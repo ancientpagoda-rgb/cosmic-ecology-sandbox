@@ -1,0 +1,13 @@
+{
+  "name": "reality-sandbox",
+  "version": "1.0.0",
+  "description": "Deterministic 2D ecosystem sandbox running in the browser.",
+  "main": "index.js",
+  "scripts": {
+    "lint": "eslint ."
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "eslint": "^8.0.0"
+  }
+}
