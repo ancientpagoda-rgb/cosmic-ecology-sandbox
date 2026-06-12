@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Computree Forest</title>
+  <style>
+    body{margin:0;background:#07100b;color:#d8ffe2;font-family:system-ui,Arial,sans-serif;overflow:hidden}
+    #ui{position:fixed;left:12px;top:12px;z-index:5;background:rgba(0,0,0,.55);border:1px solid #2d6b42;border-radius:12px;padding:12px;max-width:360px;backdrop-filter:blur(8px)}
+    h1{font-size:18px;margin:0 0 8px} button,input,textarea{background:#102417;color:#d8ffe2;border:1px solid #3a8752;border-radius:8px;padding:8px;margin:3px}button{cursor:pointer}textarea{width:330px;height:80px}small{color:#9ccaa7}.row{display:flex;gap:6px;flex-wrap:wrap}.stat{font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap}canvas{display:block;width:100vw;height:100vh}.pill{display:inline-block;border:1px solid #3a8752;border-radius:999px;padding:2px 7px;margin:2px;font-size:12px}
+  </style>
+</head>
+<body>
+  <canvas id="world"></canvas>
+  <section id="ui">
+    <h1>🌱 Computree Forest</h1>
+    <div><span class="pill">B: evolving forest</span><span class="pill">C: seed sharing</span><span class="pill">D: AI hook</span></div>
+    <div class="row">
+      <button id="run">pause</button><button id="step">step</button><button id="seed">copy worldseed</button><button id="plant">plant seed</button><button id="ai">AI flower</button>
+    </div>
+    <textarea id="seedbox" placeholder="paste worldseed here, or copy one out"></textarea>
+    <div class="stat" id="stats"></div>
+    <small>Growth is paid for by real browser computation: compression scoring, prediction, entropy, and hash search. Multiplayer-lite works by copying worldseeds. AI flower is a local stub until connected to an API/backend.</small>
+  </section>
+  <script src="app.js"></script>
+</body>
+</html>
