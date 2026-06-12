@@ -6,21 +6,27 @@
   <title>Computree Forest</title>
   <style>
     body{margin:0;background:#07100b;color:#d8ffe2;font-family:system-ui,Arial,sans-serif;overflow:hidden}
-    #ui{position:fixed;left:12px;top:12px;z-index:5;background:rgba(0,0,0,.55);border:1px solid #2d6b42;border-radius:12px;padding:12px;max-width:360px;backdrop-filter:blur(8px)}
-    h1{font-size:18px;margin:0 0 8px} button,input,textarea{background:#102417;color:#d8ffe2;border:1px solid #3a8752;border-radius:8px;padding:8px;margin:3px}button{cursor:pointer}textarea{width:330px;height:80px}small{color:#9ccaa7}.row{display:flex;gap:6px;flex-wrap:wrap}.stat{font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap}canvas{display:block;width:100vw;height:100vh}.pill{display:inline-block;border:1px solid #3a8752;border-radius:999px;padding:2px 7px;margin:2px;font-size:12px}
+    #ui{position:fixed;left:12px;top:12px;z-index:5;background:rgba(0,0,0,.55);border:1px solid #2d6b42;border-radius:12px;padding:12px;max-width:390px;backdrop-filter:blur(8px)}
+    h1{font-size:18px;margin:0 0 8px} button,input,select,textarea{background:#102417;color:#d8ffe2;border:1px solid #3a8752;border-radius:8px;padding:8px;margin:3px}button{cursor:pointer}textarea{width:360px;height:80px}input{width:250px}select{width:165px}small{color:#9ccaa7}.row{display:flex;gap:6px;flex-wrap:wrap}.stat{font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap}.artifact{max-height:120px;overflow:auto;border-top:1px solid #2d6b42;margin-top:8px;padding-top:8px;font-size:12px}canvas{display:block;width:100vw;height:100vh}.pill{display:inline-block;border:1px solid #3a8752;border-radius:999px;padding:2px 7px;margin:2px;font-size:12px}.hidden{display:none}.danger{border-color:#8a5a33}
   </style>
 </head>
 <body>
   <canvas id="world"></canvas>
   <section id="ui">
     <h1>🌱 Computree Forest</h1>
-    <div><span class="pill">B: evolving forest</span><span class="pill">C: seed sharing</span><span class="pill">D: AI hook</span></div>
+    <div><span class="pill">B: evolving forest</span><span class="pill">C: seed sharing</span><span class="pill">D: AI flowers</span></div>
     <div class="row">
-      <button id="run">pause</button><button id="step">step</button><button id="seed">copy worldseed</button><button id="plant">plant seed</button><button id="ai">AI flower</button>
+      <button id="run">pause</button><button id="step">step</button><button id="seed">copy worldseed</button><button id="plant">plant seed</button><button id="ai">AI flower</button><button id="settings">AI settings</button>
+    </div>
+    <div id="settingsPanel" class="hidden">
+      <div class="row"><select id="provider"><option value="ollama">Local Ollama</option><option value="openai">OpenAI-compatible</option></select><input id="endpoint" placeholder="endpoint URL"></div>
+      <div class="row"><input id="model" placeholder="model"><input id="apikey" placeholder="API key; optional/local"></div>
+      <small>Ollama default: http://localhost:11434/api/generate + llama3.1. OpenAI-compatible default: https://api.openai.com/v1/chat/completions.</small>
     </div>
     <textarea id="seedbox" placeholder="paste worldseed here, or copy one out"></textarea>
     <div class="stat" id="stats"></div>
-    <small>Growth is paid for by real browser computation: compression scoring, prediction, entropy, and hash search. Multiplayer-lite works by copying worldseeds. AI flower is a local stub until connected to an API/backend.</small>
+    <div class="artifact" id="artifact">AI flower artifacts will appear here.</div>
+    <small>AI calls run from your browser. Local Ollama may need CORS enabled. Do not paste a paid API key into a computer you do not control.</small>
   </section>
   <script src="app.js"></script>
 </body>
