@@ -11,6 +11,7 @@ const inspectTreeBtn = document.getElementById('inspectTree');
 const sharedStatusEl = document.getElementById('sharedStatus');
 const eventFeedEl = document.getElementById('eventFeed');
 const worldseedViewEl = document.getElementById('worldseedView');
+const missionEl = document.getElementById('mission');
 const backendUrlEl = document.getElementById('supabaseUrl');
 const writeTokenEl = document.getElementById('supabaseKey');
 const DEFAULT_BACKEND_URL = 'https://computree-backend.ancientpagoda.workers.dev';
@@ -29,6 +30,20 @@ function sharedMsg(text) {
 function setSharedStatus(text, tone = 'warn') {
   sharedStatusEl.textContent = `shared: ${text}`;
   sharedStatusEl.className = `pill status ${tone}`;
+}
+
+function setMission(step) {
+  const copy = {
+    load: 'Current mission: load shared forest.',
+    inspect: 'Current mission: inspect a shared Worldseed.',
+    plant: 'Current mission: plant the selected seed.',
+    publish: 'Current mission: publish the new Worldseed.',
+    grow: 'Current mission: keep da organism alive through its computation cycle.'
+  };
+  missionEl.textContent = copy[step] || copy.grow;
+  loadSharedBtn.classList.toggle('next', step === 'load');
+  plantSelectedBtn.classList.toggle('next', step === 'plant');
+  publishSeedBtn.classList.toggle('next', step === 'publish');
 }
 
 function formatAgo(iso) {
@@ -71,6 +86,7 @@ function inspectEvent(row) {
     },
   };
   worldseedViewEl.innerHTML = `<span class="pill tree-chip">${escapeHtml(row.kind || 'event')}</span><pre style="white-space:pre-wrap">${escapeHtml(JSON.stringify(summary, null, 2))}</pre>`;
+  setMission(row.payload?.seed ? 'plant' : 'inspect');
 }
 
 function treeSnapshot(tree) {
@@ -87,6 +103,11 @@ function treeSnapshot(tree) {
       flowers: tree.flowers.length,
       memories: tree.memory.length,
     },
+    state: tree.state,
+    season: currentSeason().name,
+    resources: Object.fromEntries(Object.entries(tree.resources).map(([k, v]) => [k, +v.toFixed(2)])),
+    metabolism: Object.fromEntries(Object.entries(tree.metabolism).map(([k, v]) => [k, +v.toFixed(3)])),
+    lastFailure: tree.lastFailure || null,
     genome: Object.fromEntries(Object.entries(tree.g).map(([k, v]) => [k, +v.toFixed(3)])),
     latestFlower: flower || null,
     latestMemory: memory || null,
@@ -186,6 +207,10 @@ async function publishCurrentSeed(kind = 'worldseed') {
       tree: {
         name: tree.name,
         energy: tree.energy,
+        state: tree.state,
+        season: currentSeason().name,
+        resources: tree.resources,
+        metabolism: tree.metabolism,
         branches: tree.branches,
         leaves: tree.leaves,
         roots: tree.roots,
@@ -199,6 +224,7 @@ async function publishCurrentSeed(kind = 'worldseed') {
   renderEventFeed(await loadRemoteEvents());
   sharedMsg(`Published ${kind}.\nTree: ${tree.id}\nFlowers: ${tree.flowers.length}\nCE: ${tree.energy.toFixed(1)}`);
   inspectTree(tree);
+  setMission('grow');
 }
 
 async function publishLatestArtifact() {
@@ -228,6 +254,7 @@ async function loadSharedForest() {
   renderEventFeed(rows);
   sharedMsg(`Loaded shared forest.\nNew trees planted: ${planted}\nEvents checked: ${rows.length}`);
   inspectTree(forest[0]);
+  setMission(rows.some(row => row.payload?.seed) ? 'inspect' : 'publish');
 }
 
 sharedSettingsBtn.onclick = () => sharedPanel.classList.toggle('hidden');
@@ -244,6 +271,7 @@ plantSelectedBtn.onclick = () => {
     const t = plantSeedString(seed, selectedEvent?.tree_hash || null);
     inspectTree(t);
     sharedMsg(`Planted selected event.\nTree: ${t.id}`);
+    setMission('publish');
   } catch (e) {
     sharedMsg(`Plant selected failed:\n${e.message}`);
   }
@@ -265,6 +293,7 @@ loadRemoteEvents().then(rows => {
   sharedMsg(`Shared backend unavailable:\n${e.message}`);
 });
 inspectTree(forest[0]);
+setMission('load');
 
 canvas.addEventListener('click', event => {
   const rect = canvas.getBoundingClientRect();

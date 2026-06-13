@@ -1,12 +1,13 @@
 # Computree Forest
 
-Online prototype of a computational plant/forest.
+Online prototype of Da Computree: a digital plant whose body is made of information and whose metabolism runs on computation.
 
 ## Modes
 
 - **B — full evolving forest:** trees grow by earning Compute Energy from real browser-side computation.
 - **C — shared forest:** publish worldseeds to a tiny `/events` backend, then load them into another forest.
 - **D — AI-powered:** the **AI flower** button can call local Ollama or an OpenAI-compatible endpoint and publish the resulting flower artifact.
+- **Organism mode:** roots, trunk, leaves, flowers, pollinators, seasons, resources, and Worldseeds are represented as one living system.
 
 ## Mechanics
 
@@ -15,8 +16,19 @@ Each turn:
 1. Roots discover generated data streams.
 2. Leaves run computation over those streams.
 3. Compression score, prediction score, entropy, and hash search create Compute Energy.
-4. Energy buys leaves, branches, roots, and flowers.
-5. Flowers can compress memory into a worldseed.
+4. Growth spends CPU cycles, RAM tissue, storage memory, and bandwidth nutrients.
+5. If da plant cannot afford growth, it reports insufficient computation and may prune.
+6. Seasons change resource abundance and competition.
+7. Flowers can compress memory into a Worldseed.
+
+Example branch cost:
+
+```text
+10,000 CPU cycles
+5 MB RAM
+1 MB storage
+0.6 bandwidth nutrient units
+```
 
 ## Files
 
@@ -39,6 +51,9 @@ The original Express backend still exists in `computree-backend/` for hosts such
 
 The live app shows:
 
+- a Current Mission loop: load shared, inspect, plant, publish
+- computational seasons and starvation/dormancy states
+- CPU/RAM/storage/bandwidth metabolism
 - shared backend connection status
 - latest shared forest events
 - one-click publish/load controls

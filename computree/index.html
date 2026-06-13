@@ -7,14 +7,15 @@
   <style>
     body{margin:0;background:#07100b;color:#d8ffe2;font-family:system-ui,Arial,sans-serif;overflow:hidden}
     #ui{position:fixed;left:12px;top:12px;z-index:5;background:rgba(0,0,0,.55);border:1px solid #2d6b42;border-radius:12px;padding:12px;max-width:390px;backdrop-filter:blur(8px)}
-    h1{font-size:18px;margin:0 0 8px} button,input,select,textarea{background:#102417;color:#d8ffe2;border:1px solid #3a8752;border-radius:8px;padding:8px;margin:3px}button{cursor:pointer}textarea{width:360px;height:80px}input{width:250px}select{width:165px}small{color:#9ccaa7}.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.stat{font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap}.artifact{max-height:120px;overflow:auto;border-top:1px solid #2d6b42;margin-top:8px;padding-top:8px;font-size:12px}canvas{display:block;width:100vw;height:100vh}.pill{display:inline-block;border:1px solid #3a8752;border-radius:999px;padding:2px 7px;margin:2px;font-size:12px}.hidden{display:none}.danger{border-color:#8a5a33}.status{border-color:#3a8752;background:#102417}.status.ok{border-color:#72d985;color:#c9ffd3}.status.warn{border-color:#b5924b;color:#ffe5a8}.status.bad{border-color:#a85d5d;color:#ffd0d0}.mini-panel{border-top:1px solid #2d6b42;margin-top:8px;padding-top:8px}.event-feed{max-height:130px;overflow:auto;font-size:12px}.event{border:1px solid #244d32;border-radius:8px;margin:5px 0;padding:6px;background:rgba(16,36,23,.75);cursor:pointer}.event:hover,.event.selected{border-color:#d2a5ff;background:rgba(43,28,54,.85)}.event b{color:#fff3b5}.tree-chip{border-color:#72d985}.worldseed{max-height:160px;overflow:auto}
+    h1{font-size:18px;margin:0 0 8px} button,input,select,textarea{background:#102417;color:#d8ffe2;border:1px solid #3a8752;border-radius:8px;padding:8px;margin:3px}button{cursor:pointer}button.next{border-color:#fff3b5;box-shadow:0 0 0 1px rgba(255,243,181,.35),0 0 18px rgba(255,243,181,.18)}textarea{width:360px;height:80px}input{width:250px}select{width:165px}small{color:#9ccaa7}.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.stat{font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap}.artifact{max-height:120px;overflow:auto;border-top:1px solid #2d6b42;margin-top:8px;padding-top:8px;font-size:12px}canvas{display:block;width:100vw;height:100vh}.pill{display:inline-block;border:1px solid #3a8752;border-radius:999px;padding:2px 7px;margin:2px;font-size:12px}.hidden{display:none}.danger{border-color:#8a5a33}.status{border-color:#3a8752;background:#102417}.status.ok{border-color:#72d985;color:#c9ffd3}.status.warn{border-color:#b5924b;color:#ffe5a8}.status.bad{border-color:#a85d5d;color:#ffd0d0}.mini-panel{border-top:1px solid #2d6b42;margin-top:8px;padding-top:8px}.mission{border:1px solid #244d32;border-radius:8px;background:rgba(16,36,23,.68);padding:7px;margin:8px 0;font-size:12px}.event-feed{max-height:130px;overflow:auto;font-size:12px}.event{border:1px solid #244d32;border-radius:8px;margin:5px 0;padding:6px;background:rgba(16,36,23,.75);cursor:pointer}.event:hover,.event.selected{border-color:#d2a5ff;background:rgba(43,28,54,.85)}.event b{color:#fff3b5}.tree-chip{border-color:#72d985}.worldseed{max-height:160px;overflow:auto}
   </style>
 </head>
 <body>
   <canvas id="world"></canvas>
   <section id="ui">
-    <h1>🌱 Computree Forest</h1>
-    <div><span class="pill">B: evolving forest</span><span class="pill">C: shared seeds</span><span class="pill">D: AI flowers</span></div>
+    <h1>Da Computree</h1>
+    <div><span class="pill">CPU metabolism</span><span class="pill">RAM tissue</span><span class="pill">storage memory</span><span class="pill">bandwidth nutrients</span></div>
+    <div id="mission" class="mission">Current mission: load shared forest, inspect a seed, plant it, then publish the new Worldseed.</div>
     <div class="row">
       <button id="run">pause</button><button id="step">step</button><button id="seed">copy worldseed</button><button id="plant">plant seed</button><button id="ai">AI flower</button><button id="settings">AI settings</button>
     </div>
@@ -28,9 +29,9 @@
     </div>
     <div id="sharedPanel">
       <div class="row"><input id="supabaseUrl" placeholder="Backend URL"><input id="supabaseKey" placeholder="Write token"></div>
-      <small>Use the shared backend URL and the same <code>WRITE_TOKEN</code> configured for that service.</small>
+      <small>Visitors can load and plant public seeds without a token. Publishing a new Worldseed needs the write token.</small>
       <div class="mini-panel">
-        <b>Shared event feed</b>
+        <b>Shared organism feed</b>
         <div id="eventFeed" class="event-feed">loading shared forest...</div>
       </div>
       <div class="mini-panel worldseed">
