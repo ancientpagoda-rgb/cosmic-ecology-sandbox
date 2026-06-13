@@ -8,6 +8,7 @@ Online prototype of Da Computree: a digital plant whose body is made of informat
 - **C — shared forest:** publish worldseeds to a tiny `/events` backend, then load them into another forest.
 - **D — AI-powered:** the **AI flower** button can call local Ollama or an OpenAI-compatible endpoint and publish the resulting flower artifact.
 - **Organism mode:** roots, trunk, leaves, flowers, pollinators, seasons, resources, and Worldseeds are represented as one living system.
+- **Real Resource Mode:** opt in to capped browser CPU work, allocated RAM blocks, browser storage writes, and measured shared-backend bandwidth.
 
 ## Mechanics
 
@@ -20,6 +21,13 @@ Each turn:
 5. If da plant cannot afford growth, it reports insufficient computation and may prune.
 6. Seasons change resource abundance and competition.
 7. Flowers can compress memory into a Worldseed.
+
+When **real resource mode** is enabled, those meters are backed by capped local resources:
+
+- CPU: measured hash work on the browser thread
+- RAM: actual `Uint8Array` megabyte blocks held in memory
+- Storage: actual trunk snapshots written into browser storage
+- Bandwidth: actual bytes transferred through shared backend reads/writes
 
 Example branch cost:
 
@@ -52,6 +60,7 @@ The original Express backend still exists in `computree-backend/` for hosts such
 The live app shows:
 
 - a Current Mission loop: load shared, inspect, plant, publish
+- opt-in Real Resource Mode with CPU/RAM/storage/bandwidth caps
 - computational seasons and starvation/dormancy states
 - CPU/RAM/storage/bandwidth metabolism
 - shared backend connection status

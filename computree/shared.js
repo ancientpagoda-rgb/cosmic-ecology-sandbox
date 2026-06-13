@@ -147,6 +147,7 @@ function saveSharedSettings() {
 async function saveRemoteEvent(event) {
   saveSharedSettings();
   const cfg = JSON.parse(localStorage.getItem('computree-shared') || '{}');
+  const body = JSON.stringify(event);
   if (!cfg.url) {
     const events = getLocalEvents();
     events.push(event);
@@ -160,10 +161,12 @@ async function saveRemoteEvent(event) {
       'Content-Type': 'application/json',
       'x-write-token': cfg.token || ''
     },
-    body: JSON.stringify(event)
+    body
   });
-  if (!res.ok) throw new Error(await res.text());
-  const saved = await res.json();
+  const text = await res.text();
+  if (window.recordRealBandwidth) window.recordRealBandwidth(body.length + text.length);
+  if (!res.ok) throw new Error(text);
+  const saved = JSON.parse(text);
   setSharedStatus('connected', 'ok');
   return saved;
 }
@@ -173,8 +176,10 @@ async function loadRemoteEvents() {
   const cfg = JSON.parse(localStorage.getItem('computree-shared') || '{}');
   if (!cfg.url) return getLocalEvents().slice(-50);
   const res = await fetch(`${cfg.url}/events?limit=50`);
-  if (!res.ok) throw new Error(await res.text());
-  const rows = await res.json();
+  const text = await res.text();
+  if (window.recordRealBandwidth) window.recordRealBandwidth(text.length);
+  if (!res.ok) throw new Error(text);
+  const rows = JSON.parse(text);
   setSharedStatus('connected', 'ok');
   renderEventFeed(rows);
   return rows;
