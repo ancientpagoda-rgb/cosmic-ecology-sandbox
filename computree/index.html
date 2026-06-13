@@ -27,8 +27,8 @@
       <small>Ollama default: http://localhost:11434/api/generate + llama3.1. OpenAI-compatible default: https://api.openai.com/v1/chat/completions.</small>
     </div>
     <div id="sharedPanel" class="hidden">
-      <div class="row"><input id="supabaseUrl" placeholder="Supabase project URL"><input id="supabaseKey" placeholder="Supabase anon key"></div>
-      <small>Create table <code>computree_events</code> with columns: id uuid default gen_random_uuid(), created_at timestamptz default now(), kind text, tree_hash text, payload jsonb.</small>
+      <div class="row"><input id="supabaseUrl" placeholder="Backend URL"><input id="supabaseKey" placeholder="Write token"></div>
+      <small>Use the shared backend URL and the same <code>WRITE_TOKEN</code> configured for that service.</small>
     </div>
     <textarea id="seedbox" placeholder="paste worldseed here, or copy one out"></textarea>
     <div class="stat" id="stats"></div>

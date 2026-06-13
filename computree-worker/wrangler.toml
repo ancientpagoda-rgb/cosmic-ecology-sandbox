@@ -1,0 +1,10 @@
+name = "computree-backend"
+main = "src/index.js"
+compatibility_date = "2026-06-13"
+
+[vars]
+CORS_ORIGIN = "*"
+
+[[kv_namespaces]]
+binding = "computree_events"
+id = "f246f5bad61741ec8447256725e42605"

@@ -5,8 +5,8 @@ Online prototype of a computational plant/forest.
 ## Modes
 
 - **B — full evolving forest:** trees grow by earning Compute Energy from real browser-side computation.
-- **C — multiplayer-lite:** click **copy worldseed**, send it to someone, and they can paste/plant it into their forest.
-- **D — AI-powered:** the **AI flower** button is currently a stub/hook. The next step is wiring it to a backend or local LLM so flowers can become real generated artifacts.
+- **C — shared forest:** publish worldseeds to a tiny `/events` backend, then load them into another forest.
+- **D — AI-powered:** the **AI flower** button can call local Ollama or an OpenAI-compatible endpoint and publish the resulting flower artifact.
 
 ## Mechanics
 
@@ -22,6 +22,20 @@ Each turn:
 
 - `index.html` — UI and canvas shell.
 - `app.js` — forest simulation engine.
+- `shared.js` — shared forest sync via the Computree backend or localStorage fallback.
+
+## Shared Backend
+
+Cloudflare Worker backend:
+
+`https://computree-backend.ancientpagoda.workers.dev`
+
+Open **shared settings** in the forest and paste:
+
+- Backend URL: the Worker URL
+- Write token: the configured `WRITE_TOKEN`
+
+The original Express backend still exists in `computree-backend/` for hosts such as Render or Railway.
 
 ## Live URL
 

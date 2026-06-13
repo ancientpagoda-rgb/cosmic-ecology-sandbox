@@ -10,7 +10,7 @@ const backendUrlEl = document.getElementById('supabaseUrl');
 const writeTokenEl = document.getElementById('supabaseKey');
 let autoSync = false;
 
-backendUrlEl.placeholder = 'Backend URL, e.g. http://server:8787';
+backendUrlEl.placeholder = 'Backend URL, e.g. https://computree-backend.ancientpagoda.workers.dev';
 writeTokenEl.placeholder = 'Write token from backend .env';
 
 function sharedMsg(text) {
