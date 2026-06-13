@@ -66,8 +66,16 @@ export default {
       return new Response(null, { headers: corsHeaders(origin) });
     }
 
-    if (request.method === 'GET' && url.pathname === '/health') {
-      return json({ ok: true, service: 'computree-worker' }, 200, origin);
+    if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/health')) {
+      return json({
+        ok: true,
+        service: 'computree-worker',
+        endpoints: {
+          health: '/health',
+          events: '/events?limit=50',
+          publish: 'POST /events with x-write-token',
+        },
+      }, 200, origin);
     }
 
     if (request.method === 'GET' && url.pathname === '/events') {
