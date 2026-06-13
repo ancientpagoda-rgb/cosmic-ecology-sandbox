@@ -43,6 +43,9 @@ The live app shows:
 - latest shared forest events
 - one-click publish/load controls
 - a Worldseed inspector for the selected tree
+- clickable shared events that copy their seed into the seed box
+- a **plant selected** control for planting a shared event
+- visual publish/load pulses and lineage lines
 
 Click a tree on the canvas to inspect its current genome, anatomy, memory, and latest flower.
 

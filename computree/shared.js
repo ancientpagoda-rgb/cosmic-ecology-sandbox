@@ -5,6 +5,7 @@ const sharedPanel = document.getElementById('sharedPanel');
 const sharedSettingsBtn = document.getElementById('sharedSettings');
 const publishSeedBtn = document.getElementById('publishSeed');
 const loadSharedBtn = document.getElementById('loadShared');
+const plantSelectedBtn = document.getElementById('plantSelected');
 const autoSyncBtn = document.getElementById('autoSync');
 const inspectTreeBtn = document.getElementById('inspectTree');
 const sharedStatusEl = document.getElementById('sharedStatus');
@@ -15,6 +16,8 @@ const writeTokenEl = document.getElementById('supabaseKey');
 const DEFAULT_BACKEND_URL = 'https://computree-backend.ancientpagoda.workers.dev';
 let autoSync = false;
 let selectedTree = forest[0];
+let sharedRows = [];
+let selectedEvent = null;
 
 backendUrlEl.placeholder = 'Backend URL, e.g. https://computree-backend.ancientpagoda.workers.dev';
 writeTokenEl.placeholder = 'Write token from backend .env';
@@ -37,6 +40,7 @@ function formatAgo(iso) {
 }
 
 function renderEventFeed(rows = []) {
+  sharedRows = rows;
   if (!rows.length) {
     eventFeedEl.innerHTML = '<div class="event">No shared seeds yet. Publish one.</div>';
     return;
@@ -46,8 +50,27 @@ function renderEventFeed(rows = []) {
     const label = row.kind || 'event';
     const flowers = tree.flowers ?? row.payload?.flowers ?? '-';
     const energy = Number.isFinite(tree.energy) ? `${tree.energy.toFixed(1)} CE` : 'unknown CE';
-    return `<div class="event"><b>${escapeHtml(label)}</b> ${escapeHtml(formatAgo(row.created_at))}<br><span>${escapeHtml(row.tree_hash || 'unknown tree')}</span><br><span>flowers: ${escapeHtml(flowers)} · ${escapeHtml(energy)}</span></div>`;
+    const selected = selectedEvent?.id === row.id ? ' selected' : '';
+    return `<div class="event${selected}" data-event-id="${escapeHtml(row.id)}"><b>${escapeHtml(label)}</b> ${escapeHtml(formatAgo(row.created_at))}<br><span>${escapeHtml(row.tree_hash || 'unknown tree')}</span><br><span>flowers: ${escapeHtml(flowers)} · ${escapeHtml(energy)}</span></div>`;
   }).join('');
+}
+
+function inspectEvent(row) {
+  selectedEvent = row;
+  if (row.payload?.seed) seedbox.value = row.payload.seed;
+  renderEventFeed(sharedRows);
+  const summary = {
+    id: row.id,
+    kind: row.kind,
+    tree_hash: row.tree_hash,
+    created_at: row.created_at,
+    payload: {
+      turn: row.payload?.turn,
+      tree: row.payload?.tree,
+      hasSeed: Boolean(row.payload?.seed),
+    },
+  };
+  worldseedViewEl.innerHTML = `<span class="pill tree-chip">${escapeHtml(row.kind || 'event')}</span><pre style="white-space:pre-wrap">${escapeHtml(JSON.stringify(summary, null, 2))}</pre>`;
 }
 
 function treeSnapshot(tree) {
@@ -140,11 +163,14 @@ function decodeSeed(seed) {
   return JSON.parse(decodeURIComponent(escape(atob(seed))));
 }
 
-function plantSeedString(seed) {
+function plantSeedString(seed, parentId = null) {
   const s = decodeSeed(seed);
+  const visibleParent = parentId && forest.some(tree => tree.id === parentId) ? parentId : forest[0]?.id;
+  s.parentId = visibleParent || s.parentId || null;
   const t = new Tree(rnd(innerWidth - 120, 60), rnd(innerHeight - 160, 120), s);
   t.mutate();
   forest.push(t);
+  pulses.push({ x: t.x, y: t.y, t: turn, label: 'shared' });
   return t;
 }
 
@@ -169,6 +195,7 @@ async function publishCurrentSeed(kind = 'worldseed') {
     }
   };
   await saveRemoteEvent(event);
+  pulses.push({ x: tree.x, y: tree.y, t: turn, label: 'published' });
   renderEventFeed(await loadRemoteEvents());
   sharedMsg(`Published ${kind}.\nTree: ${tree.id}\nFlowers: ${tree.flowers.length}\nCE: ${tree.energy.toFixed(1)}`);
   inspectTree(tree);
@@ -192,7 +219,7 @@ async function loadSharedForest() {
       const decoded = decodeSeed(seed);
       const key = decoded.hash || row.tree_hash || hash(seed);
       if (seen.has(key)) continue;
-      const t = plantSeedString(seed);
+      const t = plantSeedString(seed, decoded.parentId || row.tree_hash);
       t.id = key;
       seen.add(key);
       planted++;
@@ -210,6 +237,17 @@ sharedSettingsBtn.onclick = () => sharedPanel.classList.toggle('hidden');
 });
 publishSeedBtn.onclick = async () => { try { await publishCurrentSeed(); } catch (e) { setSharedStatus('publish failed', 'bad'); sharedMsg(e.message); } };
 loadSharedBtn.onclick = async () => { try { await loadSharedForest(); } catch (e) { setSharedStatus('load failed', 'bad'); sharedMsg(e.message); } };
+plantSelectedBtn.onclick = () => {
+  try {
+    const seed = selectedEvent?.payload?.seed || seedbox.value.trim();
+    if (!seed) throw new Error('select an event with a seed first');
+    const t = plantSeedString(seed, selectedEvent?.tree_hash || null);
+    inspectTree(t);
+    sharedMsg(`Planted selected event.\nTree: ${t.id}`);
+  } catch (e) {
+    sharedMsg(`Plant selected failed:\n${e.message}`);
+  }
+};
 inspectTreeBtn.onclick = () => inspectTree(selectedTree || forest[0]);
 autoSyncBtn.onclick = () => {
   autoSync = !autoSync;
@@ -242,6 +280,13 @@ canvas.addEventListener('click', event => {
     }
   }
   if (best && bestDistance < 90) inspectTree(best);
+});
+
+eventFeedEl.addEventListener('click', event => {
+  const card = event.target.closest('[data-event-id]');
+  if (!card) return;
+  const row = sharedRows.find(item => item.id === card.dataset.eventId);
+  if (row) inspectEvent(row);
 });
 
 setInterval(async () => {
