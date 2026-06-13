@@ -34,11 +34,11 @@ function setSharedStatus(text, tone = 'warn') {
 
 function setMission(step) {
   const copy = {
-    load: 'Current mission: load shared forest.',
-    inspect: 'Current mission: inspect a shared Worldseed.',
-    plant: 'Current mission: plant the selected seed.',
-    publish: 'Current mission: publish the new Worldseed.',
-    grow: 'Current mission: keep da organism alive through its computation cycle.'
+    load: 'Load shared roots, then graft a seed.',
+    inspect: 'Choose a Worldseed from the shared organism feed.',
+    plant: 'Plant the selected seed into this body.',
+    publish: 'Publish the new Worldseed when it flowers.',
+    grow: 'Keep it alive. Feed computation, grow flowers, prune waste.'
   };
   missionEl.textContent = copy[step] || copy.grow;
   loadSharedBtn.classList.toggle('next', step === 'load');

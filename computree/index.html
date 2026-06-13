@@ -5,54 +5,71 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Computree Forest</title>
   <style>
-    body{margin:0;background:#07100b;color:#d8ffe2;font-family:system-ui,Arial,sans-serif;overflow:hidden}
-    #ui{position:fixed;left:12px;top:12px;z-index:5;background:rgba(0,0,0,.55);border:1px solid #2d6b42;border-radius:12px;padding:12px;max-width:390px;backdrop-filter:blur(8px)}
-    h1{font-size:18px;margin:0 0 8px} button,input,select,textarea{background:#102417;color:#d8ffe2;border:1px solid #3a8752;border-radius:8px;padding:8px;margin:3px}button{cursor:pointer}button.next{border-color:#fff3b5;box-shadow:0 0 0 1px rgba(255,243,181,.35),0 0 18px rgba(255,243,181,.18)}textarea{width:360px;height:80px}input{width:250px}input[type=checkbox]{width:auto}input[type=range]{width:130px}select{width:165px}small{color:#9ccaa7}.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.stat{font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap}.artifact{max-height:120px;overflow:auto;border-top:1px solid #2d6b42;margin-top:8px;padding-top:8px;font-size:12px}canvas{display:block;width:100vw;height:100vh}.pill{display:inline-block;border:1px solid #3a8752;border-radius:999px;padding:2px 7px;margin:2px;font-size:12px}.hidden{display:none}.danger{border-color:#8a5a33}.status{border-color:#3a8752;background:#102417}.status.ok{border-color:#72d985;color:#c9ffd3}.status.warn{border-color:#b5924b;color:#ffe5a8}.status.bad{border-color:#a85d5d;color:#ffd0d0}.mini-panel{border-top:1px solid #2d6b42;margin-top:8px;padding-top:8px}.mission{border:1px solid #244d32;border-radius:8px;background:rgba(16,36,23,.68);padding:7px;margin:8px 0;font-size:12px}.event-feed{max-height:130px;overflow:auto;font-size:12px}.event{border:1px solid #244d32;border-radius:8px;margin:5px 0;padding:6px;background:rgba(16,36,23,.75);cursor:pointer}.event:hover,.event.selected{border-color:#d2a5ff;background:rgba(43,28,54,.85)}.event b{color:#fff3b5}.tree-chip{border-color:#72d985}.worldseed{max-height:160px;overflow:auto}.real-grid{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;align-items:center;font-size:12px}.real-grid label{color:#9ccaa7}
+    body{margin:0;background:#061009;color:#d8ffe2;font-family:Inter,system-ui,Arial,sans-serif;overflow:hidden}
+    canvas{display:block;width:100vw;height:100vh}
+    #ui{position:fixed;left:18px;top:18px;bottom:18px;z-index:5;width:min(390px,calc(100vw - 36px));display:flex;flex-direction:column;gap:10px;background:rgba(2,9,5,.54);border:1px solid rgba(112,217,133,.35);border-radius:8px;padding:14px;backdrop-filter:blur(14px);box-shadow:0 18px 70px rgba(0,0,0,.35)}
+    h1{font-size:24px;line-height:1;margin:0}.subtitle{color:#a8d9b2;font-size:12px}.topline{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.status{border-color:#3a8752;background:#102417}.status.ok{border-color:#72d985;color:#c9ffd3}.status.warn{border-color:#b5924b;color:#ffe5a8}.status.bad{border-color:#a85d5d;color:#ffd0d0}
+    button,input,select,textarea{background:#102417;color:#d8ffe2;border:1px solid #3a8752;border-radius:8px;padding:8px;margin:3px}button{cursor:pointer}button.primary{background:#d8ffe2;color:#07100b;border-color:#d8ffe2;font-weight:700}button.next{border-color:#fff3b5;box-shadow:0 0 0 1px rgba(255,243,181,.35),0 0 18px rgba(255,243,181,.18)}textarea{width:100%;height:72px;box-sizing:border-box}input{width:210px}input[type=checkbox]{width:auto}input[type=range]{width:130px}select{width:165px}small{color:#9ccaa7}.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.stat{font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap}.pill{display:inline-block;border:1px solid #3a8752;border-radius:999px;padding:2px 7px;margin:2px;font-size:12px}.hidden{display:none}.danger{border-color:#8a5a33}
+    .mission{border:1px solid rgba(114,217,133,.28);border-radius:8px;background:rgba(16,36,23,.66);padding:9px;font-size:13px;color:#e8ffed}.organs{display:grid;grid-template-columns:1fr 1fr;gap:8px}.organ{border:1px solid rgba(114,217,133,.24);border-radius:8px;background:rgba(16,36,23,.55);padding:9px}.organ b{display:block;font-size:11px;color:#9ccaa7;text-transform:uppercase;letter-spacing:.08em}.organ span{display:block;font-family:ui-monospace,monospace;font-size:18px;margin-top:3px}.actions{display:grid;grid-template-columns:1fr 1fr;gap:6px}.actions button:first-child{grid-column:1/-1}.mini-panel{border-top:1px solid #2d6b42;margin-top:8px;padding-top:8px}.scroll{overflow:auto;min-height:0;padding-right:2px}.event-feed{max-height:130px;overflow:auto;font-size:12px}.event{border:1px solid #244d32;border-radius:8px;margin:5px 0;padding:6px;background:rgba(16,36,23,.75);cursor:pointer}.event:hover,.event.selected{border-color:#d2a5ff;background:rgba(43,28,54,.85)}.event b{color:#fff3b5}.tree-chip{border-color:#72d985}.worldseed{max-height:160px;overflow:auto}.real-grid{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;align-items:center;font-size:12px}.real-grid label{color:#9ccaa7}.artifact{max-height:118px;overflow:auto;border-top:1px solid #2d6b42;margin-top:auto;padding-top:8px;font-size:12px}details{border-top:1px solid #244d32;padding-top:8px}summary{cursor:pointer;color:#c9ffd3;font-size:13px}
+    @media(max-width:700px){#ui{left:10px;right:10px;top:auto;bottom:10px;width:auto;max-height:70vh}.organs{grid-template-columns:1fr}.actions{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
   <canvas id="world"></canvas>
   <section id="ui">
-    <h1>Da Computree</h1>
-    <div><span class="pill">CPU metabolism</span><span class="pill">RAM tissue</span><span class="pill">storage memory</span><span class="pill">bandwidth nutrients</span></div>
-    <div id="mission" class="mission">Current mission: load shared forest, inspect a seed, plant it, then publish the new Worldseed.</div>
-    <div class="row">
-      <button id="run">pause</button><button id="step">step</button><button id="seed">copy worldseed</button><button id="plant">plant seed</button><button id="ai">AI flower</button><button id="settings">AI settings</button>
+    <div class="topline">
+      <div><h1>Da Computree</h1><div class="subtitle">a plant that eats computation</div></div>
+      <span id="sharedStatus" class="pill status warn">shared: checking</span>
     </div>
-    <div class="row">
-      <span id="sharedStatus" class="pill status warn">shared: checking</span><button id="sharedSettings">shared settings</button><button id="publishSeed">publish seed</button><button id="loadShared">load shared</button><button id="plantSelected">plant selected</button><button id="autoSync">autosync off</button><button id="inspectTree">inspect worldseed</button>
+    <div id="mission" class="mission">Feed the organism, grow a flower, publish the Worldseed.</div>
+    <div class="organs">
+      <div class="organ"><b>CPU</b><span id="organCpu">warming</span></div>
+      <div class="organ"><b>Memory</b><span id="organRam">forming</span></div>
+      <div class="organ"><b>Trunk</b><span id="organStorage">thin</span></div>
+      <div class="organ"><b>Roots</b><span id="organBandwidth">local</span></div>
     </div>
-    <div id="settingsPanel" class="hidden">
-      <div class="row"><select id="provider"><option value="ollama">Local Ollama</option><option value="openai">OpenAI-compatible</option></select><input id="endpoint" placeholder="endpoint URL"></div>
-      <div class="row"><input id="model" placeholder="model"><input id="apikey" placeholder="API key; optional/local"></div>
-      <small>Ollama default: http://localhost:11434/api/generate + llama3.1. OpenAI-compatible default: https://api.openai.com/v1/chat/completions.</small>
+    <div class="actions">
+      <button id="feed" class="primary">feed computation</button>
+      <button id="ai">grow flower</button>
+      <button id="publishSeed">publish Worldseed</button>
+      <button id="loadShared">load shared roots</button>
+      <button id="plantSelected">plant selected</button>
     </div>
-    <div class="mini-panel">
-      <div class="row"><label><input id="realMode" type="checkbox"> real resource mode</label><span id="realStatus" class="pill status warn">real: off</span></div>
-      <div class="real-grid">
-        <label for="cpuCap">CPU cap</label><span><input id="cpuCap" type="range" min="1" max="30" value="8"> <span id="cpuCapLabel">8%</span></span>
-        <label for="ramCap">RAM cap</label><select id="ramCap"><option value="16">16 MB</option><option value="64" selected>64 MB</option><option value="128">128 MB</option><option value="256">256 MB</option></select>
-        <label for="storageCap">storage cap</label><select id="storageCap"><option value="1">1 MB</option><option value="5" selected>5 MB</option><option value="10">10 MB</option><option value="25">25 MB</option></select>
-        <label for="bandwidthCap">bandwidth cap</label><select id="bandwidthCap"><option value=".25">0.25 MB/min</option><option value="1" selected>1 MB/min</option><option value="5">5 MB/min</option></select>
-      </div>
-      <div id="realMetrics" class="stat">real resources disabled</div>
-    </div>
-    <div id="sharedPanel">
-      <div class="row"><input id="supabaseUrl" placeholder="Backend URL"><input id="supabaseKey" placeholder="Write token"></div>
-      <small>Visitors can load and plant public seeds without a token. Publishing a new Worldseed needs the write token.</small>
+    <div class="scroll">
+      <div class="stat" id="stats"></div>
       <div class="mini-panel">
         <b>Shared organism feed</b>
         <div id="eventFeed" class="event-feed">loading shared forest...</div>
       </div>
       <div class="mini-panel worldseed">
-        <b>Worldseed inspector</b>
-        <div id="worldseedView" class="stat">click a tree or press inspect worldseed</div>
+        <b>Worldseed</b>
+        <div id="worldseedView" class="stat">click the organism to inspect it</div>
       </div>
+      <details>
+        <summary>controls and grafting</summary>
+        <div class="row"><button id="run">pause</button><button id="step">step</button><button id="seed">copy worldseed</button><button id="plant">plant seed</button><button id="settings">AI settings</button><button id="sharedSettings">shared settings</button><button id="autoSync">autosync off</button><button id="inspectTree">inspect</button></div>
+        <textarea id="seedbox" placeholder="paste worldseed here, or copy one out"></textarea>
+        <div id="settingsPanel" class="hidden">
+          <div class="row"><select id="provider"><option value="ollama">Local Ollama</option><option value="openai">OpenAI-compatible</option></select><input id="endpoint" placeholder="endpoint URL"></div>
+          <div class="row"><input id="model" placeholder="model"><input id="apikey" placeholder="API key; optional/local"></div>
+        </div>
+        <div class="mini-panel">
+          <div class="row"><label><input id="realMode" type="checkbox"> real resource mode</label><span id="realStatus" class="pill status warn">real: off</span></div>
+          <div class="real-grid">
+            <label for="cpuCap">CPU cap</label><span><input id="cpuCap" type="range" min="1" max="30" value="8"> <span id="cpuCapLabel">8%</span></span>
+            <label for="ramCap">RAM cap</label><select id="ramCap"><option value="16">16 MB</option><option value="64" selected>64 MB</option><option value="128">128 MB</option><option value="256">256 MB</option></select>
+            <label for="storageCap">storage cap</label><select id="storageCap"><option value="1">1 MB</option><option value="5" selected>5 MB</option><option value="10">10 MB</option><option value="25">25 MB</option></select>
+            <label for="bandwidthCap">bandwidth cap</label><select id="bandwidthCap"><option value=".25">0.25 MB/min</option><option value="1" selected>1 MB/min</option><option value="5">5 MB/min</option></select>
+          </div>
+          <div id="realMetrics" class="stat">real resources disabled</div>
+        </div>
+        <div id="sharedPanel">
+          <div class="row"><input id="supabaseUrl" placeholder="Backend URL"><input id="supabaseKey" placeholder="Write token"></div>
+          <small>Visitors can load and plant public seeds without a token. Publishing a new Worldseed needs the write token.</small>
+        </div>
+      </details>
     </div>
-    <textarea id="seedbox" placeholder="paste worldseed here, or copy one out"></textarea>
-    <div class="stat" id="stats"></div>
     <div class="artifact" id="artifact">AI flower artifacts and shared forest messages will appear here.</div>
-    <small>AI and shared calls run from your browser. Do not paste paid/private keys into a computer you do not control.</small>
   </section>
   <script src="app.js"></script>
   <script src="shared.js"></script>
