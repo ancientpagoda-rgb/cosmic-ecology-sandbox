@@ -60,6 +60,7 @@ The original Express backend still exists in `computree-backend/` for hosts such
 The live app shows:
 
 - a creature-first interface with organ readouts and one primary feed action
+- life stages, heat, Worldseed ripening, and local persistence across reloads
 - a Current Mission loop: load shared, inspect, plant, publish
 - opt-in Real Resource Mode with CPU/RAM/storage/bandwidth caps
 - computational seasons and starvation/dormancy states

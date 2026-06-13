@@ -202,6 +202,11 @@ function plantSeedString(seed, parentId = null) {
 
 async function publishCurrentSeed(kind = 'worldseed') {
   const tree = forest[0];
+  if (kind.includes('worldseed') && window.computreeWorldseedReady && !window.computreeWorldseedReady()) {
+    sharedMsg(window.computreeWorldseedStatus ? window.computreeWorldseedStatus() : 'Worldseed is not ripe yet.');
+    setMission('grow');
+    return;
+  }
   const seed = tree.seed();
   const event = {
     kind,
