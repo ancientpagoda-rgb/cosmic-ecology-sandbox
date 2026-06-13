@@ -37,6 +37,15 @@ Open **shared settings** in the forest and paste:
 
 The original Express backend still exists in `computree-backend/` for hosts such as Render or Railway.
 
+The live app shows:
+
+- shared backend connection status
+- latest shared forest events
+- one-click publish/load controls
+- a Worldseed inspector for the selected tree
+
+Click a tree on the canvas to inspect its current genome, anatomy, memory, and latest flower.
+
 ## Live URL
 
 If GitHub Pages is enabled for this repo, the app should be available at:
