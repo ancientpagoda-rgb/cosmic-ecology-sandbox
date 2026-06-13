@@ -225,6 +225,7 @@ async function publishCurrentSeed(kind = 'worldseed') {
     }
   };
   await saveRemoteEvent(event);
+  if (window.computreePublishPulse) window.computreePublishPulse();
   pulses.push({ x: tree.x, y: tree.y, t: turn, label: 'published' });
   renderEventFeed(await loadRemoteEvents());
   sharedMsg(`Published ${kind}.\nTree: ${tree.id}\nFlowers: ${tree.flowers.length}\nCE: ${tree.energy.toFixed(1)}`);
