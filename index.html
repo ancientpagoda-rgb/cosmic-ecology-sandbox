@@ -5,13 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Reality Sandbox</title>
   <link rel="stylesheet" href="style.css" />
-  <link rel="stylesheet" href="sphere.css" />
 </head>
 <body>
   <main class="app">
     <header>
       <h1>Reality Sandbox</h1>
-      <p class="tagline">An ecosystem evolving across one continuous spherical world.</p>
+      <p class="tagline">A living ecosystem evolving across a rotating world.</p>
     </header>
 
     <section class="controls" aria-label="Simulation controls">
@@ -23,18 +22,18 @@
       <div class="tools">
         <button id="spawnAgentButton">+ Agent</button>
         <button id="spawnResourceButton">+ Resource</button>
-        <button id="forceBrushButton" data-mode="force">Force Brush</button>
+        <button id="forceBrushButton">Force Brush</button>
         <button id="zoomInButton">Zoom +</button>
         <button id="zoomOutButton">Zoom −</button>
       </div>
     </section>
 
     <section class="main-panel">
-      <canvas id="world" aria-label="Spherical Reality Sandbox world"></canvas>
+      <div id="world" aria-label="Interactive 3D Reality Sandbox globe"></div>
     </section>
 
     <footer>
-      <p>Drag with Force Brush to shape movement. Hold Shift for repulsion.</p>
+      <p>Drag to rotate. Scroll or use Zoom. Force Brush paints directly onto the globe; hold Shift for repulsion.</p>
     </footer>
   </main>
 
