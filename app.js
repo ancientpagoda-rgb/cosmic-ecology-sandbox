@@ -2,17 +2,24 @@ import { createRng } from './core/rng.js';
 import { createWorld } from './core/world.js';
 import { createSphericalStepper } from './core/sphere.js';
 import { createGlobeRenderer } from './core/globe-render-v2.js';
-import { placeExistingEntitiesOnBiomes, randomHabitablePoint, samplePlanet } from './core/planet.js';
+import { placeExistingEntitiesOnBiomes, randomHabitablePoint } from './core/planet.js';
+import { createLivingSystems } from './core/living-systems.js';
 
 const FIXED_DT = 0.06;
 
 let world;
 let globe;
 let stepSphere;
+let living;
 let running = false;
 let accumulator = 0;
 let lastTime = 0;
 let brushActive = false;
+
+function runStep() {
+  stepSphere(FIXED_DT);
+  living.step(FIXED_DT);
+}
 
 function mainLoop(timestamp) {
   if (!running) return;
@@ -21,8 +28,7 @@ function mainLoop(timestamp) {
   lastTime = timestamp;
 
   while (accumulator >= FIXED_DT) {
-    stepSphere(FIXED_DT);
-    keepLifeHabitable();
+    runStep();
     accumulator -= FIXED_DT;
   }
 
@@ -42,19 +48,18 @@ function setRunning(next) {
   }
 }
 
-function keepLifeHabitable() {
-  const { position, resource } = world.ecs.components;
-  for (const [id, res] of resource.entries()) {
-    if (res.amount <= 0) continue;
-    const pos = position.get(id);
-    if (!pos) continue;
-    const biome = samplePlanet(pos.x, pos.y, world.width, world.height);
-    if (!biome.land || biome.biome === 'ice') {
-      const p = randomHabitablePoint(world.width, world.height, Math.random, 'plant');
-      pos.x = p.x;
-      pos.y = p.y;
-    }
-  }
+function renderHistory(items) {
+  const list = document.getElementById('historyList');
+  if (!list) return;
+  list.replaceChildren(...items.map(event => {
+    const li = document.createElement('li');
+    const strong = document.createElement('strong');
+    strong.textContent = event.title;
+    const span = document.createElement('span');
+    span.textContent = event.description;
+    li.append(strong, span);
+    return li;
+  }));
 }
 
 function init() {
@@ -62,13 +67,16 @@ function init() {
   world = createWorld(rng);
   placeExistingEntitiesOnBiomes(world, Math.random);
   stepSphere = createSphericalStepper(world);
+  living = createLivingSystems(world);
   globe = createGlobeRenderer(document.getElementById('world'));
+
+  window.addEventListener('reality-history', event => renderHistory(event.detail));
+  renderHistory(living.getHistory());
 
   document.getElementById('startButton').addEventListener('click', () => setRunning(true));
   document.getElementById('pauseButton').addEventListener('click', () => setRunning(false));
   document.getElementById('stepButton').addEventListener('click', () => {
-    stepSphere(FIXED_DT);
-    keepLifeHabitable();
+    runStep();
     globe.render(world);
   });
 
@@ -95,9 +103,9 @@ function init() {
 
   document.getElementById('zoomInButton').addEventListener('click', globe.zoomIn);
   document.getElementById('zoomOutButton').addEventListener('click', globe.zoomOut);
+  document.getElementById('deepZoomButton').addEventListener('click', globe.deepZoom);
 
   let painting = false;
-
   function paint(event) {
     if (!brushActive) return;
     const p = globe.pickWorldPoint(event.clientX, event.clientY);
