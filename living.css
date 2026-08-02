@@ -1,0 +1,83 @@
+.simulation-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.simulation-layout .main-panel {
+  margin-top: 1rem;
+}
+
+.history-panel {
+  margin-top: 1rem;
+  max-height: min(670px, calc(100dvh - 220px));
+  overflow: auto;
+  padding: 1rem;
+  border-radius: 20px;
+  background: rgba(7, 12, 29, 0.86);
+  border: 1px solid rgba(120, 154, 255, 0.25);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+}
+
+.history-panel h2 {
+  margin: 0 0 0.8rem;
+  font-size: 1rem;
+  color: #dce5ff;
+}
+
+#historyList {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#historyList li {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.7rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+#historyList strong {
+  color: #9fd4ff;
+  font-size: 0.82rem;
+}
+
+#historyList span {
+  color: #b8c0df;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+#deepZoomButton {
+  background: rgba(80, 175, 255, 0.16);
+}
+
+@media (max-width: 900px) {
+  .simulation-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .history-panel {
+    margin-top: 0;
+    max-height: 210px;
+  }
+}
+
+@media (max-width: 800px) {
+  .history-panel {
+    border-radius: 16px;
+    padding: 0.75rem;
+  }
+
+  #historyList {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(210px, 78vw);
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+  }
+}
