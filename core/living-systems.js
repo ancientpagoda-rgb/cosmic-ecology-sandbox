@@ -1,4 +1,5 @@
 import { samplePlanet, randomHabitablePoint } from './planet.js';
+import { sampleHydrology } from './hydrology.js';
 
 export function createLivingSystems(world) {
   const history = [];
@@ -6,6 +7,7 @@ export function createLivingSystems(world) {
   let climatePhase = 0;
   let vegetationClock = 0;
   let evolutionClock = 0;
+  let hydrologyClock = 0;
   let lastCounts = countLife(world);
 
   function step(dt) {
@@ -13,12 +15,18 @@ export function createLivingSystems(world) {
     climatePhase += dt;
     vegetationClock += dt;
     evolutionClock += dt;
+    hydrologyClock += dt;
 
     applyTerrainAndClimate(dt);
 
     if (vegetationClock >= 2.5) {
       vegetationClock = 0;
       vegetationCycle();
+    }
+
+    if (hydrologyClock >= 18) {
+      hydrologyClock = 0;
+      hydrologyCycle();
     }
 
     if (evolutionClock >= 12) {
@@ -39,7 +47,8 @@ export function createLivingSystems(world) {
         if (!pos || !vel) continue;
 
         const terrain = sampleDynamicPlanet(pos.x, pos.y);
-        if (!terrain.land || terrain.biome === 'ice') {
+        const water = sampleHydrology(pos.x, pos.y, world.width, world.height);
+        if (!terrain.land || terrain.biome === 'ice' || water.lake > 0.65) {
           const safe = randomHabitablePoint(world.width, world.height, Math.random, 'land');
           pos.x = safe.x;
           pos.y = safe.y;
@@ -49,12 +58,14 @@ export function createLivingSystems(world) {
         }
 
         const slopePenalty = terrain.elevation > 0.72 ? 0.972 : terrain.elevation > 0.64 ? 0.988 : 1;
+        const erosionPenalty = 1 - water.erosion * 0.018;
         const heatPenalty = terrain.temperature > 0.82 ? 0.991 : 1;
         const coldPenalty = terrain.temperature < 0.22 ? 0.988 : 1;
-        vel.vx *= slopePenalty * heatPenalty * coldPenalty;
-        vel.vy *= slopePenalty * heatPenalty * coldPenalty;
+        vel.vx *= slopePenalty * erosionPenalty * heatPenalty * coldPenalty;
+        vel.vy *= slopePenalty * erosionPenalty * heatPenalty * coldPenalty;
 
-        organism.climateStress = Math.max(0, Math.abs((organism.preferredTemperature ?? 0.55) - terrain.temperature) - 0.2);
+        const waterRelief = clamp(water.river * 0.16 + water.lake * 0.2 + water.delta * 0.12, 0, 0.22);
+        organism.climateStress = Math.max(0, Math.abs((organism.preferredTemperature ?? 0.55) - terrain.temperature) - 0.2 - waterRelief);
         if ('energy' in organism) organism.energy = Math.max(0.05, organism.energy - organism.climateStress * dt * 0.006);
       }
     }
@@ -63,9 +74,10 @@ export function createLivingSystems(world) {
       const pos = position.get(id);
       if (!pos) continue;
       const terrain = sampleDynamicPlanet(pos.x, pos.y);
-      const suitability = plantSuitability(terrain);
+      const water = sampleHydrology(pos.x, pos.y, world.width, world.height);
+      const suitability = plantSuitability(terrain, water);
       plant.growthSuitability = suitability;
-      if (suitability < 0.18) plant.amount = Math.max(0, plant.amount - dt * 0.015);
+      if (suitability < 0.18 || water.lake > 0.72) plant.amount = Math.max(0, plant.amount - dt * 0.015);
       else plant.amount = Math.min(1, plant.amount + dt * 0.006 * suitability);
     }
   }
@@ -80,22 +92,25 @@ export function createLivingSystems(world) {
       const pos = position.get(id);
       if (!pos) continue;
       const terrain = sampleDynamicPlanet(pos.x, pos.y);
+      const water = sampleHydrology(pos.x, pos.y, world.width, world.height);
 
-      const dryFireRisk = terrain.temperature * (1 - terrain.rainfall) * 0.018;
+      const waterProtection = clamp(water.river * 0.75 + water.lake * 0.9 + water.delta * 0.65, 0, 0.9);
+      const dryFireRisk = terrain.temperature * (1 - terrain.rainfall) * 0.018 * (1 - waterProtection);
       if (Math.random() < dryFireRisk) {
         plant.amount *= 0.18;
         fires++;
         continue;
       }
 
-      if (plants.length + births > 260) break;
-      if (Math.random() < plantSuitability(terrain) * 0.055) {
+      if (plants.length + births > 280) break;
+      if (Math.random() < plantSuitability(terrain, water) * 0.06) {
         const angle = Math.random() * Math.PI * 2;
         const distance = 6 + Math.random() * 28;
         const x = wrap(pos.x + Math.cos(angle) * distance, world.width);
         const y = Math.max(0, Math.min(world.height, pos.y + Math.sin(angle) * distance));
         const target = sampleDynamicPlanet(x, y);
-        if (plantSuitability(target) > 0.38) {
+        const targetWater = sampleHydrology(x, y, world.width, world.height);
+        if (plantSuitability(target, targetWater) > 0.38 && targetWater.lake < 0.55) {
           world.makeResourceAt?.(x, y);
           births++;
         }
@@ -103,7 +118,20 @@ export function createLivingSystems(world) {
     }
 
     if (fires >= 3) addHistory('Wildfire', `${fires} vegetation patches burned during a dry climate interval.`);
-    if (births >= 8) addHistory('Forest expansion', `${births} new vegetation patches spread into suitable terrain.`);
+    if (births >= 8) addHistory('River-valley expansion', `${births} new vegetation patches spread through moist terrain and drainage corridors.`);
+  }
+
+  function hydrologyCycle() {
+    const wetSeason = Math.max(0, Math.sin(season * Math.PI * 2));
+    const floodChance = 0.08 + wetSeason * 0.2;
+    if (Math.random() < floodChance) {
+      const severity = 1 + Math.floor(Math.random() * 4);
+      addHistory('Seasonal flooding', `${severity} major river basin${severity === 1 ? '' : 's'} overflowed, enriching floodplains and disturbing nearby life.`);
+    }
+
+    if (Math.random() < 0.06) {
+      addHistory('Erosion cycle', 'Rivers cut deeper channels through uplifted terrain and carried sediment toward lakes and coastal deltas.');
+    }
   }
 
   function evolutionCycle() {
@@ -153,6 +181,7 @@ export function createLivingSystems(world) {
     window.dispatchEvent(new CustomEvent('reality-history', { detail: history.slice(0, 12) }));
   }
 
+  addHistory('Hydrological age begins', 'Rain now drains downhill into rivers, lakes, floodplains, and coastal deltas.');
   addHistory('Living planet initialized', 'Terrain, vegetation, climate, evolution, and history systems became active.');
 
   return {
@@ -163,10 +192,12 @@ export function createLivingSystems(world) {
   };
 }
 
-function plantSuitability(t) {
-  if (!t.land || ['ice', 'cold-desert', 'snow-mountain', 'mountain', 'desert'].includes(t.biome)) return 0;
+function plantSuitability(t, water = { river: 0, lake: 0, delta: 0 }) {
+  if (!t.land || ['ice', 'cold-desert', 'snow-mountain', 'mountain'].includes(t.biome)) return 0;
   const temperatureFit = 1 - Math.abs(t.temperature - 0.58) * 1.5;
-  return clamp(temperatureFit * 0.55 + t.rainfall * 0.65, 0, 1);
+  const waterBoost = clamp(water.river * 0.5 + water.lake * 0.35 + water.delta * 0.65, 0, 0.65);
+  const desertPenalty = t.biome === 'desert' && waterBoost < 0.18 ? 0.18 : 1;
+  return clamp((temperatureFit * 0.5 + t.rainfall * 0.55 + waterBoost) * desertPenalty, 0, 1);
 }
 
 function countLife(world) {
