@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Reality Sandbox</title>
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="living.css" />
 </head>
 <body>
   <main class="app">
@@ -25,15 +26,23 @@
         <button id="forceBrushButton">Force Brush</button>
         <button id="zoomInButton">Zoom +</button>
         <button id="zoomOutButton">Zoom −</button>
+        <button id="deepZoomButton">Surface View</button>
       </div>
     </section>
 
-    <section class="main-panel">
-      <div id="world" aria-label="Interactive 3D Reality Sandbox globe"></div>
+    <section class="simulation-layout">
+      <section class="main-panel">
+        <div id="world" aria-label="Interactive 3D Reality Sandbox globe"></div>
+      </section>
+
+      <aside class="history-panel" aria-label="World history">
+        <h2>World History</h2>
+        <ol id="historyList"></ol>
+      </aside>
     </section>
 
     <footer>
-      <p>Drag to rotate. Scroll or use Zoom. Force Brush paints directly onto the globe; hold Shift for repulsion.</p>
+      <p>Drag to rotate. Pinch or use Zoom. Surface View moves close to the planet. Force Brush paints directly onto the globe.</p>
     </footer>
   </main>
 
