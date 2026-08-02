@@ -1,3 +1,5 @@
+import { sampleTectonics } from './plate-tectonics.js';
+
 export const PLANET_SEED = 734221;
 
 export function samplePlanet(x, y, width = 1200, height = 720) {
@@ -7,20 +9,28 @@ export function samplePlanet(x, y, width = 1200, height = 720) {
   const ny = Math.sin(lat);
   const nz = Math.cos(lat) * Math.sin(lon);
 
-  const continental = fbm3(nx * 1.25, ny * 1.25, nz * 1.25, PLANET_SEED, 5);
-  const ridges = 1 - Math.abs(fbm3(nx * 3.4, ny * 3.4, nz * 3.4, PLANET_SEED + 91, 4) * 2 - 1);
+  const tectonics = sampleTectonics(nx, ny, nz);
+  const continentalNoise = fbm3(nx * 1.25, ny * 1.25, nz * 1.25, PLANET_SEED, 5);
   const detail = fbm3(nx * 7.5, ny * 7.5, nz * 7.5, PLANET_SEED + 203, 3);
-  const elevation = continental * 0.72 + ridges * 0.20 + detail * 0.08;
+
+  // Plate type establishes broad continental/oceanic crust. Convergent
+  // boundaries raise mountain chains; divergent boundaries create rifts.
+  const crustBase = tectonics.continentalBias * 0.33 + continentalNoise * 0.43;
+  const mountainUplift = Math.min(0.30, tectonics.uplift * 1.55);
+  const riftDrop = Math.min(0.18, tectonics.rift * 1.15);
+  const boundaryRoughness = tectonics.boundaryStrength * detail * 0.12;
+  const elevation = clamp(0.20 + crustBase + mountainUplift + boundaryRoughness - riftDrop + detail * 0.06, 0, 1);
+
   const seaLevel = 0.53;
   const land = elevation >= seaLevel;
-
   const latitudeCooling = Math.pow(Math.abs(lat) / (Math.PI / 2), 1.35);
   const altitudeCooling = land ? Math.max(0, elevation - 0.62) * 1.65 : 0;
   const temperature = clamp(1 - latitudeCooling - altitudeCooling, 0, 1);
 
   const moistureNoise = fbm3(nx * 2.2 + 9, ny * 2.2 - 4, nz * 2.2 + 2, PLANET_SEED + 417, 4);
   const coastalMoisture = land ? clamp(1 - (elevation - seaLevel) * 2.8, 0, 1) : 1;
-  const rainfall = clamp(moistureNoise * 0.7 + coastalMoisture * 0.3, 0, 1);
+  const rainShadow = land ? tectonics.uplift * 0.18 : 0;
+  const rainfall = clamp(moistureNoise * 0.7 + coastalMoisture * 0.3 - rainShadow, 0, 1);
 
   let biome;
   if (!land) biome = elevation > seaLevel - 0.055 ? 'shallow-ocean' : 'deep-ocean';
@@ -32,7 +42,16 @@ export function samplePlanet(x, y, width = 1200, height = 720) {
   else if (rainfall > 0.58) biome = 'forest';
   else biome = 'grassland';
 
-  return { elevation, temperature, rainfall, biome, land };
+  return {
+    elevation,
+    temperature,
+    rainfall,
+    biome,
+    land,
+    plateId: tectonics.plateId,
+    plateBoundary: tectonics.boundaryStrength,
+    convergence: tectonics.convergence,
+  };
 }
 
 export function biomeColor(sample) {
@@ -52,7 +71,8 @@ export function biomeColor(sample) {
   };
   const base = colors[sample.biome] || [100, 100, 100];
   const shade = sample.land ? 0.82 + sample.elevation * 0.30 : 0.82 + sample.elevation * 0.22;
-  return base.map(v => Math.round(clamp(v * shade, 0, 255)));
+  const boundaryHighlight = sample.plateBoundary > 0.65 && sample.land ? 1.08 : 1;
+  return base.map(v => Math.round(clamp(v * shade * boundaryHighlight, 0, 255)));
 }
 
 export function randomHabitablePoint(width, height, random = Math.random, preference = 'land') {
