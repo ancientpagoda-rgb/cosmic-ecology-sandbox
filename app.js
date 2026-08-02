@@ -1,6 +1,7 @@
 import { createRng } from './core/rng.js';
 import { createWorld } from './core/world.js';
 import { createRenderer } from './core/render.js';
+import { createSphericalStepper } from './core/sphere.js';
 
 const FIXED_DT = 0.06; // 60 ms in seconds, fixed sim step
 
@@ -8,6 +9,7 @@ let seed = null;
 let rng = null;
 let world = null;
 let renderer = null;
+let stepSphere = null;
 
 let running = false;
 let accumulator = 0;
@@ -28,10 +30,10 @@ function mainLoop(timestamp) {
   const deltaMs = timestamp - lastTime;
   lastTime = timestamp;
 
-  accumulator += deltaMs / 1000; // seconds
+  accumulator += deltaMs / 1000;
 
   while (accumulator >= FIXED_DT) {
-    world.step(FIXED_DT);
+    stepSphere(FIXED_DT);
     accumulator -= FIXED_DT;
   }
 
@@ -61,7 +63,7 @@ function pause() {
 
 function stepOnce() {
   if (!world) return;
-  world.step(FIXED_DT);
+  stepSphere(FIXED_DT);
   renderer.render(world);
   updateLabels();
 }
@@ -70,17 +72,16 @@ function worldToCanvas(evt, canvas, world) {
   const rect = canvas.getBoundingClientRect();
   const x = evt.clientX - rect.left;
   const y = evt.clientY - rect.top;
-  // Assume world units ~ canvas CSS size
   const sx = world.width / rect.width;
   const sy = world.height / rect.height;
   return { x: x * sx, y: y * sy };
 }
 
 function init() {
-  // Seeded RNG: use current timestamp, but allow deterministic replay by copying the value.
   seed = Date.now().toString(36);
   rng = createRng(seed);
   world = createWorld(rng);
+  stepSphere = createSphericalStepper(world);
   const canvas = document.getElementById('world');
   renderer = createRenderer(canvas);
 
@@ -99,7 +100,6 @@ function init() {
   pauseBtn.addEventListener('click', pause);
   stepBtn.addEventListener('click', stepOnce);
 
-  // Spawn at random positions so it's obvious something happened
   spawnAgentBtn.addEventListener('click', () => {
     if (!world.makeAgentAt) return;
     world.makeAgentAt(Math.random() * world.width, Math.random() * world.height);
@@ -117,7 +117,17 @@ function init() {
     forceBrushBtn.classList.toggle('active', brushActive);
   });
 
-  // ForceField brush on canvas (mouse + touch)
+  if (zoomInBtn && zoomOutBtn) {
+    zoomInBtn.addEventListener('click', () => {
+      world.camera.zoom = Math.min(3, world.camera.zoom * 1.2);
+      renderer.render(world);
+    });
+    zoomOutBtn.addEventListener('click', () => {
+      world.camera.zoom = Math.max(0.5, world.camera.zoom / 1.2);
+      renderer.render(world);
+    });
+  }
+
   let drawing = false;
 
   function brushAtClient(x, y, polarity) {
@@ -144,7 +154,6 @@ function init() {
     if (!t) return;
     evt.preventDefault();
     drawing = true;
-    // On mobile, use two-finger tap as repulsor (if more than one touch)
     const polarity = evt.touches.length > 1 ? -1 : 1;
     brushAtClient(t.clientX, t.clientY, polarity);
   }, { passive: false });
@@ -162,12 +171,7 @@ function init() {
     drawing = false;
   });
 
-  // Entity click for inspector (mouse only; touch uses tap when brush off)
-  // No inspector clicks for now; clicks are reserved for future tools
-
-  // Initial render (paused)
   renderer.render(world);
 }
 
 window.addEventListener('DOMContentLoaded', init);
-
