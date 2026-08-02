@@ -1,7 +1,8 @@
 import { createRng } from './core/rng.js';
 import { createWorld } from './core/world.js';
 import { createSphericalStepper } from './core/sphere.js';
-import { createGlobeRenderer } from './core/globe-render.js';
+import { createGlobeRenderer } from './core/globe-render-v2.js';
+import { placeExistingEntitiesOnBiomes, randomHabitablePoint, samplePlanet } from './core/planet.js';
 
 const FIXED_DT = 0.06;
 
@@ -21,6 +22,7 @@ function mainLoop(timestamp) {
 
   while (accumulator >= FIXED_DT) {
     stepSphere(FIXED_DT);
+    keepLifeHabitable();
     accumulator -= FIXED_DT;
   }
 
@@ -40,16 +42,25 @@ function setRunning(next) {
   }
 }
 
-function randomPoint() {
-  return {
-    x: Math.random() * world.width,
-    y: Math.random() * world.height,
-  };
+function keepLifeHabitable() {
+  const { position, resource } = world.ecs.components;
+  for (const [id, res] of resource.entries()) {
+    if (res.amount <= 0) continue;
+    const pos = position.get(id);
+    if (!pos) continue;
+    const biome = samplePlanet(pos.x, pos.y, world.width, world.height);
+    if (!biome.land || biome.biome === 'ice') {
+      const p = randomHabitablePoint(world.width, world.height, Math.random, 'plant');
+      pos.x = p.x;
+      pos.y = p.y;
+    }
+  }
 }
 
 function init() {
   const rng = createRng(Date.now().toString(36));
   world = createWorld(rng);
+  placeExistingEntitiesOnBiomes(world, Math.random);
   stepSphere = createSphericalStepper(world);
   globe = createGlobeRenderer(document.getElementById('world'));
 
@@ -57,17 +68,18 @@ function init() {
   document.getElementById('pauseButton').addEventListener('click', () => setRunning(false));
   document.getElementById('stepButton').addEventListener('click', () => {
     stepSphere(FIXED_DT);
+    keepLifeHabitable();
     globe.render(world);
   });
 
   document.getElementById('spawnAgentButton').addEventListener('click', () => {
-    const p = randomPoint();
+    const p = randomHabitablePoint(world.width, world.height, Math.random, 'land');
     world.makeAgentAt?.(p.x, p.y);
     globe.render(world);
   });
 
   document.getElementById('spawnResourceButton').addEventListener('click', () => {
-    const p = randomPoint();
+    const p = randomHabitablePoint(world.width, world.height, Math.random, 'plant');
     world.makeResourceAt?.(p.x, p.y);
     globe.render(world);
   });
@@ -94,12 +106,12 @@ function init() {
     globe.render(world);
   }
 
-  globe.element.addEventListener('pointerdown', (event) => {
+  globe.element.addEventListener('pointerdown', event => {
     if (!brushActive) return;
     painting = true;
     paint(event);
   });
-  globe.element.addEventListener('pointermove', (event) => {
+  globe.element.addEventListener('pointermove', event => {
     if (painting) paint(event);
   });
   window.addEventListener('pointerup', () => { painting = false; });
