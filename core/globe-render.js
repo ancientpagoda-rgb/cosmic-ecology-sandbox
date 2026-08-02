@@ -1,14 +1,15 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
 
 export function createGlobeRenderer(container) {
+  const mobile = matchMedia('(max-width: 700px), (pointer: coarse)').matches;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x02040a);
 
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-  camera.position.set(0, 0.35, 3.25);
+  const camera = new THREE.PerspectiveCamera(mobile ? 48 : 42, 1, 0.1, 100);
+  camera.position.set(0, 0.25, mobile ? 3.65 : 3.25);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const renderer = new THREE.WebGLRenderer({ antialias: !mobile, alpha: false, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? 1.35 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   container.replaceChildren(renderer.domElement);
 
@@ -17,28 +18,22 @@ export function createGlobeRenderer(container) {
   scene.add(globeGroup);
 
   const radius = 1;
-  const texture = makePlanetTexture();
+  const segments = mobile ? 48 : 96;
   const planet = new THREE.Mesh(
-    new THREE.SphereGeometry(radius, 96, 64),
-    new THREE.MeshStandardMaterial({ map: texture, roughness: 0.86, metalness: 0.02 }),
+    new THREE.SphereGeometry(radius, segments, mobile ? 32 : 64),
+    new THREE.MeshStandardMaterial({ map: makePlanetTexture(mobile), roughness: 0.86, metalness: 0.02 }),
   );
   globeGroup.add(planet);
 
   const grid = new THREE.LineSegments(
-    new THREE.WireframeGeometry(new THREE.SphereGeometry(radius * 1.002, 24, 16)),
-    new THREE.LineBasicMaterial({ color: 0x8bb7ff, transparent: true, opacity: 0.10 }),
+    new THREE.WireframeGeometry(new THREE.SphereGeometry(radius * 1.002, mobile ? 16 : 24, mobile ? 10 : 16)),
+    new THREE.LineBasicMaterial({ color: 0x8bb7ff, transparent: true, opacity: 0.09 }),
   );
   globeGroup.add(grid);
 
   const atmosphere = new THREE.Mesh(
-    new THREE.SphereGeometry(radius * 1.055, 64, 48),
-    new THREE.MeshBasicMaterial({
-      color: 0x66aaff,
-      transparent: true,
-      opacity: 0.075,
-      side: THREE.BackSide,
-      blending: THREE.AdditiveBlending,
-    }),
+    new THREE.SphereGeometry(radius * 1.055, mobile ? 32 : 64, mobile ? 24 : 48),
+    new THREE.MeshBasicMaterial({ color: 0x66aaff, transparent: true, opacity: 0.075, side: THREE.BackSide, blending: THREE.AdditiveBlending }),
   );
   globeGroup.add(atmosphere);
 
@@ -49,22 +44,22 @@ export function createGlobeRenderer(container) {
   const sun = new THREE.DirectionalLight(0xffffff, 2.5);
   sun.position.set(3.5, 2.2, 4);
   scene.add(sun);
-
-  const stars = makeStars();
-  scene.add(stars);
+  scene.add(makeStars(mobile ? 550 : 1400));
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
+  const activePointers = new Map();
   let lastWorld = null;
-  let targetDistance = 3.25;
+  let targetDistance = mobile ? 3.65 : 3.25;
+  let lastPinchDistance = 0;
   let dragging = false;
   let lastX = 0;
   let lastY = 0;
 
   function resize() {
     const rect = container.getBoundingClientRect();
-    const width = Math.max(1, rect.width);
-    const height = Math.max(1, rect.height);
+    const width = Math.max(1, Math.floor(rect.width));
+    const height = Math.max(1, Math.floor(rect.height));
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
@@ -80,7 +75,8 @@ export function createGlobeRenderer(container) {
 
   function animate() {
     requestAnimationFrame(animate);
-    if (!dragging) globeGroup.rotation.y += 0.0007;
+    if (!dragging && activePointers.size === 0) globeGroup.rotation.y += mobile ? 0.00035 : 0.0007;
+    camera.position.setLength(targetDistance);
     renderer.render(scene, camera);
   }
   animate();
@@ -88,37 +84,34 @@ export function createGlobeRenderer(container) {
   function syncEntities(world) {
     entityGroup.clear();
     const { position, agent, predator, apex, resource, forceField } = world.ecs.components;
-
     for (const [id, res] of resource.entries()) {
       const pos = position.get(id);
-      if (!pos || res.amount <= 0) continue;
-      addMarker(pos, world, res.kind === 'pod' ? 0xffd166 : 0x55dd88, 0.010 + res.amount * 0.006);
+      if (pos && res.amount > 0) addMarker(pos, world, res.kind === 'pod' ? 0xffd166 : 0x55dd88, mobile ? 0.018 : 0.014);
     }
     for (const [id] of agent.entries()) {
       const pos = position.get(id);
-      if (pos) addMarker(pos, world, 0x5fd7ff, 0.022);
+      if (pos) addMarker(pos, world, 0x5fd7ff, mobile ? 0.030 : 0.022);
     }
     for (const [id] of predator.entries()) {
       const pos = position.get(id);
-      if (pos) addMarker(pos, world, 0xff5c67, 0.030);
+      if (pos) addMarker(pos, world, 0xff5c67, mobile ? 0.038 : 0.030);
     }
     for (const [id] of apex.entries()) {
       const pos = position.get(id);
-      if (pos) addMarker(pos, world, 0xc890ff, 0.042);
+      if (pos) addMarker(pos, world, 0xc890ff, mobile ? 0.050 : 0.042);
     }
     for (const [id, field] of forceField.entries()) {
       const pos = position.get(id);
-      if (pos) addMarker(pos, world, field.strength < 0 ? 0xff8844 : 0x66ffff, 0.028, true);
+      if (pos) addMarker(pos, world, field.strength < 0 ? 0xff8844 : 0x66ffff, mobile ? 0.040 : 0.028, true);
     }
   }
 
   function addMarker(pos, world, color, size, glow = false) {
-    const p = worldToSphere(pos.x, pos.y, world.width, world.height, radius + 0.018);
     const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(size, 10, 8),
+      new THREE.SphereGeometry(size, mobile ? 6 : 10, mobile ? 5 : 8),
       new THREE.MeshBasicMaterial({ color, transparent: glow, opacity: glow ? 0.72 : 1 }),
     );
-    mesh.position.copy(p);
+    mesh.position.copy(worldToSphere(pos.x, pos.y, world.width, world.height, radius + 0.018));
     entityGroup.add(mesh);
   }
 
@@ -130,7 +123,6 @@ export function createGlobeRenderer(container) {
     raycaster.setFromCamera(pointer, camera);
     const hit = raycaster.intersectObject(planet, false)[0];
     if (!hit) return null;
-
     const local = globeGroup.worldToLocal(hit.point.clone()).normalize();
     const lat = Math.asin(local.y);
     const lon = Math.atan2(local.z, local.x);
@@ -140,60 +132,81 @@ export function createGlobeRenderer(container) {
     };
   }
 
-  function zoomIn() {
-    targetDistance = Math.max(1.7, targetDistance - 0.35);
-  }
+  function zoomIn() { targetDistance = Math.max(1.75, targetDistance - 0.35); }
+  function zoomOut() { targetDistance = Math.min(6, targetDistance + 0.35); }
 
-  function zoomOut() {
-    targetDistance = Math.min(6, targetDistance + 0.35);
-  }
+  const canvas = renderer.domElement;
+  canvas.style.touchAction = 'none';
 
-  renderer.domElement.addEventListener('pointerdown', (event) => {
+  canvas.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    canvas.setPointerCapture?.(event.pointerId);
     dragging = true;
     lastX = event.clientX;
     lastY = event.clientY;
-    renderer.domElement.setPointerCapture?.(event.pointerId);
+    lastPinchDistance = 0;
   });
-  renderer.domElement.addEventListener('pointermove', (event) => {
-    if (!dragging || renderer.domElement.dataset.brush === 'on') return;
+
+  canvas.addEventListener('pointermove', (event) => {
+    if (!activePointers.has(event.pointerId)) return;
+    event.preventDefault();
+    activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    const points = [...activePointers.values()];
+    if (points.length >= 2) {
+      const dx = points[0].x - points[1].x;
+      const dy = points[0].y - points[1].y;
+      const distance = Math.hypot(dx, dy);
+      if (lastPinchDistance) {
+        targetDistance = Math.max(1.75, Math.min(6, targetDistance - (distance - lastPinchDistance) * 0.008));
+      }
+      lastPinchDistance = distance;
+      return;
+    }
+
+    if (canvas.dataset.brush === 'on') return;
     globeGroup.rotation.y += (event.clientX - lastX) * 0.006;
     globeGroup.rotation.x += (event.clientY - lastY) * 0.004;
     globeGroup.rotation.x = Math.max(-1.2, Math.min(1.2, globeGroup.rotation.x));
     lastX = event.clientX;
     lastY = event.clientY;
-  });
-  window.addEventListener('pointerup', () => { dragging = false; });
-  renderer.domElement.addEventListener('wheel', (event) => {
-    event.preventDefault();
-    targetDistance = Math.max(1.7, Math.min(6, targetDistance + Math.sign(event.deltaY) * 0.25));
   }, { passive: false });
 
-  return {
-    render,
-    zoomIn,
-    zoomOut,
-    pickWorldPoint,
-    get element() { return renderer.domElement; },
-  };
+  function endPointer(event) {
+    activePointers.delete(event.pointerId);
+    if (activePointers.size === 0) {
+      dragging = false;
+      lastPinchDistance = 0;
+    }
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('lostpointercapture', endPointer);
+
+  canvas.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    targetDistance = Math.max(1.75, Math.min(6, targetDistance + Math.sign(event.deltaY) * 0.25));
+  }, { passive: false });
+
+  window.addEventListener('resize', resize, { passive: true });
+  window.visualViewport?.addEventListener('resize', resize, { passive: true });
+
+  return { render, zoomIn, zoomOut, pickWorldPoint, get element() { return canvas; } };
 }
 
 function worldToSphere(x, y, width, height, radius) {
   const lon = (x / width - 0.5) * Math.PI * 2;
   const lat = (0.5 - y / height) * Math.PI;
   const cosLat = Math.cos(lat);
-  return new THREE.Vector3(
-    radius * cosLat * Math.cos(lon),
-    radius * Math.sin(lat),
-    radius * cosLat * Math.sin(lon),
-  );
+  return new THREE.Vector3(radius * cosLat * Math.cos(lon), radius * Math.sin(lat), radius * cosLat * Math.sin(lon));
 }
 
-function makePlanetTexture() {
+function makePlanetTexture(mobile) {
   const canvas = document.createElement('canvas');
-  canvas.width = 1024;
-  canvas.height = 512;
+  canvas.width = mobile ? 512 : 1024;
+  canvas.height = mobile ? 256 : 512;
   const ctx = canvas.getContext('2d');
-
   const ocean = ctx.createLinearGradient(0, 0, 0, canvas.height);
   ocean.addColorStop(0, '#18365f');
   ocean.addColorStop(0.5, '#0c5b79');
@@ -202,19 +215,16 @@ function makePlanetTexture() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const rng = mulberry32(734221);
-  for (let continent = 0; continent < 28; continent++) {
+  for (let continent = 0; continent < 24; continent++) {
     const cx = rng() * canvas.width;
-    const cy = 70 + rng() * (canvas.height - 140);
-    const base = 34 + rng() * 95;
+    const cy = 35 + rng() * (canvas.height - 70);
+    const base = (18 + rng() * 52) * (canvas.width / 512);
     ctx.fillStyle = rng() > 0.3 ? '#3f7d4d' : '#7b8f54';
     ctx.beginPath();
-    for (let i = 0; i < 18; i++) {
-      const angle = i / 18 * Math.PI * 2;
-      const wobble = 0.55 + rng() * 0.75;
-      const rx = base * wobble;
-      const ry = base * (0.45 + rng() * 0.45);
-      const px = cx + Math.cos(angle) * rx;
-      const py = cy + Math.sin(angle) * ry;
+    for (let i = 0; i < 16; i++) {
+      const angle = i / 16 * Math.PI * 2;
+      const px = cx + Math.cos(angle) * base * (0.55 + rng() * 0.75);
+      const py = cy + Math.sin(angle) * base * (0.45 + rng() * 0.45);
       if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.closePath();
@@ -222,15 +232,9 @@ function makePlanetTexture() {
   }
 
   ctx.fillStyle = 'rgba(235,245,255,0.82)';
-  ctx.fillRect(0, 0, canvas.width, 34);
-  ctx.fillRect(0, canvas.height - 34, canvas.width, 34);
-
-  for (let i = 0; i < 1800; i++) {
-    const x = rng() * canvas.width;
-    const y = rng() * canvas.height;
-    ctx.fillStyle = `rgba(255,255,255,${rng() * 0.06})`;
-    ctx.fillRect(x, y, 1, 1);
-  }
+  const cap = Math.max(18, canvas.height * 0.065);
+  ctx.fillRect(0, 0, canvas.width, cap);
+  ctx.fillRect(0, canvas.height - cap, canvas.width, cap);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -238,10 +242,10 @@ function makePlanetTexture() {
   return texture;
 }
 
-function makeStars() {
+function makeStars(count) {
   const geometry = new THREE.BufferGeometry();
   const values = [];
-  for (let i = 0; i < 1400; i++) {
+  for (let i = 0; i < count; i++) {
     const r = 12 + Math.random() * 18;
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
