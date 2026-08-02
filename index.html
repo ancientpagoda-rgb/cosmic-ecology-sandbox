@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Reality Sandbox</title>
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="sphere.css" />
 </head>
 <body>
   <main class="app">
     <header>
       <h1>Reality Sandbox</h1>
-      <p class="tagline">Deterministic 2D ecosystem sandbox with agents, resources, and fields.</p>
+      <p class="tagline">Deterministic ecosystem evolving across one continuous spherical world.</p>
     </header>
 
     <section class="controls" aria-label="Simulation controls">
@@ -33,11 +34,11 @@
     </section>
 
     <section class="main-panel">
-      <canvas id="world" aria-label="Reality Sandbox world"></canvas>
+      <canvas id="world" aria-label="Spherical Reality Sandbox world"></canvas>
     </section>
 
     <footer>
-      <p>M1: seeded tick loop + canvas render. Future: agents, resources, force fields, audio.</p>
+      <p>Longitude wraps continuously; crossing a pole reflects latitude and rotates longitude halfway around the globe.</p>
     </footer>
   </main>
 
