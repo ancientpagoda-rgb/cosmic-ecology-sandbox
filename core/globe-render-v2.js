@@ -18,9 +18,8 @@ export function createGlobeRenderer(container) {
   globe.rotation.x = -0.12;
   scene.add(globe);
 
-  const radius = 1;
   const planet = new THREE.Mesh(
-    new THREE.SphereGeometry(radius, mobile ? 56 : 112, mobile ? 36 : 72),
+    new THREE.SphereGeometry(1, mobile ? 56 : 112, mobile ? 36 : 72),
     new THREE.MeshStandardMaterial({ map: makeBiomeTexture(mobile), roughness: 0.9, metalness: 0.01 }),
   );
   globe.add(planet);
@@ -67,7 +66,7 @@ export function createGlobeRenderer(container) {
 
   function animate() {
     requestAnimationFrame(animate);
-    if (!dragging && activePointers.size === 0) globe.rotation.y += mobile ? 0.00035 : 0.0007;
+    if (!dragging && activePointers.size === 0 && targetDistance > 1.55) globe.rotation.y += mobile ? 0.00035 : 0.0007;
     camera.position.setLength(targetDistance);
     renderer.render(scene, camera);
   }
@@ -99,8 +98,9 @@ export function createGlobeRenderer(container) {
   }
 
   function marker(pos, world, color, size, glow = false) {
+    const closeScale = targetDistance < 1.6 ? 0.72 : 1;
     const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(size, mobile ? 6 : 10, mobile ? 5 : 8),
+      new THREE.SphereGeometry(size * closeScale, mobile ? 6 : 10, mobile ? 5 : 8),
       new THREE.MeshBasicMaterial({ color, transparent: glow, opacity: glow ? 0.72 : 1 }),
     );
     mesh.position.copy(worldToSphere(pos.x, pos.y, world.width, world.height, 1.018));
@@ -118,10 +118,7 @@ export function createGlobeRenderer(container) {
     const local = globe.worldToLocal(hit.point.clone()).normalize();
     const lat = Math.asin(local.y);
     const lon = Math.atan2(local.z, local.x);
-    return {
-      x: ((lon / (Math.PI * 2)) + 0.5) * lastWorld.width,
-      y: (0.5 - lat / Math.PI) * lastWorld.height,
-    };
+    return { x: ((lon / (Math.PI * 2)) + 0.5) * lastWorld.width, y: (0.5 - lat / Math.PI) * lastWorld.height };
   }
 
   const canvas = renderer.domElement;
@@ -142,7 +139,7 @@ export function createGlobeRenderer(container) {
     const points = [...activePointers.values()];
     if (points.length >= 2) {
       const d = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
-      if (lastPinch) targetDistance = clamp(targetDistance - (d - lastPinch) * 0.008, 1.75, 6);
+      if (lastPinch) targetDistance = clamp(targetDistance - (d - lastPinch) * 0.008, 1.22, 6);
       lastPinch = d;
       return;
     }
@@ -155,17 +152,14 @@ export function createGlobeRenderer(container) {
 
   function end(event) {
     activePointers.delete(event.pointerId);
-    if (!activePointers.size) {
-      dragging = false;
-      lastPinch = 0;
-    }
+    if (!activePointers.size) { dragging = false; lastPinch = 0; }
   }
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);
   canvas.addEventListener('lostpointercapture', end);
   canvas.addEventListener('wheel', event => {
     event.preventDefault();
-    targetDistance = clamp(targetDistance + Math.sign(event.deltaY) * 0.25, 1.75, 6);
+    targetDistance = clamp(targetDistance + Math.sign(event.deltaY) * 0.25, 1.22, 6);
   }, { passive: false });
 
   window.addEventListener('resize', resize, { passive: true });
@@ -173,8 +167,9 @@ export function createGlobeRenderer(container) {
 
   return {
     render,
-    zoomIn: () => { targetDistance = Math.max(1.75, targetDistance - 0.35); },
+    zoomIn: () => { targetDistance = Math.max(1.22, targetDistance - 0.35); },
     zoomOut: () => { targetDistance = Math.min(6, targetDistance + 0.35); },
+    deepZoom: () => { targetDistance = targetDistance < 1.6 ? (mobile ? 3.65 : 3.25) : 1.28; },
     pickWorldPoint,
     get element() { return canvas; },
   };
@@ -186,16 +181,11 @@ function makeBiomeTexture(mobile) {
   canvas.height = mobile ? 256 : 512;
   const ctx = canvas.getContext('2d');
   const image = ctx.createImageData(canvas.width, canvas.height);
-
   for (let y = 0; y < canvas.height; y++) {
     for (let x = 0; x < canvas.width; x++) {
-      const s = samplePlanet(x, y, canvas.width, canvas.height);
-      const [r, g, b] = biomeColor(s);
+      const [r, g, b] = biomeColor(samplePlanet(x, y, canvas.width, canvas.height));
       const i = (y * canvas.width + x) * 4;
-      image.data[i] = r;
-      image.data[i + 1] = g;
-      image.data[i + 2] = b;
-      image.data[i + 3] = 255;
+      image.data[i] = r; image.data[i + 1] = g; image.data[i + 2] = b; image.data[i + 3] = 255;
     }
   }
   ctx.putImageData(image, 0, 0);
