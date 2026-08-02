@@ -1,5 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
 import { samplePlanet, biomeColor } from './planet.js';
+import { sampleHydrology, hydrologyColor } from './hydrology.js';
 
 export function createGlobeRenderer(container) {
   const mobile = matchMedia('(max-width: 700px), (pointer: coarse)').matches;
@@ -183,9 +184,14 @@ function makeBiomeTexture(mobile) {
   const image = ctx.createImageData(canvas.width, canvas.height);
   for (let y = 0; y < canvas.height; y++) {
     for (let x = 0; x < canvas.width; x++) {
-      const [r, g, b] = biomeColor(samplePlanet(x, y, canvas.width, canvas.height));
+      const planet = samplePlanet(x, y, canvas.width, canvas.height);
+      const hydro = sampleHydrology(x, y, canvas.width, canvas.height);
+      const [r, g, b] = hydrologyColor(biomeColor(planet), hydro);
       const i = (y * canvas.width + x) * 4;
-      image.data[i] = r; image.data[i + 1] = g; image.data[i + 2] = b; image.data[i + 3] = 255;
+      image.data[i] = r;
+      image.data[i + 1] = g;
+      image.data[i + 2] = b;
+      image.data[i + 3] = 255;
     }
   }
   ctx.putImageData(image, 0, 0);
