@@ -15,6 +15,7 @@ export default defineConfig({
         worldCoreLab: resolve(process.cwd(), 'world-core-lab.html'),
         hexOctreeLab: resolve(process.cwd(), 'hex-octree-lab.html'),
         planetRendererLab: resolve(process.cwd(), 'planet-renderer-lab.html'),
+        potreePlanetLab: resolve(process.cwd(), 'potree-planet-lab.html'),
       },
     },
   },
