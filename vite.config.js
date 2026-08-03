@@ -18,6 +18,7 @@ export default defineConfig({
         potreePlanetLab: resolve(process.cwd(), 'potree-planet-lab.html'),
         openSpaceBridgeLab: resolve(process.cwd(), 'openspace-bridge-lab.html'),
         realityLab: resolve(process.cwd(), 'reality-lab.html'),
+        realityFlightLab: resolve(process.cwd(), 'reality-flight-lab.html'),
       },
     },
   },
