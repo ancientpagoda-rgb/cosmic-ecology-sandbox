@@ -8,6 +8,7 @@ import { createGalaxySystem } from './core/galaxy-system.js';
 import { createOrbitalSystem } from './core/orbital-system.js';
 import { createSurfaceCharacter } from './core/surface-character.js';
 import { createCloseupPolish } from './core/closeup-polish.js';
+import { createScaleRuntime } from './core/scale-runtime.js';
 import { placeExistingEntitiesOnBiomes } from './core/planet.js';
 import { createLivingSystems } from './core/living-systems.js';
 import { createPlanetDynamics } from './core/planet-dynamics.js';
@@ -24,6 +25,7 @@ let globe;
 let galaxyLayer;
 let surfaceCharacter;
 let closeupPolish;
+let scaleRuntime;
 let stepSphere;
 let moduleHost;
 let accumulator = 0;
@@ -79,9 +81,20 @@ function loop(timestamp) {
   if (steps === maxSteps) accumulator = 0;
 
   const cameraState = globe.getCameraState();
+  scaleRuntime.updateCamera(cameraState);
   globe.render(world);
   galaxyLayer.render(cameraState, timestamp);
-  moduleHost.render({ world, globe, galaxyLayer, surfaceCharacter, closeupPolish, timestamp });
+  moduleHost.render({
+    world,
+    globe,
+    galaxyLayer,
+    surfaceCharacter,
+    closeupPolish,
+    scaleRuntime,
+    lod: scaleRuntime.getLod(),
+    simulationBudget: scaleRuntime.simulationBudget(),
+    timestamp,
+  });
 
   if (timestamp - lastSave > 5000) {
     lastSave = timestamp;
@@ -115,6 +128,15 @@ async function init() {
     const dynamics = createPlanetDynamics(world, living, waterCycle, orbitalSystem);
     const worldElement = document.getElementById('world');
 
+    scaleRuntime = createScaleRuntime({
+      planetId: 'gaia',
+      distance: saved.camera?.distance || 3,
+    });
+    scaleRuntime.registerEntity({ id: 'milky-way', scale: 'galaxy', kind: 'galaxy' });
+    scaleRuntime.registerEntity({ id: 'sol', scale: 'system', kind: 'star' });
+    scaleRuntime.registerEntity({ id: 'gaia', scale: 'planet', kind: 'planet' });
+    scaleRuntime.registerEntity({ id: 'surface-player', scale: 'surface', kind: 'character' });
+
     globe = createGlobeRenderer(
       worldElement,
       dynamics,
@@ -123,14 +145,15 @@ async function init() {
         quality: 'auto',
         cameraState: saved.camera,
         orbitalSystem,
+        scaleRuntime,
         onCameraChange: saveState,
         onError: showError,
       },
     );
 
-    galaxyLayer = createGalaxyRenderLayer(worldElement, galaxySystem);
-    closeupPolish = createCloseupPolish(globe);
-    surfaceCharacter = createSurfaceCharacter(globe);
+    galaxyLayer = createGalaxyRenderLayer(worldElement, galaxySystem, { scaleRuntime });
+    closeupPolish = createCloseupPolish(globe, { scaleRuntime });
+    surfaceCharacter = createSurfaceCharacter(globe, { scaleRuntime });
 
     moduleHost = createModuleHost({ world });
     registerCurrentModules(moduleHost, {
@@ -152,8 +175,11 @@ async function init() {
     window.realitySandboxGalaxy = galaxySystem;
     window.realitySandboxCharacter = surfaceCharacter;
     window.realitySandboxCloseup = closeupPolish;
+    window.realitySandboxScale = scaleRuntime;
     globe.render(world);
-    galaxyLayer.render(globe.getCameraState());
+    const cameraState = globe.getCameraState();
+    scaleRuntime.updateCamera(cameraState);
+    galaxyLayer.render(cameraState);
     requestAnimationFrame(loop);
   } catch (error) {
     showError(error);
