@@ -14,6 +14,7 @@ export default defineConfig({
         emergenceLab: resolve(process.cwd(), 'emergence-lab.html'),
         worldCoreLab: resolve(process.cwd(), 'world-core-lab.html'),
         hexOctreeLab: resolve(process.cwd(), 'hex-octree-lab.html'),
+        planetRendererLab: resolve(process.cwd(), 'planet-renderer-lab.html'),
       },
     },
   },
