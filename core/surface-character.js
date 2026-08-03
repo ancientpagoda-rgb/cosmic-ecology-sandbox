@@ -26,6 +26,7 @@ export function createSurfaceCharacter(globe, options = {}) {
   let walkingPhase = 0;
   let enabled = false;
   let lastTime = performance.now();
+  let syntheticPointerId = 9182;
 
   function updateVisibility() {
     const distance = globe.getCameraState().distance;
@@ -62,6 +63,40 @@ export function createSurfaceCharacter(globe, options = {}) {
     knob.style.transform = `translate3d(${dx}px,${dy}px,0)`;
   }
 
+  function moveWorld(x, y, amount) {
+    if (typeof globe.moveSurface === 'function') {
+      globe.moveSurface(x, y, amount);
+      return;
+    }
+    const canvas = globe.element;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const scale = amount * 180;
+    syntheticPointerId += 1;
+    const common = {
+      pointerId: syntheticPointerId,
+      pointerType: 'touch',
+      bubbles: true,
+      cancelable: true,
+      isPrimary: true,
+    };
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { ...common, clientX: centerX, clientY: centerY, buttons: 1 }));
+    canvas.dispatchEvent(new PointerEvent('pointermove', {
+      ...common,
+      clientX: centerX - x * scale,
+      clientY: centerY - y * scale,
+      buttons: 1,
+    }));
+    canvas.dispatchEvent(new PointerEvent('pointerup', {
+      ...common,
+      clientX: centerX - x * scale,
+      clientY: centerY - y * scale,
+      buttons: 0,
+    }));
+  }
+
   joystick.addEventListener('pointerdown', event => {
     if (!enabled) return;
     event.preventDefault();
@@ -90,8 +125,7 @@ export function createSurfaceCharacter(globe, options = {}) {
   window.addEventListener('keyup', event => keys.delete(event.code));
 
   exitButton.addEventListener('click', () => {
-    globe.setDistance?.(2.85);
-    globe.zoomOut?.();
+    for (let i = 0; i < 6; i++) globe.zoomOut?.();
   });
 
   function frame(now) {
@@ -113,9 +147,10 @@ export function createSurfaceCharacter(globe, options = {}) {
     const magnitude = Math.min(1, Math.hypot(x, y));
 
     if (magnitude > 0.04) {
-      const directionX = x / Math.max(1, Math.hypot(x, y));
-      const directionY = y / Math.max(1, Math.hypot(x, y));
-      globe.moveSurface?.(directionX, directionY, dt * (options.speed || 0.34));
+      const length = Math.max(1, Math.hypot(x, y));
+      const directionX = x / length;
+      const directionY = y / length;
+      moveWorld(directionX, directionY, dt * (options.speed || 0.34));
       walkingPhase += dt * 10 * magnitude;
       avatar.classList.add('walking');
       avatar.style.setProperty('--walk-phase', String(Math.sin(walkingPhase)));
