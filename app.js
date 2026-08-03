@@ -5,6 +5,7 @@ import { createGlobeRenderer } from './core/globe-render-v3.js';
 import { placeExistingEntitiesOnBiomes, randomHabitablePoint } from './core/planet.js';
 import { createLivingSystems } from './core/living-systems.js';
 import { createPlanetDynamics } from './core/planet-dynamics.js';
+import { createBiosphere } from './core/biosphere.js';
 
 const FIXED_DT = 0.06;
 
@@ -13,6 +14,7 @@ let globe;
 let stepSphere;
 let living;
 let dynamics;
+let biosphere;
 let running = false;
 let accumulator = 0;
 let lastTime = 0;
@@ -21,6 +23,7 @@ let brushActive = false;
 function runStep() {
   stepSphere(FIXED_DT);
   living.step(FIXED_DT);
+  biosphere.step(FIXED_DT);
   dynamics.step(FIXED_DT);
 }
 
@@ -70,6 +73,11 @@ function renderHistory(items) {
 }
 
 function showInspector(data) {
+  const nearbySpecies = biosphere.getNearbySpecies(data.x ?? world.width / 2, data.y ?? world.height / 2, 120);
+  const speciesText = nearbySpecies.length
+    ? nearbySpecies.slice(0, 4).map(s => `${s.name} (${s.population})`).join(' · ')
+    : 'No classified animal species nearby';
+
   document.getElementById('inspectorTitle').textContent = data.title;
   document.getElementById('inspectorBody').innerHTML = `
     <div><b>Biome</b><span>${data.biome}</span></div>
@@ -79,7 +87,8 @@ function showInspector(data) {
     <div><b>Water</b><span>${data.water}</span></div>
     <div><b>Weather</b><span>${data.weather}</span></div>
     <div><b>Geology</b><span>${data.geology}</span></div>
-    <div><b>Nearby life</b><span>${data.counts.plants} plants · ${data.counts.grazers} grazers · ${data.counts.predators + data.counts.apex} predators</span></div>`;
+    <div><b>Nearby life</b><span>${data.counts.plants} plants · ${data.counts.grazers} grazers · ${data.counts.predators + data.counts.apex} predators</span></div>
+    <div><b>Species</b><span>${speciesText}</span></div>`;
   document.getElementById('inspector').classList.add('visible');
 }
 
@@ -89,10 +98,12 @@ function init() {
   placeExistingEntitiesOnBiomes(world, Math.random);
   stepSphere = createSphericalStepper(world);
   living = createLivingSystems(world);
+  biosphere = createBiosphere(world);
   dynamics = createPlanetDynamics(world, living);
   globe = createGlobeRenderer(document.getElementById('world'), dynamics, showInspector);
 
   window.addEventListener('reality-history', event => renderHistory(event.detail));
+  window.addEventListener('biosphere-event', event => addHistory(event.detail));
   window.addEventListener('planet-event', event => {
     addHistory(event.detail);
     if (event.detail.narrator) {
@@ -104,6 +115,7 @@ function init() {
     }
   });
   renderHistory(living.getHistory());
+  addHistory({ title: 'Biosphere initialized', description: 'Distinct species, inheritance, food webs, migration, disease, and speciation are now active.' });
 
   document.getElementById('startButton').addEventListener('click', () => setRunning(true));
   document.getElementById('pauseButton').addEventListener('click', () => setRunning(false));
