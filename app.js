@@ -3,6 +3,7 @@ import { createWorld } from './core/world.js';
 import { createSphericalStepper } from './core/sphere.js';
 import { createModuleHost } from './core/module-host.js';
 import { createGlobeRenderer } from './core/globe-render-v4.js';
+import { createOrbitalSystem } from './core/orbital-system.js';
 import { placeExistingEntitiesOnBiomes } from './core/planet.js';
 import { createLivingSystems } from './core/living-systems.js';
 import { createPlanetDynamics } from './core/planet-dynamics.js';
@@ -97,10 +98,11 @@ async function init() {
     restoreWorldState();
 
     stepSphere = createSphericalStepper(world);
+    const orbitalSystem = createOrbitalSystem(world);
     const living = createLivingSystems(world);
     const biosphere = createBiosphere(world);
-    const waterCycle = createWaterCycle(world);
-    const dynamics = createPlanetDynamics(world, living, waterCycle);
+    const waterCycle = createWaterCycle(world, orbitalSystem);
+    const dynamics = createPlanetDynamics(world, living, waterCycle, orbitalSystem);
 
     globe = createGlobeRenderer(
       document.getElementById('world'),
@@ -109,6 +111,7 @@ async function init() {
       {
         quality: 'auto',
         cameraState: saved.camera,
+        orbitalSystem,
         onCameraChange: saveState,
         onError: showError,
         onReady: () => {
@@ -122,6 +125,7 @@ async function init() {
     moduleHost = createModuleHost({ world });
     registerCurrentModules(moduleHost, {
       globe,
+      orbitalSystem,
       living,
       biosphere,
       waterCycle,
@@ -132,6 +136,7 @@ async function init() {
     await moduleHost.load(saved.modules || {});
 
     window.realitySandboxModules = moduleHost;
+    window.realitySandboxOrbits = orbitalSystem;
     globe.render(world);
     requestAnimationFrame(loop);
   } catch (error) {
