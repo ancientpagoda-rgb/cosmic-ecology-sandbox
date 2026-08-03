@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#02060b">
+<title>Reality Engine V5 · Cesium</title>
+<script>window.CESIUM_BASE_URL='https://cdn.jsdelivr.net/npm/cesium@1.143.0/Build/Cesium/';</script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.143.0/Build/Cesium/Widgets/widgets.css">
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.143.0/Build/Cesium/Cesium.js"></script>
+<style>
+*{box-sizing:border-box}html,body,#cesium{margin:0;width:100%;height:100%;overflow:hidden;background:#02060b;color:#def3ff;font-family:system-ui,-apple-system,sans-serif}.glass{background:#07131ddd;border:1px solid #91bdd03d;backdrop-filter:blur(11px)}.badge{position:fixed;z-index:5;top:max(12px,env(safe-area-inset-top));left:12px;padding:8px 11px;border-radius:999px;font-size:11px}.stats{position:fixed;z-index:5;top:max(12px,env(safe-area-inset-top));right:12px;padding:9px 11px;border-radius:12px;font:10px/1.5 ui-monospace,SFMono-Regular,monospace;color:#bad9eb;text-align:right}.hud{position:fixed;z-index:5;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));padding:10px 12px;border-radius:14px}.top{display:flex;justify-content:space-between;gap:10px;font-size:11px}.inspect{margin-top:6px;font:10px/1.35 ui-monospace,SFMono-Regular,monospace;color:#9fc5da;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row{display:grid;grid-template-columns:55px 1fr 74px;gap:8px;align-items:center;margin-top:8px}.row label,.row output{font-size:10px;color:#abc8d9}.row input{width:100%;accent-color:#8fd0ff}.actions{display:flex;gap:7px;margin-top:8px}.actions a,.actions button{flex:1;padding:8px;border-radius:10px;border:1px solid #91bdd03d;background:#0b1c28;color:#dff4ff;text-align:center;text-decoration:none;font-size:10px}.loading{position:fixed;z-index:20;left:50%;top:50%;transform:translate(-50%,-50%);padding:12px 16px;border-radius:13px;font-size:13px}.cesium-viewer-bottom,.cesium-viewer-toolbar{display:none!important}
+</style>
+</head>
+<body>
+<div id="cesium"></div>
+<div id="loading" class="loading glass">Loading Cesium terrain engine…</div>
+<div class="badge glass">ENGINE V5 · CESIUM RUNTIME</div>
+<div id="stats" class="stats glass">procedural terrain<br>shared world model</div>
+<section class="hud glass">
+  <div class="top"><span id="mode">Orbit-to-ground globe</span><span id="coords">0.0°, 0.0°</span></div>
+  <div id="inspect" class="inspect">Tap the world to inspect the shared simulation.</div>
+  <div class="row"><label>TIME</label><input id="time" type="range" min="0" max="1000000" step="100" value="0"><output id="year">0 yr</output></div>
+  <div class="actions"><a href="./reality-worldwind-v5.html">WorldWind view</a><a href="./reality-v5-export.html">Desktop exports</a><button id="reset" type="button">Reset camera</button></div>
+</section>
+<script type="module">
+import {
+  createWorldTexture,
+  generateSettlements,
+  sampleWorld,
+  settlementsGeoJSON,
+  terrainHeightMeters,
+} from './core/reality-v5/world-model.js';
+
+const loading = document.getElementById('loading');
+const stats = document.getElementById('stats');
+const coords = document.getElementById('coords');
+const inspect = document.getElementById('inspect');
+const timeInput = document.getElementById('time');
+const yearOutput = document.getElementById('year');
+let years = Number(localStorage.getItem('reality-v5-years') || 0);
+timeInput.value = String(Math.min(1_000_000, years));
+let viewer;
+let pointCollection;
+let lastHudUpdate = 0;
+
+function formatYears(value) {
+  if (value < 1_000) return `${Math.round(value)} yr`;
+  if (value < 1_000_000) return `${(value / 1_000).toFixed(1)} kyr`;
+  return `${(value / 1_000_000).toFixed(2)} Myr`;
+}
+
+function downloadText(name, text, type = 'application/json') {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([text], { type }));
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1_000);
+}
+
+function terrainProvider() {
+  const width = 33;
+  const height = 33;
+  const tilingScheme = new Cesium.GeographicTilingScheme();
+  return new Cesium.CustomHeightmapTerrainProvider({
+    width,
+    height,
+    tilingScheme,
+    credit: 'Procedural terrain · Reality Sandbox',
+    callback(x, y, level) {
+      const rectangle = tilingScheme.tileXYToRectangle(x, y, level);
+      const values = new Float32Array(width * height);
+      for (let row = 0; row < height; row += 1) {
+        const latitude = rectangle.north - (row / (height - 1)) * (rectangle.north - rectangle.south);
+        for (let column = 0; column < width; column += 1) {
+          const longitude = rectangle.west + (column / (width - 1)) * (rectangle.east - rectangle.west);
+          values[row * width + column] = terrainHeightMeters(latitude, longitude);
+        }
+      }
+      return values;
+    },
+  });
+}
+
+async function imageryLayer() {
+  const texture = createWorldTexture(1_024, 512, years);
+  const provider = await Cesium.SingleTileImageryProvider.fromUrl(texture.toDataURL('image/png'), {
+    rectangle: Cesium.Rectangle.MAX_VALUE,
+    credit: 'Climate, ecology and settlements · Reality Sandbox',
+  });
+  return new Cesium.ImageryLayer(provider);
+}
+
+function rebuildSettlements() {
+  if (pointCollection) viewer.scene.primitives.remove(pointCollection);
+  pointCollection = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
+  for (const settlement of generateSettlements(years, 150)) {
+    pointCollection.add({
+      position: Cesium.Cartesian3.fromRadians(
+        settlement.longitude,
+        settlement.latitude,
+        settlement.heightMeters + 250,
+      ),
+      pixelSize: 4 + Math.min(5, Math.log10(settlement.population + 1)),
+      color: Cesium.Color.fromCssColorString('#efb34e').withAlpha(0.9),
+      outlineColor: Cesium.Color.BLACK.withAlpha(0.65),
+      outlineWidth: 1,
+      distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 8_000_000),
+    });
+  }
+}
+
+async function rebuildImagery() {
+  const layer = await imageryLayer();
+  viewer.imageryLayers.removeAll(true);
+  viewer.imageryLayers.add(layer);
+  rebuildSettlements();
+  viewer.scene.requestRender();
+}
+
+function resetCamera() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(18, 12, 17_000_000),
+    duration: 1.2,
+  });
+}
+
+try {
+  const baseLayer = await imageryLayer();
+  viewer = new Cesium.Viewer('cesium', {
+    terrainProvider: terrainProvider(),
+    baseLayer,
+    baseLayerPicker: false,
+    geocoder: false,
+    homeButton: false,
+    sceneModePicker: false,
+    navigationHelpButton: false,
+    animation: false,
+    timeline: false,
+    fullscreenButton: false,
+    infoBox: false,
+    selectionIndicator: false,
+    shouldAnimate: true,
+  });
+
+  viewer.scene.globe.enableLighting = true;
+  viewer.scene.globe.depthTestAgainstTerrain = true;
+  viewer.scene.globe.maximumScreenSpaceError = 2.2;
+  viewer.scene.globe.tileCacheSize = 320;
+  viewer.scene.fog.enabled = true;
+  viewer.scene.skyAtmosphere.show = true;
+  viewer.scene.screenSpaceCameraController.minimumZoomDistance = 3;
+  viewer.scene.screenSpaceCameraController.maximumZoomDistance = 60_000_000;
+  rebuildSettlements();
+  resetCamera();
+
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  handler.setInputAction((movement) => {
+    const ray = viewer.camera.getPickRay(movement.position);
+    const cartesian = viewer.scene.globe.pick(ray, viewer.scene);
+    if (!cartesian) return;
+    const location = Cesium.Cartographic.fromCartesian(cartesian);
+    const sample = sampleWorld(location.latitude, location.longitude, years);
+    inspect.textContent = `elev ${Math.round(sample.heightMeters).toLocaleString()} m · temp ${Math.round(sample.temperature * 42 - 12)}°C · moisture ${Math.round(sample.moisture * 100)}% · vegetation ${Math.round(sample.vegetation * 100)}% · runoff ${Math.round(sample.runoff * 100)}% · civilization ${Math.round(sample.civilization * 100)}%`;
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+  viewer.scene.postRender.addEventListener(() => {
+    const now = performance.now();
+    if (now - lastHudUpdate < 250) return;
+    lastHudUpdate = now;
+    const cartographic = viewer.camera.positionCartographic;
+    const altitude = Math.max(0, cartographic.height);
+    coords.textContent = `${Cesium.Math.toDegrees(cartographic.latitude).toFixed(1)}°, ${Cesium.Math.toDegrees(cartographic.longitude).toFixed(1)}°`;
+    stats.innerHTML = `CesiumJS 1.143<br>${altitude > 1_000 ? `${Math.round(altitude / 1_000).toLocaleString()} km` : `${Math.round(altitude)} m`} altitude<br>${generateSettlements(years, 150).length} settlements`;
+  });
+
+  document.getElementById('reset').addEventListener('click', resetCamera);
+  timeInput.addEventListener('input', () => {
+    years = Number(timeInput.value);
+    yearOutput.value = formatYears(years);
+  });
+  timeInput.addEventListener('change', async () => {
+    localStorage.setItem('reality-v5-years', String(years));
+    loading.textContent = 'Updating the shared world state…';
+    document.body.appendChild(loading);
+    await rebuildImagery();
+    loading.remove();
+  });
+  yearOutput.value = formatYears(years);
+  loading.remove();
+
+  window.realityV5 = {
+    viewer,
+    exportSettlements() {
+      downloadText('reality-v5-settlements.geojson', JSON.stringify(settlementsGeoJSON(years), null, 2));
+    },
+  };
+} catch (error) {
+  loading.textContent = `V5 failed to start: ${error.message}`;
+  console.error(error);
+}
+</script>
+</body>
+</html>
