@@ -49,6 +49,7 @@ export class ReboundWasmSystem {
     };
     this.metadata = [];
     this.lastImpactCount = 0;
+    this.pendingImpactorDays = 0;
   }
 
   initialize({ seed = 1, planets = 6, asteroids = 48 } = {}) {
@@ -56,6 +57,7 @@ export class ReboundWasmSystem {
     if (count <= 0) throw new Error('REBOUND could not initialize the generated system.');
     this.refreshMetadata();
     this.lastImpactCount = this.api.impacts();
+    this.pendingImpactorDays = 0;
     return count;
   }
 
@@ -71,6 +73,7 @@ export class ReboundWasmSystem {
     const count = this.api.reset();
     this.refreshMetadata();
     this.lastImpactCount = this.api.impacts();
+    this.pendingImpactorDays = 0;
     return count;
   }
 
@@ -80,6 +83,12 @@ export class ReboundWasmSystem {
 
   step(days) {
     if (!Number.isFinite(days) || days <= 0) return 0;
+    if (this.pendingImpactorDays > 0) {
+      const sharedDays = Math.min(days, this.pendingImpactorDays);
+      const coupling = window.realityV65?.coupling;
+      if (coupling) coupling.advanceDays(sharedDays);
+      this.pendingImpactorDays = Math.max(0, this.pendingImpactorDays - sharedDays);
+    }
     const before = this.api.count();
     const status = this.api.step(days);
     const after = this.api.count();
@@ -89,7 +98,10 @@ export class ReboundWasmSystem {
 
   spawnImpactor() {
     const index = this.api.spawnImpactor();
-    if (index >= 0) this.refreshMetadata();
+    if (index >= 0) {
+      this.pendingImpactorDays = 3;
+      this.refreshMetadata();
+    }
     return index;
   }
 
