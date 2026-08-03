@@ -51,6 +51,15 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Smoke test V6.7 artifact
+        run: |
+          test -f dist/reality-engine-v6-7.html
+          test -f dist/rebound-v6-6/rebound.js
+          test -f dist/rebound-v6-6/rebound.wasm
+          grep -q "THREE.JS UNIVERSE" dist/reality-engine-v6-7.html
+          grep -R -q "ThreeReboundUniverse" dist/assets
+          test -s dist/rebound-v6-6/rebound.wasm
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
