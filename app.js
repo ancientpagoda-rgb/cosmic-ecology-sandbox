@@ -1,18 +1,20 @@
 import { createRng } from './core/rng.js';
 import { createWorld } from './core/world.js';
 import { createSphericalStepper } from './core/sphere.js';
+import { createModuleHost } from './core/module-host.js';
 import { createGlobeRenderer } from './core/globe-render-v4.js';
 import { placeExistingEntitiesOnBiomes, randomHabitablePoint } from './core/planet.js';
 import { createLivingSystems } from './core/living-systems.js';
 import { createPlanetDynamics } from './core/planet-dynamics.js';
 import { createBiosphere } from './core/biosphere.js';
 import { createWaterCycle } from './core/water-cycle.js';
+import { registerCurrentModules } from './integrations/runtime.js';
 
 const FIXED_DT = 0.06;
 const STORAGE_KEY = 'reality-sandbox-state-v1';
 const saved = readSavedState();
 let quality = saved.quality || 'auto';
-let world, globe, stepSphere, living, dynamics, biosphere, waterCycle;
+let world, globe, stepSphere, living, dynamics, biosphere, waterCycle, moduleHost;
 let running = false;
 let accumulator = 0;
 let lastTime = 0;
@@ -22,10 +24,7 @@ let saveTimer = 0;
 
 function runStep() {
   stepSphere(FIXED_DT);
-  living.step(FIXED_DT);
-  biosphere.step(FIXED_DT);
-  waterCycle.step(FIXED_DT);
-  dynamics.step(FIXED_DT);
+  moduleHost.step(FIXED_DT);
 }
 
 function mainLoop(timestamp) {
@@ -42,6 +41,7 @@ function mainLoop(timestamp) {
   }
   if (steps === maxSteps) accumulator = 0;
   globe.render(world);
+  moduleHost.render({ world, globe, timestamp });
   if (timestamp - saveTimer > 5000) { saveTimer = timestamp; saveState(); }
   requestAnimationFrame(mainLoop);
 }
@@ -65,7 +65,14 @@ function saveState() {
   const positions = {};
   for (const [id, pos] of world.ecs.components.position.entries()) positions[id] = [pos.x, pos.y];
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ quality, running, tick: world.tick, camera: globe?.getCameraState?.(), positions }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      quality,
+      running,
+      tick: world.tick,
+      camera: globe?.getCameraState?.(),
+      positions,
+      modules: moduleHost?.save?.(),
+    }));
   } catch {}
 }
 
@@ -117,7 +124,7 @@ function showError(error) {
   panel.hidden = false;
 }
 
-function init() {
+async function init() {
   document.getElementById('qualitySelect').value = quality;
   document.getElementById('errorState').hidden = true;
   try {
@@ -144,14 +151,20 @@ function init() {
         setRunning(saved.running !== false);
       },
     });
+
+    moduleHost = createModuleHost({ world });
+    registerCurrentModules(moduleHost, { globe, living, biosphere, waterCycle, dynamics });
+    await moduleHost.initialize();
+    await moduleHost.load(saved.modules || {});
   } catch (error) { showError(error); return; }
 
+  window.realitySandboxModules = moduleHost;
   window.addEventListener('reality-history', event => renderHistory(event.detail));
   window.addEventListener('biosphere-event', event => addHistory(event.detail));
   window.addEventListener('planet-event', event => addHistory(event.detail));
   window.addEventListener('water-cycle-event', event => addHistory(event.detail));
   renderHistory(living.getHistory());
-  addHistory({ title: 'Water cycle active', description: 'Evaporation, moisture transport, clouds, rain, snow, runoff, rivers, lakes, floods, and drought are now simulated.' });
+  addHistory({ title: 'Modular engine active', description: `${moduleHost.getStatus().length} simulation modules are running through the new scientific adapter host.` });
 
   document.getElementById('startButton').addEventListener('click', () => setRunning(true));
   document.getElementById('pauseButton').addEventListener('click', () => setRunning(false));
