@@ -51,6 +51,13 @@ function saveState() {
   }
 }
 
+function hideLoader() {
+  const loader = document.getElementById('loadingState');
+  if (!loader) return;
+  loader.classList.add('ready');
+  setTimeout(() => loader.remove(), 450);
+}
+
 function restoreWorldState() {
   if (Number.isFinite(saved.tick)) world.tick = saved.tick;
 }
@@ -162,6 +169,7 @@ async function init() {
         orbitalSystem,
         onCameraChange: saveState,
         onError: showError,
+        onReady: hideLoader,
       },
     );
 
@@ -187,6 +195,9 @@ async function init() {
 
     globe.render(world);
     requestAnimationFrame(loop);
+
+    // Fallback in case Safari never fires the first-frame callback.
+    setTimeout(hideLoader, 2500);
 
     // Allow the base globe to display before requesting more WebGL contexts.
     setTimeout(() => {
