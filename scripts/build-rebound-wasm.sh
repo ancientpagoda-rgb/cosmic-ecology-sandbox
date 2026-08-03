@@ -63,9 +63,15 @@ emcc \
 cat > "${OUTPUT_DIR}/BUILD.txt" <<EOF
 REBOUND ${REBOUND_REF}
 Built with Emscripten for Reality Engine V6.6.
-Source: https://github.com/hannorein/rebound
-License: GNU GPL v3 or later.
+Exact source: https://github.com/hannorein/rebound/tree/${REBOUND_REF}
+Bridge source: core/reality-v6-6/rebound_bridge.c
+License: GNU GPL v3 or later; see LICENSE.txt in this directory.
 EOF
 
+cp "${REBOUND_DIR}/LICENSE" "${OUTPUT_DIR}/LICENSE.txt"
+
 echo "Built same-origin REBOUND assets:"
-ls -lh "${OUTPUT_DIR}/rebound.js" "${OUTPUT_DIR}/rebound.wasm"
+ls -lh \
+  "${OUTPUT_DIR}/rebound.js" \
+  "${OUTPUT_DIR}/rebound.wasm" \
+  "${OUTPUT_DIR}/LICENSE.txt"
