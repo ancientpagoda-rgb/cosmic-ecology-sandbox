@@ -7,9 +7,10 @@ export function createGlobeRenderer(container, dynamics, onInspect, options = {}
   const coarse = matchMedia('(max-width: 700px), (pointer: coarse)').matches;
   const tier = requested === 'mobile' ? 'mobile' : requested === 'desktop' ? 'desktop' : coarse ? 'mobile' : 'desktop';
   const mobile = tier === 'mobile';
+  const orbitalSystem = options.orbitalSystem || null;
   const settings = mobile
-    ? { segments: 72, textureW: 768, textureH: 384, cloudW: 384, cloudH: 192, stars: 420, pixelRatio: 1, home: 3.2 }
-    : { segments: 192, textureW: 2048, textureH: 1024, cloudW: 1024, cloudH: 512, stars: 1800, pixelRatio: 2, home: 2.85 };
+    ? { segments: 72, textureW: 768, textureH: 384, cloudW: 384, cloudH: 192, stars: 720, pixelRatio: 1, home: 3.2 }
+    : { segments: 192, textureW: 2048, textureH: 1024, cloudW: 1024, cloudH: 512, stars: 2400, pixelRatio: 2, home: 2.85 };
 
   let renderer;
   try {
@@ -26,14 +27,22 @@ export function createGlobeRenderer(container, dynamics, onInspect, options = {}
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x01030a);
-  const camera = new THREE.PerspectiveCamera(mobile ? 46 : 40, 1, 0.05, 100);
+  const camera = new THREE.PerspectiveCamera(mobile ? 46 : 40, 1, 0.05, 140);
   const savedCamera = options.cameraState;
-  let targetDistance = clamp(savedCamera?.distance ?? settings.home, 1.18, 6);
+  let targetDistance = clamp(savedCamera?.distance ?? settings.home, 1.18, 52);
   camera.position.set(0, 0.15, targetDistance);
 
+  const universe = new THREE.Group();
+  universe.rotation.set(savedCamera?.systemRotationX ?? 0, savedCamera?.systemRotationY ?? 0, 0);
+  scene.add(universe);
+
   const globe = new THREE.Group();
-  globe.rotation.set(savedCamera?.rotationX ?? -0.12, savedCamera?.rotationY ?? 0, 0);
-  scene.add(globe);
+  globe.rotation.set(
+    savedCamera?.rotationX ?? -0.12,
+    savedCamera?.rotationY ?? 0,
+    orbitalSystem ? -23.44 * Math.PI / 180 : 0,
+  );
+  universe.add(globe);
 
   const terrainGeometry = createDisplacedSphere(settings.segments, mobile ? 0.042 : 0.06);
   const terrainMaterial = new THREE.MeshStandardMaterial({
@@ -46,7 +55,11 @@ export function createGlobeRenderer(container, dynamics, onInspect, options = {}
   const terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
   globe.add(terrain);
 
-  const oceanUniforms = { time: { value: 0 }, sunDirection: { value: new THREE.Vector3(1, 0, 1).normalize() } };
+  const oceanUniforms = {
+    time: { value: 0 },
+    sunDirection: { value: new THREE.Vector3(1, 0, 1).normalize() },
+    tideStrength: { value: 0.5 },
+  };
   const ocean = new THREE.Mesh(
     new THREE.SphereGeometry(1.004, mobile ? 64 : 144, mobile ? 40 : 90),
     new THREE.ShaderMaterial({
@@ -55,10 +68,12 @@ export function createGlobeRenderer(container, dynamics, onInspect, options = {}
       depthWrite: false,
       vertexShader: `
         varying vec3 vNormalW; varying vec3 vPositionW; varying float vWave;
-        uniform float time;
+        uniform float time; uniform float tideStrength;
         void main(){
           vec3 p=position;
-          float w=sin(p.x*42.0+time*0.8)*sin(p.z*37.0-time*0.55)*0.0013;
+          float waves=sin(p.x*42.0+time*0.8)*sin(p.z*37.0-time*0.55)*0.0013;
+          float tide=cos(atan(p.z,p.x)*2.0-time*0.08)*0.0012*tideStrength;
+          float w=waves+tide;
           p+=normal*w;
           vec4 wp=modelMatrix*vec4(p,1.0);
           vPositionW=wp.xyz; vNormalW=normalize(mat3(modelMatrix)*normal); vWave=w;
@@ -99,9 +114,18 @@ export function createGlobeRenderer(container, dynamics, onInspect, options = {}
   const geologyLayer = new THREE.Group();
   globe.add(farLife, nearLife, weatherLayer, geologyLayer);
 
-  scene.add(new THREE.HemisphereLight(0x9bbdff, 0x050713, 0.52));
-  const sun = new THREE.DirectionalLight(0xfff0d2, 3.8);
-  scene.add(sun);
+  const systemLayer = new THREE.Group();
+  const orbitLayer = new THREE.Group();
+  universe.add(orbitLayer, systemLayer);
+  const systemScale = 8.5;
+  const systemMeshes = new Map();
+  let orbitCenter = new THREE.Vector3();
+  let lastOrbitRefresh = -Infinity;
+  buildSystemObjects();
+
+  scene.add(new THREE.HemisphereLight(0x9bbdff, 0x050713, 0.46));
+  const sunLight = new THREE.DirectionalLight(0xfff0d2, 3.8);
+  scene.add(sunLight);
   scene.add(makeStars(settings.stars));
 
   const shared = createShared(mobile);
@@ -122,12 +146,122 @@ export function createGlobeRenderer(container, dynamics, onInspect, options = {}
   let active = true;
   let readySent = false;
 
+  function buildSystemObjects() {
+    if (!orbitalSystem) {
+      systemLayer.visible = false;
+      orbitLayer.visible = false;
+      return;
+    }
+    systemLayer.clear();
+    orbitLayer.clear();
+    systemMeshes.clear();
+
+    const state = orbitalSystem.getState();
+    for (const body of state.bodies) {
+      if (body.id === 'gaia') continue;
+      let mesh;
+      if (body.type === 'star') {
+        const starMaterial = new THREE.MeshBasicMaterial({ color: body.color, toneMapped: false });
+        mesh = new THREE.Mesh(new THREE.SphereGeometry(1.15, mobile ? 24 : 48, mobile ? 16 : 32), starMaterial);
+        const glow = new THREE.Mesh(
+          new THREE.SphereGeometry(1.65, mobile ? 18 : 36, mobile ? 12 : 24),
+          new THREE.MeshBasicMaterial({ color: 0xff9f42, transparent: true, opacity: 0.13, blending: THREE.AdditiveBlending, depthWrite: false }),
+        );
+        mesh.add(glow);
+      } else {
+        const radius = body.id === 'selene' ? 0.12 : 0.17 + body.radius * 0.55;
+        mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(radius, mobile ? 12 : 24, mobile ? 8 : 16),
+          new THREE.MeshStandardMaterial({ color: body.color, roughness: 0.85, metalness: 0.02 }),
+        );
+      }
+      mesh.userData.bodyId = body.id;
+      systemLayer.add(mesh);
+      systemMeshes.set(body.id, mesh);
+    }
+
+    refreshOrbitLines();
+  }
+
+  function refreshOrbitLines() {
+    if (!orbitalSystem) return;
+    orbitLayer.clear();
+    const bodies = orbitalSystem.getBodies();
+    const sunBody = bodies.find(body => body.id === 'sun');
+    if (!sunBody) return;
+    orbitCenter.set(sunBody.position.x, sunBody.position.y, sunBody.position.z).multiplyScalar(systemScale);
+
+    for (const body of bodies) {
+      if (body.type !== 'planet' || !body.semiMajorAxis) continue;
+      const points = [];
+      const samples = mobile ? 80 : 160;
+      const a = body.semiMajorAxis * systemScale;
+      const b = a * Math.sqrt(1 - body.eccentricity ** 2);
+      const inclination = body.inclination * Math.PI / 180;
+      for (let index = 0; index <= samples; index++) {
+        const angle = index / samples * Math.PI * 2;
+        const x = Math.cos(angle) * a - body.eccentricity * a;
+        const zFlat = Math.sin(angle) * b;
+        points.push(new THREE.Vector3(
+          x,
+          zFlat * Math.sin(inclination),
+          zFlat * Math.cos(inclination),
+        ));
+      }
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const material = new THREE.LineBasicMaterial({ color: 0x6f7b9a, transparent: true, opacity: body.id === 'gaia' ? 0.42 : 0.2 });
+      const line = new THREE.Line(geometry, material);
+      line.position.copy(orbitCenter);
+      orbitLayer.add(line);
+    }
+
+    const moonPoints = [];
+    for (let index = 0; index <= 64; index++) {
+      const angle = index / 64 * Math.PI * 2;
+      moonPoints.push(new THREE.Vector3(Math.cos(angle) * 3.06, Math.sin(angle) * 0.27, Math.sin(angle) * 3.04));
+    }
+    orbitLayer.add(new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(moonPoints),
+      new THREE.LineBasicMaterial({ color: 0xaab4ca, transparent: true, opacity: 0.3 }),
+    ));
+  }
+
+  function updateSystemView(timestamp) {
+    if (!orbitalSystem) return;
+    const bodies = orbitalSystem.getBodies();
+    const sunBody = bodies.find(body => body.id === 'sun');
+    for (const body of bodies) {
+      if (body.id === 'gaia') continue;
+      const mesh = systemMeshes.get(body.id);
+      if (!mesh) continue;
+      mesh.position.set(body.position.x, body.position.y, body.position.z).multiplyScalar(systemScale);
+      if (body.type === 'planet' || body.id === 'selene') mesh.rotation.y += 0.002;
+    }
+    if (sunBody) {
+      const lightPosition = new THREE.Vector3(sunBody.position.x, sunBody.position.y, sunBody.position.z).multiplyScalar(systemScale);
+      sunLight.position.copy(lightPosition);
+      oceanUniforms.sunDirection.value.copy(lightPosition).normalize();
+      orbitCenter.copy(lightPosition);
+      for (const line of orbitLayer.children) {
+        if (line === orbitLayer.children.at(-1)) continue;
+        line.position.copy(orbitCenter);
+      }
+    }
+    const tide = orbitalSystem.getTideAt(0, lastWorld?.height ? lastWorld.height / 2 : 360);
+    oceanUniforms.tideStrength.value = tide.springTide;
+    if (timestamp - lastOrbitRefresh > 4000) {
+      lastOrbitRefresh = timestamp;
+      refreshOrbitLines();
+    }
+  }
+
   function resize() {
     const rect = container.getBoundingClientRect();
     const width = Math.max(1, Math.floor(rect.width));
     const height = Math.max(1, Math.floor(rect.height));
     if (width === lastWidth && height === lastHeight) return;
-    lastWidth = width; lastHeight = height;
+    lastWidth = width;
+    lastHeight = height;
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
@@ -150,24 +284,50 @@ export function createGlobeRenderer(container, dynamics, onInspect, options = {}
     if (!active || (mobile && timestamp - lastFrame < 33)) return;
     lastFrame = timestamp;
     const t = dynamics.getTime();
-    const dayAngle = t * 0.018;
-    const sunPos = new THREE.Vector3(Math.cos(dayAngle) * 5, Math.sin(dayAngle * 0.37) * 2.1, Math.sin(dayAngle) * 5);
-    sun.position.copy(sunPos);
+    updateSystemView(timestamp);
     oceanUniforms.time.value = t;
-    oceanUniforms.sunDirection.value.copy(sunPos).normalize();
     cloudsLow.rotation.y += mobile ? 0.00032 : 0.00048;
     cloudsHigh.rotation.y -= mobile ? 0.00012 : 0.0002;
     cloudsHigh.rotation.z = Math.sin(t * 0.003) * 0.015;
-    if (!dragging && !activePointers.size && targetDistance > 1.48) globe.rotation.y += mobile ? 0.0003 : 0.00048;
-    camera.position.setLength(targetDistance);
+
+    const systemAmount = smoothstep(4.8, 10, targetDistance);
+    systemLayer.visible = Boolean(orbitalSystem) && systemAmount > 0.01;
+    orbitLayer.visible = Boolean(orbitalSystem) && systemAmount > 0.04;
+    setSystemOpacity(systemAmount);
+
+    if (!dragging && !activePointers.size) {
+      if (systemAmount > 0.45) universe.rotation.y += mobile ? 0.00016 : 0.00024;
+      else if (targetDistance > 1.48) globe.rotation.y += mobile ? 0.0003 : 0.00048;
+    }
+
+    camera.position.set(0, targetDistance * 0.055, targetDistance);
+    camera.lookAt(0, 0, 0);
     const near = targetDistance < 1.85;
+    const planetDetail = targetDistance < 6.4;
     nearLife.visible = near;
-    farLife.visible = !near;
+    farLife.visible = !near && planetDetail;
+    weatherLayer.visible = planetDetail;
+    geologyLayer.visible = planetDetail;
+    cloudsHigh.visible = targetDistance < 9;
     terrainMaterial.bumpScale = near ? (mobile ? 0.019 : 0.032) : (mobile ? 0.009 : 0.016);
     renderer.render(scene, camera);
     if (!readySent) { readySent = true; options.onReady?.(); }
   }
   requestAnimationFrame(animate);
+
+  function setSystemOpacity(amount) {
+    for (const mesh of systemMeshes.values()) {
+      mesh.visible = amount > 0.02;
+      mesh.traverse(child => {
+        if (!child.material) return;
+        child.material.transparent = true;
+        child.material.opacity = child.userData.bodyId === 'sun' ? amount : clamp(amount * 1.15, 0, 1);
+      });
+    }
+    for (const line of orbitLayer.children) {
+      if (line.material) line.material.opacity = (line.userData.baseOpacity || line.material.opacity || 0.25) * amount;
+    }
+  }
 
   function syncEntities(world) {
     farLife.clear(); nearLife.clear();
@@ -205,8 +365,8 @@ export function createGlobeRenderer(container, dynamics, onInspect, options = {}
     let count = 0;
     for (const system of dynamics.getWeather()) {
       if (system.type === 'cloud' || count++ >= (mobile ? 12 : 22)) continue;
-      const mat = system.type === 'snow' ? shared.snowMaterial : system.type === 'storm' ? shared.stormMaterial : shared.rainMaterial;
-      const mesh = new THREE.Mesh(shared.weatherGeometry, mat);
+      const material = system.type === 'snow' ? shared.snowMaterial : system.type === 'storm' ? shared.stormMaterial : shared.rainMaterial;
+      const mesh = new THREE.Mesh(shared.weatherGeometry, material);
       mesh.scale.setScalar(0.7 + system.strength * 0.85);
       placeSurface(mesh, system, world, 1.071); weatherLayer.add(mesh);
     }
@@ -222,14 +382,14 @@ export function createGlobeRenderer(container, dynamics, onInspect, options = {}
     }
   }
 
-  function placeSurface(object, pos, world, radius) {
-    const vector = worldToSphere(pos.x, pos.y, world.width, world.height, radius);
+  function placeSurface(object, position, world, radius) {
+    const vector = worldToSphere(position.x, position.y, world.width, world.height, radius);
     object.position.copy(vector);
     object.quaternion.setFromUnitVectors(up, vector.clone().normalize());
   }
 
   function pick(clientX, clientY) {
-    if (!lastWorld) return null;
+    if (!lastWorld || targetDistance > 6.5) return null;
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
@@ -237,56 +397,102 @@ export function createGlobeRenderer(container, dynamics, onInspect, options = {}
     const hit = raycaster.intersectObject(terrain, false)[0];
     if (!hit) return null;
     const local = globe.worldToLocal(hit.point.clone()).normalize();
-    return { x: ((Math.atan2(local.z, local.x) / (Math.PI * 2)) + 0.5) * lastWorld.width, y: (0.5 - Math.asin(local.y) / Math.PI) * lastWorld.height };
+    return {
+      x: ((Math.atan2(local.z, local.x) / (Math.PI * 2)) + 0.5) * lastWorld.width,
+      y: (0.5 - Math.asin(local.y) / Math.PI) * lastWorld.height,
+    };
   }
 
   const canvas = renderer.domElement;
   canvas.style.touchAction = 'none';
   canvas.addEventListener('pointerdown', event => {
-    event.preventDefault(); activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    canvas.setPointerCapture?.(event.pointerId); dragging = true; pointerMoved = false;
-    lastX = event.clientX; lastY = event.clientY; lastPinch = 0;
+    event.preventDefault();
+    activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    canvas.setPointerCapture?.(event.pointerId);
+    dragging = true;
+    pointerMoved = false;
+    lastX = event.clientX;
+    lastY = event.clientY;
+    lastPinch = 0;
   });
   canvas.addEventListener('pointermove', event => {
     if (!activePointers.has(event.pointerId)) return;
-    event.preventDefault(); activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    event.preventDefault();
+    activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     const points = [...activePointers.values()];
     if (points.length >= 2) {
-      const d = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
-      if (lastPinch) targetDistance = clamp(targetDistance - (d - lastPinch) * 0.008, 1.18, 6);
-      lastPinch = d; return;
+      const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+      if (lastPinch) {
+        const scale = targetDistance > 7 ? 0.045 : 0.012;
+        targetDistance = clamp(targetDistance - (distance - lastPinch) * scale, 1.18, 52);
+      }
+      lastPinch = distance;
+      return;
     }
-    if (canvas.dataset.brush === 'on') return;
+
     if (Math.abs(event.clientX - lastX) + Math.abs(event.clientY - lastY) > 3) pointerMoved = true;
-    globe.rotation.y += (event.clientX - lastX) * 0.006;
-    globe.rotation.x = clamp(globe.rotation.x + (event.clientY - lastY) * 0.004, -1.2, 1.2);
-    lastX = event.clientX; lastY = event.clientY;
+    if (targetDistance > 6) {
+      universe.rotation.y += (event.clientX - lastX) * 0.004;
+      universe.rotation.x = clamp(universe.rotation.x + (event.clientY - lastY) * 0.003, -1.2, 1.2);
+    } else {
+      globe.rotation.y += (event.clientX - lastX) * 0.006;
+      globe.rotation.x = clamp(globe.rotation.x + (event.clientY - lastY) * 0.004, -1.2, 1.2);
+    }
+    lastX = event.clientX;
+    lastY = event.clientY;
   }, { passive: false });
+
   function end(event) {
     const single = activePointers.size === 1;
     activePointers.delete(event.pointerId);
     if (!activePointers.size) {
-      dragging = false; lastPinch = 0; options.onCameraChange?.(getCameraState());
-      if (single && !pointerMoved && canvas.dataset.brush !== 'on') {
-        const point = pick(event.clientX, event.clientY); if (point) onInspect?.(dynamics.inspect(point.x, point.y));
+      dragging = false;
+      lastPinch = 0;
+      options.onCameraChange?.(getCameraState());
+      if (single && !pointerMoved) {
+        const point = pick(event.clientX, event.clientY);
+        if (point) onInspect?.(dynamics.inspect(point.x, point.y));
       }
     }
   }
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);
   canvas.addEventListener('lostpointercapture', end);
-  canvas.addEventListener('webglcontextlost', event => { event.preventDefault(); active = false; options.onError?.(new Error('WebGL context was lost. Switch to Mobile quality and retry.')); });
-  canvas.addEventListener('wheel', event => { event.preventDefault(); targetDistance = clamp(targetDistance + Math.sign(event.deltaY) * 0.22, 1.18, 6); options.onCameraChange?.(getCameraState()); }, { passive: false });
+  canvas.addEventListener('webglcontextlost', event => {
+    event.preventDefault();
+    active = false;
+    options.onError?.(new Error('WebGL context was lost. Reload to restore the planet.'));
+  });
+  canvas.addEventListener('wheel', event => {
+    event.preventDefault();
+    const increment = targetDistance > 7 ? 2.2 : 0.34;
+    targetDistance = clamp(targetDistance + Math.sign(event.deltaY) * increment, 1.18, 52);
+    options.onCameraChange?.(getCameraState());
+  }, { passive: false });
   document.addEventListener('visibilitychange', () => { active = !document.hidden; });
   window.addEventListener('resize', resize, { passive: true });
 
-  function getCameraState() { return { distance: targetDistance, rotationX: globe.rotation.x, rotationY: globe.rotation.y }; }
-  function resetView() { targetDistance = settings.home; globe.rotation.set(-0.12, 0, 0); options.onCameraChange?.(getCameraState()); }
+  function getCameraState() {
+    return {
+      distance: targetDistance,
+      rotationX: globe.rotation.x,
+      rotationY: globe.rotation.y,
+      systemRotationX: universe.rotation.x,
+      systemRotationY: universe.rotation.y,
+    };
+  }
+
+  function resetView() {
+    targetDistance = settings.home;
+    globe.rotation.set(-0.12, 0, orbitalSystem ? -23.44 * Math.PI / 180 : 0);
+    universe.rotation.set(0, 0, 0);
+    options.onCameraChange?.(getCameraState());
+  }
 
   return {
     render,
-    zoomIn: () => { targetDistance = Math.max(1.18, targetDistance - 0.28); options.onCameraChange?.(getCameraState()); },
-    zoomOut: () => { targetDistance = Math.min(6, targetDistance + 0.28); options.onCameraChange?.(getCameraState()); },
+    zoomIn: () => { targetDistance = Math.max(1.18, targetDistance - (targetDistance > 7 ? 2 : 0.28)); options.onCameraChange?.(getCameraState()); },
+    zoomOut: () => { targetDistance = Math.min(52, targetDistance + (targetDistance > 7 ? 2 : 0.28)); options.onCameraChange?.(getCameraState()); },
     deepZoom: () => { targetDistance = targetDistance < 1.75 ? settings.home : 1.34; options.onCameraChange?.(getCameraState()); },
     resetView,
     getCameraState,
@@ -298,17 +504,19 @@ export function createGlobeRenderer(container, dynamics, onInspect, options = {}
 function createDisplacedSphere(segments, amplitude) {
   const geometry = new THREE.SphereGeometry(1, segments, Math.floor(segments * 0.62));
   const positions = geometry.attributes.position;
-  const v = new THREE.Vector3();
-  for (let i = 0; i < positions.count; i++) {
-    v.fromBufferAttribute(positions, i).normalize();
-    const lat = Math.asin(v.y);
-    const lon = Math.atan2(v.z, v.x);
-    const x = ((lon / (Math.PI * 2)) + 0.5) * 1200;
-    const y = (0.5 - lat / Math.PI) * 720;
-    const p = samplePlanet(x, y, 1200, 720);
-    const displacement = p.land ? Math.max(0, p.elevation - 0.53) * amplitude : Math.max(-0.012, (p.elevation - 0.53) * amplitude * 0.18);
-    v.multiplyScalar(1 + displacement);
-    positions.setXYZ(i, v.x, v.y, v.z);
+  const vector = new THREE.Vector3();
+  for (let index = 0; index < positions.count; index++) {
+    vector.fromBufferAttribute(positions, index).normalize();
+    const latitude = Math.asin(vector.y);
+    const longitude = Math.atan2(vector.z, vector.x);
+    const x = ((longitude / (Math.PI * 2)) + 0.5) * 1200;
+    const y = (0.5 - latitude / Math.PI) * 720;
+    const planet = samplePlanet(x, y, 1200, 720);
+    const displacement = planet.land
+      ? Math.max(0, planet.elevation - 0.53) * amplitude
+      : Math.max(-0.012, (planet.elevation - 0.53) * amplitude * 0.18);
+    vector.multiplyScalar(1 + displacement);
+    positions.setXYZ(index, vector.x, vector.y, vector.z);
   }
   positions.needsUpdate = true;
   geometry.computeVertexNormals();
@@ -316,75 +524,146 @@ function createDisplacedSphere(segments, amplitude) {
 }
 
 function createSurfaceTexture(width, height) {
-  const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
-  const ctx = canvas.getContext('2d'); const image = ctx.createImageData(width, height);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  const image = context.createImageData(width, height);
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-    const p = samplePlanet(x, y, width, height); const h = sampleHydrology(x, y, width, height);
-    let [r, g, b] = hydrologyColor(biomeColor(p), h);
-    if (!p.land) { r *= 0.3; g *= 0.42; b *= 0.55; }
-    const i = (y * width + x) * 4; image.data[i] = r; image.data[i + 1] = g; image.data[i + 2] = b; image.data[i + 3] = 255;
+    const planet = samplePlanet(x, y, width, height);
+    const hydro = sampleHydrology(x, y, width, height);
+    let [r, g, b] = hydrologyColor(biomeColor(planet), hydro);
+    if (!planet.land) { r *= 0.3; g *= 0.42; b *= 0.55; }
+    const index = (y * width + x) * 4;
+    image.data[index] = r;
+    image.data[index + 1] = g;
+    image.data[index + 2] = b;
+    image.data[index + 3] = 255;
   }
-  ctx.putImageData(image, 0, 0); const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace; texture.wrapS = THREE.RepeatWrapping;
+  context.putImageData(image, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
   return texture;
 }
 
 function createReliefTexture(width, height) {
-  const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
-  const ctx = canvas.getContext('2d'); const image = ctx.createImageData(width, height);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  const image = context.createImageData(width, height);
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-    const p = samplePlanet(x, y, width, height); const h = sampleHydrology(x, y, width, height);
-    const value = clamp((p.elevation * 0.78 + p.plateBoundary * 0.18 - h.erosion * 0.12) * 255, 0, 255);
-    const i = (y * width + x) * 4; image.data[i] = image.data[i + 1] = image.data[i + 2] = value; image.data[i + 3] = 255;
+    const planet = samplePlanet(x, y, width, height);
+    const hydro = sampleHydrology(x, y, width, height);
+    const value = clamp((planet.elevation * 0.78 + planet.plateBoundary * 0.18 - hydro.erosion * 0.12) * 255, 0, 255);
+    const index = (y * width + x) * 4;
+    image.data[index] = image.data[index + 1] = image.data[index + 2] = value;
+    image.data[index + 3] = 255;
   }
-  ctx.putImageData(image, 0, 0); const texture = new THREE.CanvasTexture(canvas); texture.wrapS = THREE.RepeatWrapping; return texture;
+  context.putImageData(image, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  return texture;
 }
 
 function makeCloudLayer(radius, width, height, opacity, phase) {
-  const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
-  const ctx = canvas.getContext('2d'); const image = ctx.createImageData(width, height);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  const image = context.createImageData(width, height);
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-    const nx = x / width, ny = y / height;
-    const n = (Math.sin(nx * 31 + Math.sin(ny * 17 + phase)) + Math.sin(nx * 67 - ny * 23 + phase) * 0.5 + Math.sin((nx + ny) * 113 - phase) * 0.25 + 1.75) / 3.5;
-    const a = clamp((n - 0.5) * 4.1, 0, 1) * opacity;
-    const i = (y * width + x) * 4; image.data[i] = 247; image.data[i + 1] = 251; image.data[i + 2] = 255; image.data[i + 3] = Math.round(a * 255);
+    const nx = x / width;
+    const ny = y / height;
+    const noise = (
+      Math.sin(nx * 31 + Math.sin(ny * 17 + phase)) +
+      Math.sin(nx * 67 - ny * 23 + phase) * 0.5 +
+      Math.sin((nx + ny) * 113 - phase) * 0.25 + 1.75
+    ) / 3.5;
+    const alpha = clamp((noise - 0.5) * 4.1, 0, 1) * opacity;
+    const index = (y * width + x) * 4;
+    image.data[index] = 247;
+    image.data[index + 1] = 251;
+    image.data[index + 2] = 255;
+    image.data[index + 3] = Math.round(alpha * 255);
   }
-  ctx.putImageData(image, 0, 0); const texture = new THREE.CanvasTexture(canvas); texture.wrapS = THREE.RepeatWrapping;
-  return new THREE.Mesh(new THREE.SphereGeometry(radius, 64, 40), new THREE.MeshLambertMaterial({ map: texture, transparent: true, opacity: 1, depthWrite: false }));
+  context.putImageData(image, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  return new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 64, 40),
+    new THREE.MeshLambertMaterial({ map: texture, transparent: true, opacity: 1, depthWrite: false }),
+  );
 }
 
 function makeTree(material, shared) {
   const group = new THREE.Group();
-  const trunk = new THREE.Mesh(shared.trunkGeometry, shared.trunkMaterial); trunk.position.y = 0.012;
-  const crown = new THREE.Mesh(shared.crownGeometry, material); crown.position.y = 0.036;
-  group.add(trunk, crown); return group;
+  const trunk = new THREE.Mesh(shared.trunkGeometry, shared.trunkMaterial);
+  trunk.position.y = 0.012;
+  const crown = new THREE.Mesh(shared.crownGeometry, material);
+  crown.position.y = 0.036;
+  group.add(trunk, crown);
+  return group;
 }
 
 function createShared(mobile) {
   return {
-    farPlantGeometry: new THREE.SphereGeometry(0.011, 5, 4), farAnimalGeometry: new THREE.SphereGeometry(0.015, 6, 4),
-    nearAnimalGeometry: new THREE.CapsuleGeometry(0.008, 0.025, 3, 6), trunkGeometry: new THREE.CylinderGeometry(0.003, 0.004, 0.024, 5),
-    crownGeometry: new THREE.ConeGeometry(0.014, 0.042, mobile ? 5 : 7), weatherGeometry: new THREE.RingGeometry(0.018, 0.038, 12),
-    volcanoGeometry: new THREE.ConeGeometry(0.02, 0.065, 8), plantMaterial: new THREE.MeshBasicMaterial({ color: 0x46c56a }),
-    podMaterial: new THREE.MeshBasicMaterial({ color: 0xdab65b }), trunkMaterial: new THREE.MeshBasicMaterial({ color: 0x68472a }),
-    grazerMaterial: new THREE.MeshBasicMaterial({ color: 0x75d9ff }), predatorMaterial: new THREE.MeshBasicMaterial({ color: 0xff705e }),
-    apexMaterial: new THREE.MeshBasicMaterial({ color: 0xd294ff }), rainMaterial: new THREE.MeshBasicMaterial({ color: 0x64b9ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }),
+    farPlantGeometry: new THREE.SphereGeometry(0.011, 5, 4),
+    farAnimalGeometry: new THREE.SphereGeometry(0.015, 6, 4),
+    nearAnimalGeometry: new THREE.CapsuleGeometry(0.008, 0.025, 3, 6),
+    trunkGeometry: new THREE.CylinderGeometry(0.003, 0.004, 0.024, 5),
+    crownGeometry: new THREE.ConeGeometry(0.014, 0.042, mobile ? 5 : 7),
+    weatherGeometry: new THREE.RingGeometry(0.018, 0.038, 12),
+    volcanoGeometry: new THREE.ConeGeometry(0.02, 0.065, 8),
+    plantMaterial: new THREE.MeshBasicMaterial({ color: 0x46c56a }),
+    podMaterial: new THREE.MeshBasicMaterial({ color: 0xdab65b }),
+    trunkMaterial: new THREE.MeshBasicMaterial({ color: 0x68472a }),
+    grazerMaterial: new THREE.MeshBasicMaterial({ color: 0x75d9ff }),
+    predatorMaterial: new THREE.MeshBasicMaterial({ color: 0xff705e }),
+    apexMaterial: new THREE.MeshBasicMaterial({ color: 0xd294ff }),
+    rainMaterial: new THREE.MeshBasicMaterial({ color: 0x64b9ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }),
     snowMaterial: new THREE.MeshBasicMaterial({ color: 0xeaf7ff, transparent: true, opacity: 0.56, side: THREE.DoubleSide, depthWrite: false }),
     stormMaterial: new THREE.MeshBasicMaterial({ color: 0x8f82d8, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }),
-    volcanoMaterial: new THREE.MeshBasicMaterial({ color: 0x704c3b }), activeVolcanoMaterial: new THREE.MeshBasicMaterial({ color: 0xff542e }),
+    volcanoMaterial: new THREE.MeshBasicMaterial({ color: 0x704c3b }),
+    activeVolcanoMaterial: new THREE.MeshBasicMaterial({ color: 0xff542e }),
   };
 }
 
 function worldToSphere(x, y, width, height, radius) {
-  const lon = (x / width - 0.5) * Math.PI * 2; const lat = (0.5 - y / height) * Math.PI; const cos = Math.cos(lat);
-  return new THREE.Vector3(radius * cos * Math.cos(lon), radius * Math.sin(lat), radius * cos * Math.sin(lon));
+  const longitude = (x / width - 0.5) * Math.PI * 2;
+  const latitude = (0.5 - y / height) * Math.PI;
+  const cosine = Math.cos(latitude);
+  return new THREE.Vector3(
+    radius * cosine * Math.cos(longitude),
+    radius * Math.sin(latitude),
+    radius * cosine * Math.sin(longitude),
+  );
 }
 
 function makeStars(count) {
-  const geometry = new THREE.BufferGeometry(); const values = [];
-  for (let i = 0; i < count; i++) { const r = 12 + Math.random() * 18, theta = Math.random() * Math.PI * 2, phi = Math.acos(2 * Math.random() - 1); values.push(r * Math.sin(phi) * Math.cos(theta), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta)); }
+  const geometry = new THREE.BufferGeometry();
+  const values = [];
+  for (let index = 0; index < count; index++) {
+    const radius = 18 + Math.random() * 80;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    values.push(
+      radius * Math.sin(phi) * Math.cos(theta),
+      radius * Math.cos(phi),
+      radius * Math.sin(phi) * Math.sin(theta),
+    );
+  }
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(values, 3));
-  return new THREE.Points(geometry, new THREE.PointsMaterial({ color: 0xffffff, size: 0.035, transparent: true, opacity: 0.84 }));
+  return new THREE.Points(
+    geometry,
+    new THREE.PointsMaterial({ color: 0xffffff, size: 0.055, transparent: true, opacity: 0.84 }),
+  );
 }
 
-const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+function smoothstep(edge0, edge1, value) {
+  const x = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+  return x * x * (3 - 2 * x);
+}
+
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
