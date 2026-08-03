@@ -3,15 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#050812" />
   <title>Reality Sandbox</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="living.css" />
+  <link rel="stylesheet" href="immersive.css" />
 </head>
 <body>
   <main class="app">
     <header>
       <h1>Reality Sandbox</h1>
-      <p class="tagline">A living ecosystem evolving across a rotating world.</p>
+      <p class="tagline">A living planet with weather, geology, evolution, and history.</p>
     </header>
 
     <section class="controls" aria-label="Simulation controls">
@@ -21,8 +23,8 @@
         <button id="stepButton">Step</button>
       </div>
       <div class="tools">
-        <button id="spawnAgentButton">+ Agent</button>
-        <button id="spawnResourceButton">+ Resource</button>
+        <button id="spawnAgentButton">+ Animal</button>
+        <button id="spawnResourceButton">+ Plant</button>
         <button id="forceBrushButton">Force Brush</button>
         <button id="zoomInButton">Zoom +</button>
         <button id="zoomOutButton">Zoom −</button>
@@ -32,7 +34,13 @@
 
     <section class="simulation-layout">
       <section class="main-panel">
-        <div id="world" aria-label="Interactive 3D Reality Sandbox globe"></div>
+        <div id="world" aria-label="Interactive living 3D planet"></div>
+        <div id="narrator" class="narrator" aria-live="polite"></div>
+        <aside id="inspector" class="inspector" aria-label="Explorer information">
+          <button id="closeInspector" aria-label="Close explorer">×</button>
+          <h2 id="inspectorTitle">Explorer</h2>
+          <div id="inspectorBody"></div>
+        </aside>
       </section>
 
       <aside class="history-panel" aria-label="World history">
@@ -42,10 +50,10 @@
     </section>
 
     <footer>
-      <p>Drag to rotate. Pinch or use Zoom. Surface View moves close to the planet. Force Brush paints directly onto the globe.</p>
+      <p>Tap the globe to explore a region. Drag to rotate. Pinch or use Zoom. Weather, clouds, sunlight, ecosystems, and tectonic events evolve continuously.</p>
     </footer>
   </main>
 
-  <script type="module" src="app.js"></script>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>
