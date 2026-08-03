@@ -6,12 +6,13 @@ import { placeExistingEntitiesOnBiomes, randomHabitablePoint } from './core/plan
 import { createLivingSystems } from './core/living-systems.js';
 import { createPlanetDynamics } from './core/planet-dynamics.js';
 import { createBiosphere } from './core/biosphere.js';
+import { createWaterCycle } from './core/water-cycle.js';
 
 const FIXED_DT = 0.06;
 const STORAGE_KEY = 'reality-sandbox-state-v1';
 const saved = readSavedState();
 let quality = saved.quality || 'auto';
-let world, globe, stepSphere, living, dynamics, biosphere;
+let world, globe, stepSphere, living, dynamics, biosphere, waterCycle;
 let running = false;
 let accumulator = 0;
 let lastTime = 0;
@@ -23,6 +24,7 @@ function runStep() {
   stepSphere(FIXED_DT);
   living.step(FIXED_DT);
   biosphere.step(FIXED_DT);
+  waterCycle.step(FIXED_DT);
   dynamics.step(FIXED_DT);
 }
 
@@ -100,7 +102,9 @@ function showInspector(data) {
     <div><b>Biome</b><span>${data.biome}</span></div><div><b>Elevation</b><span>${data.elevation} m</span></div>
     <div><b>Temperature</b><span>${data.temperature} °C</span></div><div><b>Rainfall</b><span>${data.rainfall} mm/yr</span></div>
     <div><b>Water</b><span>${data.water}</span></div><div><b>Weather</b><span>${data.weather}</span></div>
-    <div><b>Geology</b><span>${data.geology}</span></div><div><b>Species</b><span>${species}</span></div>`;
+    <div><b>Soil moisture</b><span>${data.soilMoisture ?? 0}%</span></div><div><b>Flood risk</b><span>${data.floodRisk ?? 0}%</span></div>
+    <div><b>Drought risk</b><span>${data.droughtRisk ?? 0}%</span></div><div><b>Geology</b><span>${data.geology}</span></div>
+    <div><b>Species</b><span>${species}</span></div>`;
   document.getElementById('inspector').classList.add('visible');
 }
 
@@ -124,7 +128,8 @@ function init() {
     stepSphere = createSphericalStepper(world);
     living = createLivingSystems(world);
     biosphere = createBiosphere(world);
-    dynamics = createPlanetDynamics(world, living);
+    waterCycle = createWaterCycle(world);
+    dynamics = createPlanetDynamics(world, living, waterCycle);
     globe = createGlobeRenderer(document.getElementById('world'), dynamics, showInspector, {
       quality,
       cameraState: saved.camera,
@@ -144,8 +149,9 @@ function init() {
   window.addEventListener('reality-history', event => renderHistory(event.detail));
   window.addEventListener('biosphere-event', event => addHistory(event.detail));
   window.addEventListener('planet-event', event => addHistory(event.detail));
+  window.addEventListener('water-cycle-event', event => addHistory(event.detail));
   renderHistory(living.getHistory());
-  addHistory({ title: 'HD planet active', description: 'Terrain displacement, layered clouds, animated oceans, sharper textures, and adaptive zoom detail are running.' });
+  addHistory({ title: 'Water cycle active', description: 'Evaporation, moisture transport, clouds, rain, snow, runoff, rivers, lakes, floods, and drought are now simulated.' });
 
   document.getElementById('startButton').addEventListener('click', () => setRunning(true));
   document.getElementById('pauseButton').addEventListener('click', () => setRunning(false));
