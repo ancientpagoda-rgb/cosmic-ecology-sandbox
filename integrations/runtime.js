@@ -1,7 +1,5 @@
 import { integrationCatalog } from './catalog.js';
-import { createRapierAdapter } from './rapier-adapter.js';
 import { createReboundAdapter } from './rebound-adapter.js';
-import { createGdalAdapter } from './gdal-adapter.js';
 
 export function registerCurrentModules(host, systems) {
   const catalog = new Map(integrationCatalog.map(item => [item.id, item]));
@@ -14,9 +12,9 @@ export function registerCurrentModules(host, systems) {
     },
   }));
 
-  host.register(createRapierAdapter());
+  host.register(createLazyRapierModule());
   host.register(createReboundAdapter({ endpoint: systems.reboundEndpoint || null }));
-  host.register(createGdalAdapter());
+  host.register(createLazyGdalModule());
 
   if (systems.orbitalSystem) {
     host.register({
@@ -77,6 +75,67 @@ export function registerCurrentModules(host, systems) {
   });
 
   return host;
+}
+
+function createLazyRapierModule() {
+  let adapterPromise = null;
+  let adapter = null;
+
+  async function load() {
+    if (adapter) return adapter;
+    if (!adapterPromise) {
+      adapterPromise = import('./rapier-adapter.js')
+        .then(({ createRapierAdapter }) => createRapierAdapter())
+        .then(async instance => {
+          await instance.initialize({ provideCapability() {} });
+          adapter = instance;
+          return instance;
+        });
+    }
+    return adapterPromise;
+  }
+
+  return {
+    id: 'physics.rapier',
+    name: 'Rapier Physics (on demand)',
+    version: '0.19.3',
+    execution: 'lazy-wasm',
+    source: '@dimforge/rapier3d-compat',
+    license: 'Apache-2.0',
+    provides: ['physics.loader'],
+    initialize({ provideCapability }) {
+      provideCapability('physics.loader', { load });
+    },
+    step(dt) { adapter?.step(dt); },
+    loadEngine: load,
+    isLoaded: () => Boolean(adapter),
+  };
+}
+
+function createLazyGdalModule() {
+  let adapterPromise = null;
+
+  async function load() {
+    if (!adapterPromise) {
+      adapterPromise = import('./gdal-adapter.js')
+        .then(({ createGdalAdapter }) => createGdalAdapter());
+    }
+    return adapterPromise;
+  }
+
+  return {
+    id: 'gis.gdal',
+    name: 'GDAL GIS (on demand)',
+    version: '2.8.1',
+    execution: 'lazy-wasm-worker',
+    source: 'gdal3.js / GDAL',
+    license: 'MIT and GDAL MIT/X-style',
+    provides: ['gis.loader'],
+    initialize({ provideCapability }) {
+      provideCapability('gis.loader', { load });
+    },
+    loadEngine: load,
+  };
 }
 
 function moduleFromCatalog(item, overrides = {}) {
