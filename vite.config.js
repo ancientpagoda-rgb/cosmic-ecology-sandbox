@@ -17,6 +17,7 @@ export default defineConfig({
         planetRendererLab: resolve(process.cwd(), 'planet-renderer-lab.html'),
         potreePlanetLab: resolve(process.cwd(), 'potree-planet-lab.html'),
         openSpaceBridgeLab: resolve(process.cwd(), 'openspace-bridge-lab.html'),
+        realityLab: resolve(process.cwd(), 'reality-lab.html'),
       },
     },
   },
