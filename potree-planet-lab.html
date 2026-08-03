@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+  <meta name="theme-color" content="#03070c" />
+  <title>Reality Sandbox — Potree Planet</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/potree/potree@1.8.2/build/potree/potree.css" />
+  <style>
+    html,body,#potree_render_area{margin:0;width:100%;height:100%;overflow:hidden;background:#03070c}
+    body{font-family:system-ui,-apple-system,sans-serif}
+    #potree_render_area{position:fixed;inset:0;touch-action:none}
+    #status{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:20;padding:10px 14px;border-radius:12px;background:rgba(5,12,20,.78);color:#dcecff;font-size:14px;backdrop-filter:blur(8px);pointer-events:none}
+    #status.error{color:#ffb7ad;border:1px solid rgba(255,120,100,.35)}
+  </style>
+</head>
+<body>
+  <div id="potree_render_area"></div>
+  <div id="status">Loading Potree…</div>
+
+  <script src="https://cdn.jsdelivr.net/gh/potree/potree@1.8.2/libs/jquery/jquery-3.1.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/potree/potree@1.8.2/libs/spectrum/spectrum.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/potree/potree@1.8.2/libs/jquery-ui/jquery-ui.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/potree/potree@1.8.2/libs/other/BinaryHeap.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/potree/potree@1.8.2/libs/tween/tween.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/potree/potree@1.8.2/libs/d3/d3.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/potree/potree@1.8.2/libs/proj4/proj4.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/potree/potree@1.8.2/libs/openlayers3/ol.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/potree/potree@1.8.2/libs/i18next/i18next.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/potree/potree@1.8.2/libs/jstree/jstree.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/potree/potree@1.8.2/libs/three.js/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/potree/potree@1.8.2/build/potree/potree.js"></script>
+  <script src="./potree-planet-lab.js?v=1"></script>
+</body>
+</html>
