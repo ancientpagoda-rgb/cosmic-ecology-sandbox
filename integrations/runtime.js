@@ -5,16 +5,28 @@ export function registerCurrentModules(host, systems) {
   const catalog = new Map(integrationCatalog.map(item => [item.id, item]));
 
   host.register(moduleFromCatalog(catalog.get('render.three'), {
-    provides: ['rendering.globe', 'rendering.webgl'],
+    provides: ['rendering.globe', 'rendering.webgl', 'rendering.galaxy'],
     initialize({ provideCapability }) {
       provideCapability('rendering.globe', systems.globe);
       provideCapability('rendering.webgl', systems.globe);
+      if (systems.galaxyLayer) provideCapability('rendering.galaxy', systems.galaxyLayer);
     },
   }));
 
   host.register(createLazyRapierModule());
   host.register(createReboundAdapter({ endpoint: systems.reboundEndpoint || null }));
   host.register(createLazyGdalModule());
+
+  if (systems.galaxySystem) {
+    host.register({
+      ...systems.galaxySystem,
+      initialize({ provideCapability }) {
+        provideCapability('galaxy.population', systems.galaxySystem);
+        provideCapability('galaxy.structure', systems.galaxySystem);
+        provideCapability('stellar.metadata', systems.galaxySystem);
+      },
+    });
+  }
 
   if (systems.orbitalSystem) {
     host.register({
