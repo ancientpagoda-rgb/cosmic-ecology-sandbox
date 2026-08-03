@@ -19,6 +19,7 @@ export default defineConfig({
         openSpaceBridgeLab: resolve(process.cwd(), 'openspace-bridge-lab.html'),
         realityLab: resolve(process.cwd(), 'reality-lab.html'),
         realityFlightLab: resolve(process.cwd(), 'reality-flight-lab.html'),
+        realityEngineV1: resolve(process.cwd(), 'reality-engine-v1.html'),
       },
     },
   },
