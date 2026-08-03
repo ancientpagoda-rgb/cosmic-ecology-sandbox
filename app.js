@@ -3,8 +3,8 @@ import { createWorld } from './core/world.js';
 import { createSphericalStepper } from './core/sphere.js';
 import { createModuleHost } from './core/module-host.js';
 import { createGlobeRenderer } from './core/globe-render-v4.js';
+import { createGalaxyRenderLayer } from './core/galaxy-render-layer.js';
 import { createGalaxySystem } from './core/galaxy-system.js';
-import { createGeologicalTime } from './core/geological-time.js';
 import { createOrbitalSystem } from './core/orbital-system.js';
 import { placeExistingEntitiesOnBiomes } from './core/planet.js';
 import { createLivingSystems } from './core/living-systems.js';
@@ -19,10 +19,7 @@ const saved = readSavedState();
 
 let world;
 let globe;
-let galaxyLayer = null;
-let hdTerrainLayer = null;
-let localSurfaceLayer = null;
-let geologicalTime;
+let galaxyLayer;
 let stepSphere;
 let moduleHost;
 let accumulator = 0;
@@ -51,13 +48,6 @@ function saveState() {
   }
 }
 
-function hideLoader() {
-  const loader = document.getElementById('loadingState');
-  if (!loader) return;
-  loader.classList.add('ready');
-  setTimeout(() => loader.remove(), 450);
-}
-
 function restoreWorldState() {
   if (Number.isFinite(saved.tick)) world.tick = saved.tick;
 }
@@ -84,20 +74,9 @@ function loop(timestamp) {
   }
   if (steps === maxSteps) accumulator = 0;
 
-  const cameraState = globe.getCameraState();
   globe.render(world);
-  hdTerrainLayer?.render(cameraState);
-  localSurfaceLayer?.render(cameraState);
-  galaxyLayer?.render(cameraState.distance, timestamp);
-  moduleHost.render({
-    world,
-    globe,
-    galaxyLayer,
-    hdTerrainLayer,
-    localSurfaceLayer,
-    geologicalTime,
-    timestamp,
-  });
+  galaxyLayer.render(globe.getCameraState().distance, timestamp);
+  moduleHost.render({ world, globe, galaxyLayer, timestamp });
 
   if (timestamp - lastSave > 5000) {
     lastSave = timestamp;
@@ -115,30 +94,6 @@ function showError(error) {
   }
 }
 
-async function loadOptionalVisualLayers(worldElement, galaxySystem) {
-  const tasks = [
-    import('./core/hd-terrain-layer.js')
-      .then(({ createHdTerrainLayer }) => {
-        hdTerrainLayer = createHdTerrainLayer(worldElement);
-        window.realitySandboxTerrain = hdTerrainLayer;
-      }),
-    import('./core/local-surface-layer.js')
-      .then(({ createLocalSurfaceLayer }) => {
-        localSurfaceLayer = createLocalSurfaceLayer(worldElement, geologicalTime);
-        window.realitySandboxSurface = localSurfaceLayer;
-      }),
-    import('./core/galaxy-render-layer.js')
-      .then(({ createGalaxyRenderLayer }) => {
-        galaxyLayer = createGalaxyRenderLayer(worldElement, galaxySystem);
-      }),
-  ];
-
-  const results = await Promise.allSettled(tasks);
-  for (const result of results) {
-    if (result.status === 'rejected') console.warn('Optional visual layer disabled:', result.reason);
-  }
-}
-
 async function init() {
   try {
     const rng = createRng('stable-world');
@@ -149,10 +104,6 @@ async function init() {
     stepSphere = createSphericalStepper(world);
     const orbitalSystem = createOrbitalSystem(world);
     const galaxySystem = createGalaxySystem({ seed: 20260802 });
-    geologicalTime = createGeologicalTime({
-      seed: 20260802,
-      millionYearsPerSecond: matchMedia('(pointer: coarse)').matches ? 0.2 : 0.35,
-    });
     const living = createLivingSystems(world);
     const biosphere = createBiosphere(world);
     const waterCycle = createWaterCycle(world, orbitalSystem);
@@ -169,14 +120,15 @@ async function init() {
         orbitalSystem,
         onCameraChange: saveState,
         onError: showError,
-        onReady: hideLoader,
       },
     );
 
+    galaxyLayer = createGalaxyRenderLayer(worldElement, galaxySystem);
+
     moduleHost = createModuleHost({ world });
-    moduleHost.register(geologicalTime);
     registerCurrentModules(moduleHost, {
       globe,
+      galaxyLayer,
       galaxySystem,
       orbitalSystem,
       living,
@@ -191,18 +143,9 @@ async function init() {
     window.realitySandboxModules = moduleHost;
     window.realitySandboxOrbits = orbitalSystem;
     window.realitySandboxGalaxy = galaxySystem;
-    window.realitySandboxGeology = geologicalTime;
-
     globe.render(world);
+    galaxyLayer.render(globe.getCameraState().distance);
     requestAnimationFrame(loop);
-
-    // Fallback in case Safari never fires the first-frame callback.
-    setTimeout(hideLoader, 2500);
-
-    // Allow the base globe to display before requesting more WebGL contexts.
-    setTimeout(() => {
-      void loadOptionalVisualLayers(worldElement, galaxySystem);
-    }, 1200);
   } catch (error) {
     showError(error);
   }
