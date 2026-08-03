@@ -13,6 +13,7 @@ export default defineConfig({
         cohesionLab: resolve(process.cwd(), 'cohesion-lab.html'),
         emergenceLab: resolve(process.cwd(), 'emergence-lab.html'),
         worldCoreLab: resolve(process.cwd(), 'world-core-lab.html'),
+        hexOctreeLab: resolve(process.cwd(), 'hex-octree-lab.html'),
       },
     },
   },
