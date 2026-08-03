@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#071018">
+<title>Reality V5 · Desktop Exports</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#071018;color:#edf7ff;font-family:system-ui,-apple-system,sans-serif;padding:max(16px,env(safe-area-inset-top)) 14px max(24px,env(safe-area-inset-bottom))}.shell{max-width:760px;margin:auto}.card{background:#0c1823;border:1px solid #294052;border-radius:16px;padding:14px;margin-bottom:12px}h1{font-size:1.35rem;margin:.1rem 0 .4rem}h2{font-size:1rem;margin:.1rem 0 .5rem}.sub,.small{color:#a8bfce;line-height:1.45}.small{font-size:.78rem}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.grid button,.links a{border:1px solid #38566c;border-radius:11px;background:#13283a;color:#edf7ff;padding:11px;font:inherit;text-decoration:none;text-align:center}.links{display:flex;gap:9px}.links a{flex:1}.status{font:12px/1.45 ui-monospace,SFMono-Regular,monospace;color:#9fd2ef;margin-top:10px;min-height:2.8em}code{color:#d6efff}@media(max-width:560px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main class="shell">
+  <section class="card">
+    <h1>Reality V5 export bridge</h1>
+    <p class="sub">Cesium is the mobile runtime. These files let OpenSpace and osgEarth consume the same terrain, colors and settlement coordinates instead of inventing separate worlds.</p>
+    <div class="links"><a href="./reality-engine-v5.html">Cesium runtime</a><a href="./reality-worldwind-v5.html">WorldWind audit</a></div>
+  </section>
+
+  <section class="card">
+    <h2>Shared datasets</h2>
+    <div class="grid">
+      <button id="color">Download color PNG</button>
+      <button id="heightPng">Download Terrarium height PNG</button>
+      <button id="heightCsv">Download height CSV</button>
+      <button id="geojson">Download settlements GeoJSON</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>OpenSpace bridge</h2>
+    <p class="small">Downloads a Lua asset that loads the V5 settlement GeoJSON as a globe layer. Place the asset beside the GeoJSON inside an OpenSpace asset directory.</p>
+    <div class="grid"><button id="openspace">Download OpenSpace asset</button></div>
+  </section>
+
+  <section class="card">
+    <h2>osgEarth bridge</h2>
+    <p class="small">Downloads an <code>.earth</code> map and a GDAL preparation script. The script converts the browser exports into georeferenced GeoTIFF layers for osgEarth.</p>
+    <div class="grid"><button id="earth">Download osgEarth map</button><button id="gdal">Download GDAL script</button></div>
+  </section>
+  <div id="status" class="status">Ready.</div>
+</main>
+<script type="module">
+import {
+  createTerrariumHeightTexture,
+  createWorldTexture,
+  settlementsGeoJSON,
+  terrainHeightMeters,
+} from './core/reality-v5/world-model.js';
+
+const status = document.getElementById('status');
+const years = Number(localStorage.getItem('reality-v5-years') || 0);
+
+function downloadBlob(name, blob) {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 2_000);
+}
+
+function downloadText(name, text, type = 'text/plain') {
+  downloadBlob(name, new Blob([text], { type }));
+}
+
+function canvasDownload(canvas, name) {
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    downloadBlob(name, blob);
+    status.textContent = `Downloaded ${name}`;
+  }, 'image/png');
+}
+
+async function busy(message, action) {
+  status.textContent = message;
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  try { await action(); } catch (error) { status.textContent = `Export failed: ${error.message}`; }
+}
+
+document.getElementById('color').addEventListener('click', () => busy('Rendering 2048×1024 world color texture…', async () => {
+  canvasDownload(createWorldTexture(2048, 1024, years), 'reality-v5-color.png');
+}));
+
+document.getElementById('heightPng').addEventListener('click', () => busy('Encoding Terrarium elevation texture…', async () => {
+  canvasDownload(createTerrariumHeightTexture(2048, 1024), 'reality-v5-height-terrarium.png');
+}));
+
+document.getElementById('heightCsv').addEventListener('click', () => busy('Sampling a one-degree global elevation grid…', async () => {
+  const rows = ['lon,lat,height'];
+  for (let lat = -90; lat <= 90; lat += 1) {
+    const latitude = lat * Math.PI / 180;
+    for (let lon = -180; lon < 180; lon += 1) {
+      rows.push(`${lon},${lat},${terrainHeightMeters(latitude, lon * Math.PI / 180).toFixed(3)}`);
+    }
+  }
+  downloadText('reality-v5-height.csv', rows.join('\n'), 'text/csv');
+  status.textContent = 'Downloaded reality-v5-height.csv';
+}));
+
+document.getElementById('geojson').addEventListener('click', () => {
+  downloadText('reality-v5-settlements.geojson', JSON.stringify(settlementsGeoJSON(years), null, 2), 'application/geo+json');
+  status.textContent = 'Downloaded reality-v5-settlements.geojson';
+});
+
+document.getElementById('openspace').addEventListener('click', () => {
+  const asset = `local RealityV5Settlements = {
+  Identifier = "RealityV5-Settlements",
+  File = "reality-v5-settlements.geojson",
+  HeightOffset = 800.0,
+  DefaultProperties = {
+    PointSize = 8.0,
+    Color = { 0.94, 0.67, 0.28 },
+    AltitudeMode = "RelativeToGround"
+  },
+  Name = "Reality V5 Settlements"
+}
+
+asset.onInitialize(function()
+  openspace.globebrowsing.addGeoJson("Earth", RealityV5Settlements)
+end)
+
+asset.onDeinitialize(function()
+  openspace.globebrowsing.deleteGeoJson("Earth", RealityV5Settlements)
+end)
+`;
+  downloadText('reality-v5-settlements.asset', asset);
+  status.textContent = 'Downloaded OpenSpace settlement asset.';
+});
+
+document.getElementById('earth').addEventListener('click', () => {
+  const earth = `<Map name="Reality V5">
+  <GDALImage name="Reality V5 color">
+    <url>reality-v5-color.tif</url>
+  </GDALImage>
+  <GDALElevation name="Reality V5 elevation">
+    <url>reality-v5-height.tif</url>
+  </GDALElevation>
+</Map>
+`;
+  downloadText('reality-v5.earth', earth, 'application/xml');
+  status.textContent = 'Downloaded reality-v5.earth';
+});
+
+document.getElementById('gdal').addEventListener('click', () => {
+  const script = `#!/usr/bin/env bash
+set -euo pipefail
+
+# Georeference the color map exported by Reality V5.
+gdal_translate \\
+  -of GTiff -a_srs EPSG:4326 -a_ullr -180 90 180 -90 \\
+  reality-v5-color.png reality-v5-color.tif
+
+# Build a floating-point global DEM from the exported lon/lat/height CSV.
+gdal_grid \\
+  -of GTiff -ot Float32 -a_srs EPSG:4326 \\
+  -txe -180 180 -tye -90 90 -outsize 1440 720 \\
+  -a nearest:radius1=1.5:radius2=1.5 \\
+  -zfield height \\
+  reality-v5-height.csv reality-v5-height.tif
+
+echo "Prepared reality-v5-color.tif and reality-v5-height.tif"
+echo "Open with: osgearth_imgui reality-v5.earth"
+`;
+  downloadText('prepare-reality-v5-osgearth.sh', script, 'text/x-shellscript');
+  status.textContent = 'Downloaded GDAL/osgEarth preparation script.';
+});
+</script>
+</body>
+</html>
