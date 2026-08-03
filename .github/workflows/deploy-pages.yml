@@ -29,6 +29,25 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Cache Emscripten SDK
+        uses: actions/cache@v4
+        with:
+          path: .cache/emsdk
+          key: emsdk-${{ runner.os }}-latest-v1
+
+      - name: Build same-origin REBOUND WebAssembly
+        run: |
+          if [ ! -f .cache/emsdk/emsdk ]; then
+            git clone --depth 1 https://github.com/emscripten-core/emsdk.git .cache/emsdk
+          else
+            git -C .cache/emsdk fetch --depth 1 origin main
+            git -C .cache/emsdk reset --hard origin/main
+          fi
+          .cache/emsdk/emsdk install latest
+          .cache/emsdk/emsdk activate latest
+          source .cache/emsdk/emsdk_env.sh
+          bash scripts/build-rebound-wasm.sh
+
       - name: Build
         run: npm run build
 
