@@ -11,6 +11,7 @@ export default defineConfig({
       input: {
         main: resolve(process.cwd(), 'index.html'),
         cohesionLab: resolve(process.cwd(), 'cohesion-lab.html'),
+        emergenceLab: resolve(process.cwd(), 'emergence-lab.html'),
       },
     },
   },
