@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#02060b">
+<title>Reality Engine V6.2 · Turf.js Civilizations</title>
+<script>window.CESIUM_BASE_URL='https://cdn.jsdelivr.net/npm/cesium@1.143.0/Build/Cesium/';</script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.143.0/Build/Cesium/Widgets/widgets.css">
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.143.0/Build/Cesium/Cesium.js"></script>
+<style>
+*{box-sizing:border-box}html,body,#cesium{margin:0;width:100%;height:100%;overflow:hidden;background:#02060b;color:#def3ff;font-family:system-ui,-apple-system,sans-serif}.glass{background:#07131dde;border:1px solid #91bdd03d;backdrop-filter:blur(11px)}.badge{position:fixed;z-index:5;top:max(12px,env(safe-area-inset-top));left:12px;padding:8px 11px;border-radius:999px;font-size:11px}.weather{position:fixed;z-index:5;top:58px;left:12px;padding:9px 11px;border-radius:12px;font:10px/1.48 ui-monospace,SFMono-Regular,monospace;color:#c2e5f7;max-width:220px}.civilization{position:fixed;z-index:5;top:140px;left:12px;padding:9px 11px;border-radius:12px;font:10px/1.48 ui-monospace,SFMono-Regular,monospace;color:#efd9ff;max-width:225px}.stats{position:fixed;z-index:5;top:max(12px,env(safe-area-inset-top));right:12px;padding:9px 11px;border-radius:12px;font:10px/1.48 ui-monospace,SFMono-Regular,monospace;color:#bad9eb;text-align:right}.hud{position:fixed;z-index:5;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));padding:9px 11px;border-radius:14px}.top{display:flex;justify-content:space-between;gap:10px;font-size:11px}.inspect{margin-top:5px;font:10px/1.35 ui-monospace,SFMono-Regular,monospace;color:#9fc5da;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.speed{display:grid;grid-template-columns:46px 1fr 88px;gap:8px;align-items:center;margin-top:7px}.speed label,.speed output{font-size:10px;color:#abc8d9}.speed input{width:100%;accent-color:#8fd0ff}.actions{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:7px}.actions button,.actions a{padding:7px 3px;border-radius:9px;border:1px solid #91bdd03d;background:#0b1c28;color:#dff4ff;text-align:center;text-decoration:none;font:9px system-ui}.loading{position:fixed;z-index:20;left:50%;top:50%;transform:translate(-50%,-50%);padding:12px 16px;border-radius:13px;font-size:13px}.cesium-viewer-bottom,.cesium-viewer-toolbar{display:none!important}@media(max-height:720px){.weather{top:50px}.civilization{top:124px}.actions button,.actions a{padding:5px 2px}.hud{padding:7px 9px}}
+</style>
+</head>
+<body>
+<div id="cesium"></div>
+<div id="loading" class="loading glass">Loading weather, nations, borders and trade networks…</div>
+<div class="badge glass">ENGINE V6.2 · TURF.JS CIVILIZATIONS</div>
+<div id="weatherStatus" class="weather glass">Building planetary weather…</div>
+<div id="civilizationStatus" class="civilization glass">Mapping emerging civilizations…</div>
+<div id="stats" class="stats glass">Starting simulation…</div>
+<section class="hud glass">
+  <div class="top"><span id="age">0 yr</span><span id="coords">0.0°, 0.0°</span></div>
+  <div id="inspect" class="inspect">Tap a territory to inspect its nation, weather and local world state.</div>
+  <div class="speed"><label>WORLD</label><input id="speed" type="range" min="0" max="5" step="1" value="0"><output id="speedOut">paused</output></div>
+  <div class="actions">
+    <button id="weatherSpeed" type="button">Weather ×1</button>
+    <button id="weatherToggle" type="button">Clouds on</button>
+    <button id="daySpeed" type="button">Sun natural</button>
+    <button id="politicsSpeed" type="button">Politics ×1</button>
+    <button id="step100" type="button">+100 years</button>
+    <button id="step1000" type="button">+1,000 years</button>
+    <button id="advancePolitics" type="button">+250 politics</button>
+    <button id="overlayToggle" type="button">Borders on</button>
+    <button id="save" type="button">Save world</button>
+    <button id="resetCamera" type="button">Reset camera</button>
+    <button id="resetWorld" type="button">Reset world</button>
+    <a href="./reality-engine-v6-1.html">Open V6.1</a>
+  </div>
+</section>
+<script type="module" src="./core/reality-v6-2/app.js"></script>
+</body>
+</html>
