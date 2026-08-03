@@ -13,7 +13,7 @@
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",
     "gdal3.js": "^2.8.1",
-    "three": "^0.180.0"
+    "three": "0.184.0"
   },
   "devDependencies": {
     "@vitejs/plugin-basic-ssl": "^2.1.0",
