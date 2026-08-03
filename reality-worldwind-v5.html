@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#02060b">
+<title>Reality V5 · WorldWind View</title>
+<script src="https://files.worldwind.arc.nasa.gov/artifactory/web/0.11.0/worldwind.min.js"></script>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#02060b;color:#def3ff;font-family:system-ui,-apple-system,sans-serif}canvas{display:block;width:100%;height:100%;touch-action:none}.glass{background:#07131ddd;border:1px solid #91bdd03d;backdrop-filter:blur(11px)}.badge{position:fixed;z-index:5;top:max(12px,env(safe-area-inset-top));left:12px;padding:8px 11px;border-radius:999px;font-size:11px}.note{position:fixed;z-index:5;top:max(12px,env(safe-area-inset-top));right:12px;max-width:170px;padding:9px 11px;border-radius:12px;font:10px/1.45 ui-monospace,SFMono-Regular,monospace;color:#bad9eb;text-align:right}.hud{position:fixed;z-index:5;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));padding:10px 12px;border-radius:14px}.row{display:flex;gap:7px}.row a,.row button{flex:1;padding:9px;border-radius:10px;border:1px solid #91bdd03d;background:#0b1c28;color:#dff4ff;text-align:center;text-decoration:none;font-size:10px}.loading{position:fixed;z-index:20;left:50%;top:50%;transform:translate(-50%,-50%);padding:12px 16px;border-radius:13px;font-size:13px}.status{font-size:10px;color:#9fc5da;margin-bottom:8px}
+</style>
+</head>
+<body>
+<canvas id="worldwind">Your browser does not support HTML canvas.</canvas>
+<div id="loading" class="loading glass">Loading NASA Web WorldWind…</div>
+<div class="badge glass">V5 · WORLDWIND AUDIT VIEW</div>
+<div class="note glass">Independent globe renderer<br>shared world texture<br>visual comparison only</div>
+<section class="hud glass">
+  <div id="status" class="status">The same V5 world model is being drawn by NASA Web WorldWind.</div>
+  <div class="row"><a href="./reality-engine-v5.html">Cesium runtime</a><a href="./reality-v5-export.html">Desktop exports</a><button id="reset" type="button">Reset view</button></div>
+</section>
+<script type="module">
+import { createWorldTexture } from './core/reality-v5/world-model.js';
+
+const loading = document.getElementById('loading');
+const status = document.getElementById('status');
+const years = Number(localStorage.getItem('reality-v5-years') || 0);
+
+try {
+  if (!window.WorldWind) throw new Error('WorldWind library did not load');
+  const worldWindow = new WorldWind.WorldWindow('worldwind');
+  const stars = new WorldWind.StarFieldLayer();
+  const atmosphere = new WorldWind.AtmosphereLayer();
+  const worldLayer = new WorldWind.RenderableLayer('Reality V5 shared world');
+  const texture = createWorldTexture(1_024, 512, years);
+  const surface = new WorldWind.SurfaceImage(
+    WorldWind.Sector.FULL_SPHERE,
+    texture.toDataURL('image/png'),
+  );
+  worldLayer.addRenderable(surface);
+  worldLayer.pickEnabled = false;
+  worldWindow.addLayer(stars);
+  worldWindow.addLayer(atmosphere);
+  worldWindow.addLayer(worldLayer);
+  worldWindow.addLayer(new WorldWind.CoordinatesDisplayLayer(worldWindow));
+  worldWindow.addLayer(new WorldWind.ViewControlsLayer(worldWindow));
+
+  function reset() {
+    worldWindow.navigator.lookAtLocation.latitude = 8;
+    worldWindow.navigator.lookAtLocation.longitude = 18;
+    worldWindow.navigator.range = 15_500_000;
+    worldWindow.navigator.tilt = 0;
+    worldWindow.redraw();
+  }
+
+  reset();
+  document.getElementById('reset').addEventListener('click', reset);
+  status.textContent = `World age ${Math.round(years).toLocaleString()} years · same generated color surface as Cesium.`;
+  loading.remove();
+  window.realityV5WorldWind = { worldWindow };
+} catch (error) {
+  loading.textContent = `WorldWind view failed: ${error.message}`;
+  console.error(error);
+}
+</script>
+</body>
+</html>
