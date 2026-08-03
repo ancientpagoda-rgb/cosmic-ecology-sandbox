@@ -3,6 +3,9 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   base: '/reality-sandbox/',
+  define: {
+    'THREE.REVISION': JSON.stringify('184'),
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,
@@ -33,6 +36,7 @@ export default defineConfig({
         realityEngineV64: resolve(process.cwd(), 'reality-engine-v6-4.html'),
         realityEngineV65: resolve(process.cwd(), 'reality-engine-v6-5.html'),
         realityEngineV66: resolve(process.cwd(), 'reality-engine-v6-6.html'),
+        realityEngineV67: resolve(process.cwd(), 'reality-engine-v6-7.html'),
       },
     },
   },
