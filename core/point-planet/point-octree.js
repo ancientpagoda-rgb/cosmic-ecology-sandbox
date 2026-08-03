@@ -8,19 +8,31 @@ export function createPointOctree(points, options = {}) {
     root,
     visibleNodes(camera) {
       const nodes = [];
-      visit(root, camera, nodes);
+      visitLeaves(root, camera, nodes);
+      if (!nodes.length) collectPopulatedLeaves(root, nodes);
       return nodes;
     },
     stats() {
       let nodes = 0, leaves = 0, deepest = 0;
-      walk(root, node => { nodes++; deepest = Math.max(deepest, node.depth); if (!node.children) leaves++; });
+      walk(root, node => {
+        nodes++;
+        deepest = Math.max(deepest, node.depth);
+        if (!node.children) leaves++;
+      });
       return { nodes, leaves, deepest, points: points.length };
     },
   };
 }
 
 function createNode(bounds, depth) {
-  return { bounds, depth, points: [], children: null, center: [bounds.x, bounds.y, bounds.z], radius: Math.sqrt(3) * bounds.half };
+  return {
+    bounds,
+    depth,
+    points: [],
+    children: null,
+    center: [bounds.x, bounds.y, bounds.z],
+    radius: Math.sqrt(3) * bounds.half,
+  };
 }
 
 function insert(node, point, capacity, maxDepth) {
@@ -30,7 +42,9 @@ function insert(node, point, capacity, maxDepth) {
     return true;
   }
   if (!node.children) subdivide(node, capacity, maxDepth);
-  for (const child of node.children) if (insert(child, point, capacity, maxDepth)) return true;
+  for (const child of node.children) {
+    if (insert(child, point, capacity, maxDepth)) return true;
+  }
   node.points.push(point);
   return true;
 }
@@ -39,21 +53,34 @@ function subdivide(node, capacity, maxDepth) {
   const h = node.bounds.half / 2;
   node.children = [];
   for (const dx of [-1, 1]) for (const dy of [-1, 1]) for (const dz of [-1, 1]) {
-    node.children.push(createNode({ x: node.bounds.x + dx * h, y: node.bounds.y + dy * h, z: node.bounds.z + dz * h, half: h }, node.depth + 1));
+    node.children.push(createNode({
+      x: node.bounds.x + dx * h,
+      y: node.bounds.y + dy * h,
+      z: node.bounds.z + dz * h,
+      half: h,
+    }, node.depth + 1));
   }
   const old = node.points.splice(0);
   for (const point of old) insert(node, point, capacity, maxDepth);
 }
 
-function visit(node, camera, out) {
+function visitLeaves(node, camera, out) {
   if (!nodeVisible(node, camera)) return;
-  const distance = Math.hypot(node.bounds.x - camera.position[0], node.bounds.y - camera.position[1], node.bounds.z - camera.position[2]);
-  const wantedDepth = camera.zoom > 0.72 && distance < 3 ? 7 : camera.zoom > 0.42 ? 6 : 5;
-  if (!node.children || node.depth >= wantedDepth) {
-    out.push(node);
+  if (!node.children) {
+    if (node.points.length) out.push(node);
     return;
   }
-  for (const child of node.children) visit(child, camera, out);
+  for (const child of node.children) visitLeaves(child, camera, out);
+  if (node.points.length) out.push(node);
+}
+
+function collectPopulatedLeaves(node, out) {
+  if (!node.children) {
+    if (node.points.length) out.push(node);
+    return;
+  }
+  for (const child of node.children) collectPopulatedLeaves(child, out);
+  if (node.points.length) out.push(node);
 }
 
 function nodeVisible(node, camera) {
@@ -68,8 +95,13 @@ function rotate(x0, y0, z0, rx, ry) {
   return [x, y0 * cx - z * sx, y0 * sx + z * cx];
 }
 
-function contains(b, p) {
-  return p.x >= b.x - b.half && p.x <= b.x + b.half && p.y >= b.y - b.half && p.y <= b.y + b.half && p.z >= b.z - b.half && p.z <= b.z + b.half;
+function contains(bounds, point) {
+  return point.x >= bounds.x - bounds.half && point.x <= bounds.x + bounds.half &&
+    point.y >= bounds.y - bounds.half && point.y <= bounds.y + bounds.half &&
+    point.z >= bounds.z - bounds.half && point.z <= bounds.z + bounds.half;
 }
 
-function walk(node, callback) { callback(node); node.children?.forEach(child => walk(child, callback)); }
+function walk(node, callback) {
+  callback(node);
+  node.children?.forEach(child => walk(child, callback));
+}
