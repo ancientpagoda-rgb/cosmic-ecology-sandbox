@@ -21,6 +21,7 @@ export default defineConfig({
         realityFlightLab: resolve(process.cwd(), 'reality-flight-lab.html'),
         realityEngineV1: resolve(process.cwd(), 'reality-engine-v1.html'),
         realityEngineV2: resolve(process.cwd(), 'reality-engine-v2.html'),
+        realityEngineV3: resolve(process.cwd(), 'reality-engine-v3.html'),
       },
     },
   },
