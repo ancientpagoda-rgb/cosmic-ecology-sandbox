@@ -74,7 +74,42 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  verify-live:
+    name: Verify live V6.7
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Check deployed HTML and REBOUND assets
+        env:
+          PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+        run: |
+          BASE_URL="${PAGE_URL%/}/"
+          V67_URL="${BASE_URL}reality-engine-v6-7.html"
+          for attempt in 1 2 3 4 5 6; do
+            if curl --fail --silent --show-error --location \
+              --max-time 30 \
+              "${V67_URL}?verify=${GITHUB_SHA}" \
+              --output /tmp/reality-engine-v6-7.html; then
+              break
+            fi
+            sleep 10
+          done
+          grep -q "THREE.JS UNIVERSE" /tmp/reality-engine-v6-7.html
+          curl --fail --silent --show-error --location \
+            --max-time 30 \
+            "${BASE_URL}rebound-v6-6/rebound.js?verify=${GITHUB_SHA}" \
+            --output /tmp/rebound.js
+          curl --fail --silent --show-error --location \
+            --max-time 30 \
+            "${BASE_URL}rebound-v6-6/rebound.wasm?verify=${GITHUB_SHA}" \
+            --output /tmp/rebound.wasm
+          test -s /tmp/rebound.js
+          test -s /tmp/rebound.wasm
+          echo "Verified live V6.7: ${V67_URL}"
