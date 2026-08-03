@@ -26,6 +26,7 @@ export default defineConfig({
         realityEngineV5: resolve(process.cwd(), 'reality-engine-v5.html'),
         realityWorldWindV5: resolve(process.cwd(), 'reality-worldwind-v5.html'),
         realityV5Export: resolve(process.cwd(), 'reality-v5-export.html'),
+        realityEngineV6: resolve(process.cwd(), 'reality-engine-v6.html'),
       },
     },
   },
