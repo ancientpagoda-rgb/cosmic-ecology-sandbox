@@ -18,14 +18,26 @@ export function registerCurrentModules(host, systems) {
   host.register(createReboundAdapter({ endpoint: systems.reboundEndpoint || null }));
   host.register(createGdalAdapter());
 
+  if (systems.orbitalSystem) {
+    host.register({
+      ...systems.orbitalSystem,
+      initialize({ provideCapability }) {
+        provideCapability('orbits.system', systems.orbitalSystem);
+        provideCapability('climate.seasons', systems.orbitalSystem);
+        provideCapability('hydrology.tides', systems.orbitalSystem);
+      },
+    });
+  }
+
   host.register({
     id: 'hydrology.browser',
     name: 'Browser Water Cycle',
-    version: '1.0.0',
+    version: '1.1.0',
     execution: 'browser-worker-ready',
     source: 'Reality Sandbox; D8 routing and semi-Lagrangian-style transport concepts',
     license: 'Project license',
     provides: ['hydrology.surface', 'atmosphere.moisture'],
+    requires: systems.orbitalSystem ? ['climate.seasons', 'hydrology.tides'] : [],
     initialize({ provideCapability }) {
       provideCapability('hydrology.surface', systems.waterCycle);
       provideCapability('atmosphere.moisture', systems.waterCycle);
