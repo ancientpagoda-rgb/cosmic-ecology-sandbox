@@ -74,8 +74,9 @@ function loop(timestamp) {
   }
   if (steps === maxSteps) accumulator = 0;
 
+  const cameraState = globe.getCameraState();
   globe.render(world);
-  galaxyLayer.render(globe.getCameraState().distance, timestamp);
+  galaxyLayer.render(cameraState, timestamp);
   moduleHost.render({ world, globe, galaxyLayer, timestamp });
 
   if (timestamp - lastSave > 5000) {
@@ -144,7 +145,7 @@ async function init() {
     window.realitySandboxOrbits = orbitalSystem;
     window.realitySandboxGalaxy = galaxySystem;
     globe.render(world);
-    galaxyLayer.render(globe.getCameraState().distance);
+    galaxyLayer.render(globe.getCameraState());
     requestAnimationFrame(loop);
   } catch (error) {
     showError(error);
