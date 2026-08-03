@@ -3,69 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#050812" />
+  <meta name="theme-color" content="#01030a" />
   <title>Reality Sandbox</title>
-  <link rel="stylesheet" href="style.css" />
-  <link rel="stylesheet" href="living.css" />
-  <link rel="stylesheet" href="immersive.css" />
-  <link rel="stylesheet" href="stability.css" />
+  <link rel="stylesheet" href="globe-only.css" />
 </head>
 <body>
-  <main class="app">
-    <header>
-      <h1>Reality Sandbox</h1>
-      <p class="tagline">A living planet with weather, geology, evolution, and history.</p>
-    </header>
-
-    <section class="controls" aria-label="Simulation controls">
-      <div class="transport">
-        <button id="startButton">Start</button>
-        <button id="pauseButton" disabled>Pause</button>
-        <button id="stepButton">Step</button>
-      </div>
-      <div class="tools">
-        <button id="spawnAgentButton">+ Animal</button>
-        <button id="spawnResourceButton">+ Plant</button>
-        <button id="forceBrushButton">Force Brush</button>
-        <button id="zoomInButton">Zoom +</button>
-        <button id="zoomOutButton">Zoom −</button>
-        <button id="deepZoomButton">Surface View</button>
-        <button id="resetViewButton">Reset View</button>
-        <label class="quality-control">Quality
-          <select id="qualitySelect" aria-label="Graphics quality">
-            <option value="auto">Auto</option>
-            <option value="mobile">Mobile</option>
-            <option value="desktop">Desktop</option>
-          </select>
-        </label>
-      </div>
-    </section>
-
-    <section class="simulation-layout">
-      <section class="main-panel">
-        <div id="world" aria-label="Interactive living 3D planet">
-          <div id="loadingState" class="loading-state" role="status"><span></span>Building planet…</div>
-          <div id="errorState" class="error-state" role="alert" hidden>
-            <strong>Planet renderer could not start.</strong>
-            <span id="errorMessage">WebGL may be unavailable or Safari may have run out of graphics memory.</span>
-            <button id="retryButton">Retry</button>
-          </div>
-        </div>
-        <div id="narrator" class="narrator" aria-live="polite"></div>
-        <aside id="inspector" class="inspector" aria-label="Explorer information">
-          <button id="closeInspector" aria-label="Close explorer">×</button>
-          <h2 id="inspectorTitle">Explorer</h2>
-          <div id="inspectorBody"></div>
-        </aside>
-      </section>
-
-      <aside class="history-panel" aria-label="World history">
-        <h2>World History</h2>
-        <ol id="historyList"></ol>
-      </aside>
-    </section>
-
-    <footer><p>Tap the globe to explore. Drag to rotate. Pinch to zoom. Reset View always returns to a complete globe.</p></footer>
+  <main id="world" aria-label="Interactive living planet">
+    <div id="loadingState" aria-live="polite">Building planet…</div>
+    <div id="errorState" role="alert" hidden>Unable to start the globe.</div>
   </main>
   <script type="module" src="/app.js"></script>
 </body>
