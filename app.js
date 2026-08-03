@@ -5,6 +5,7 @@ import { createModuleHost } from './core/module-host.js';
 import { createGlobeRenderer } from './core/globe-render-v4.js';
 import { createGalaxyRenderLayer } from './core/galaxy-render-layer.js';
 import { createGalaxySystem } from './core/galaxy-system.js';
+import { createHdTerrainLayer } from './core/hd-terrain-layer.js';
 import { createOrbitalSystem } from './core/orbital-system.js';
 import { placeExistingEntitiesOnBiomes } from './core/planet.js';
 import { createLivingSystems } from './core/living-systems.js';
@@ -20,6 +21,7 @@ const saved = readSavedState();
 let world;
 let globe;
 let galaxyLayer;
+let hdTerrainLayer;
 let stepSphere;
 let moduleHost;
 let accumulator = 0;
@@ -74,9 +76,11 @@ function loop(timestamp) {
   }
   if (steps === maxSteps) accumulator = 0;
 
+  const cameraState = globe.getCameraState();
   globe.render(world);
-  galaxyLayer.render(globe.getCameraState().distance, timestamp);
-  moduleHost.render({ world, globe, galaxyLayer, timestamp });
+  hdTerrainLayer.render(cameraState);
+  galaxyLayer.render(cameraState.distance, timestamp);
+  moduleHost.render({ world, globe, galaxyLayer, hdTerrainLayer, timestamp });
 
   if (timestamp - lastSave > 5000) {
     lastSave = timestamp;
@@ -128,11 +132,13 @@ async function init() {
       },
     );
 
+    hdTerrainLayer = createHdTerrainLayer(worldElement);
     galaxyLayer = createGalaxyRenderLayer(worldElement, galaxySystem);
 
     moduleHost = createModuleHost({ world });
     registerCurrentModules(moduleHost, {
       globe,
+      hdTerrainLayer,
       galaxyLayer,
       galaxySystem,
       orbitalSystem,
@@ -148,7 +154,9 @@ async function init() {
     window.realitySandboxModules = moduleHost;
     window.realitySandboxOrbits = orbitalSystem;
     window.realitySandboxGalaxy = galaxySystem;
+    window.realitySandboxTerrain = hdTerrainLayer;
     globe.render(world);
+    hdTerrainLayer.render(globe.getCameraState());
     galaxyLayer.render(globe.getCameraState().distance);
     requestAnimationFrame(loop);
   } catch (error) {
