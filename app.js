@@ -5,7 +5,9 @@ import { createModuleHost } from './core/module-host.js';
 import { createGlobeRenderer } from './core/globe-render-v4.js';
 import { createGalaxyRenderLayer } from './core/galaxy-render-layer.js';
 import { createGalaxySystem } from './core/galaxy-system.js';
+import { createGeologicalTime } from './core/geological-time.js';
 import { createHdTerrainLayer } from './core/hd-terrain-layer.js';
+import { createLocalSurfaceLayer } from './core/local-surface-layer.js';
 import { createOrbitalSystem } from './core/orbital-system.js';
 import { placeExistingEntitiesOnBiomes } from './core/planet.js';
 import { createLivingSystems } from './core/living-systems.js';
@@ -22,6 +24,8 @@ let world;
 let globe;
 let galaxyLayer;
 let hdTerrainLayer;
+let localSurfaceLayer;
+let geologicalTime;
 let stepSphere;
 let moduleHost;
 let accumulator = 0;
@@ -79,8 +83,17 @@ function loop(timestamp) {
   const cameraState = globe.getCameraState();
   globe.render(world);
   hdTerrainLayer.render(cameraState);
+  localSurfaceLayer.render(cameraState);
   galaxyLayer.render(cameraState.distance, timestamp);
-  moduleHost.render({ world, globe, galaxyLayer, hdTerrainLayer, timestamp });
+  moduleHost.render({
+    world,
+    globe,
+    galaxyLayer,
+    hdTerrainLayer,
+    localSurfaceLayer,
+    geologicalTime,
+    timestamp,
+  });
 
   if (timestamp - lastSave > 5000) {
     lastSave = timestamp;
@@ -108,6 +121,10 @@ async function init() {
     stepSphere = createSphericalStepper(world);
     const orbitalSystem = createOrbitalSystem(world);
     const galaxySystem = createGalaxySystem({ seed: 20260802 });
+    geologicalTime = createGeologicalTime({
+      seed: 20260802,
+      millionYearsPerSecond: matchMedia('(pointer: coarse)').matches ? 0.2 : 0.35,
+    });
     const living = createLivingSystems(world);
     const biosphere = createBiosphere(world);
     const waterCycle = createWaterCycle(world, orbitalSystem);
@@ -133,12 +150,16 @@ async function init() {
     );
 
     hdTerrainLayer = createHdTerrainLayer(worldElement);
+    localSurfaceLayer = createLocalSurfaceLayer(worldElement, geologicalTime);
     galaxyLayer = createGalaxyRenderLayer(worldElement, galaxySystem);
 
     moduleHost = createModuleHost({ world });
+    moduleHost.register(geologicalTime);
     registerCurrentModules(moduleHost, {
       globe,
       hdTerrainLayer,
+      localSurfaceLayer,
+      geologicalTime,
       galaxyLayer,
       galaxySystem,
       orbitalSystem,
@@ -155,9 +176,14 @@ async function init() {
     window.realitySandboxOrbits = orbitalSystem;
     window.realitySandboxGalaxy = galaxySystem;
     window.realitySandboxTerrain = hdTerrainLayer;
+    window.realitySandboxSurface = localSurfaceLayer;
+    window.realitySandboxGeology = geologicalTime;
+
     globe.render(world);
-    hdTerrainLayer.render(globe.getCameraState());
-    galaxyLayer.render(globe.getCameraState().distance);
+    const cameraState = globe.getCameraState();
+    hdTerrainLayer.render(cameraState);
+    localSurfaceLayer.render(cameraState);
+    galaxyLayer.render(cameraState.distance);
     requestAnimationFrame(loop);
   } catch (error) {
     showError(error);
