@@ -3,6 +3,8 @@ import { createWorld } from './core/world.js';
 import { createSphericalStepper } from './core/sphere.js';
 import { createModuleHost } from './core/module-host.js';
 import { createGlobeRenderer } from './core/globe-render-v4.js';
+import { createGalaxyRenderLayer } from './core/galaxy-render-layer.js';
+import { createGalaxySystem } from './core/galaxy-system.js';
 import { createOrbitalSystem } from './core/orbital-system.js';
 import { placeExistingEntitiesOnBiomes } from './core/planet.js';
 import { createLivingSystems } from './core/living-systems.js';
@@ -17,6 +19,7 @@ const saved = readSavedState();
 
 let world;
 let globe;
+let galaxyLayer;
 let stepSphere;
 let moduleHost;
 let accumulator = 0;
@@ -72,7 +75,8 @@ function loop(timestamp) {
   if (steps === maxSteps) accumulator = 0;
 
   globe.render(world);
-  moduleHost.render({ world, globe, timestamp });
+  galaxyLayer.render(globe.getCameraState().distance, timestamp);
+  moduleHost.render({ world, globe, galaxyLayer, timestamp });
 
   if (timestamp - lastSave > 5000) {
     lastSave = timestamp;
@@ -99,13 +103,15 @@ async function init() {
 
     stepSphere = createSphericalStepper(world);
     const orbitalSystem = createOrbitalSystem(world);
+    const galaxySystem = createGalaxySystem({ seed: 20260802 });
     const living = createLivingSystems(world);
     const biosphere = createBiosphere(world);
     const waterCycle = createWaterCycle(world, orbitalSystem);
     const dynamics = createPlanetDynamics(world, living, waterCycle, orbitalSystem);
+    const worldElement = document.getElementById('world');
 
     globe = createGlobeRenderer(
-      document.getElementById('world'),
+      worldElement,
       dynamics,
       null,
       {
@@ -122,9 +128,13 @@ async function init() {
       },
     );
 
+    galaxyLayer = createGalaxyRenderLayer(worldElement, galaxySystem);
+
     moduleHost = createModuleHost({ world });
     registerCurrentModules(moduleHost, {
       globe,
+      galaxyLayer,
+      galaxySystem,
       orbitalSystem,
       living,
       biosphere,
@@ -137,7 +147,9 @@ async function init() {
 
     window.realitySandboxModules = moduleHost;
     window.realitySandboxOrbits = orbitalSystem;
+    window.realitySandboxGalaxy = galaxySystem;
     globe.render(world);
+    galaxyLayer.render(globe.getCameraState().distance);
     requestAnimationFrame(loop);
   } catch (error) {
     showError(error);
