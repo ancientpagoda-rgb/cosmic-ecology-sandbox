@@ -2,12 +2,12 @@ const TAU = Math.PI * 2;
 
 export function createOrbitalSystem(world) {
   const bodies = [
-    planet('cinder', 'Cinder', 0.62, 88, 0.12, 0xc97855, 0.42, 7),
-    planet('aurelia', 'Aurelia', 0.86, 224, 0.18, 0xe1ad6e, 0.18, 3),
-    planet('gaia', 'Gaia', 1, 365.25, 0.22, 0x3d7fc4, 0.0167, 0),
-    planet('ember', 'Ember', 1.42, 687, 0.16, 0xa34d35, 0.093, 2),
-    planet('brontes', 'Brontes', 2.35, 2150, 0.48, 0xc7a56f, 0.048, 1),
-    planet('thalassa', 'Thalassa', 3.25, 3900, 0.38, 0x5d8fb9, 0.055, 2.5),
+    planet('cinder', 'Cinder', 0.62, 88, 0.12, 0x746a62, 0.42, 7),
+    planet('aurelia', 'Aurelia', 0.86, 224, 0.18, 0xb79a72, 0.18, 3),
+    planet('gaia', 'Gaia', 1, 365.25, 0.22, 0x416f8d, 0.0167, 0),
+    planet('ember', 'Ember', 1.42, 687, 0.16, 0x8a5744, 0.093, 2),
+    planet('brontes', 'Brontes', 2.35, 2150, 0.48, 0xa9977e, 0.048, 1),
+    planet('thalassa', 'Thalassa', 3.25, 3900, 0.38, 0x60788a, 0.055, 2.5),
   ];
 
   const moon = {
@@ -15,7 +15,7 @@ export function createOrbitalSystem(world) {
     name: 'Selene',
     parentId: 'gaia',
     radius: 0.065,
-    color: 0xc9ced8,
+    color: 0xa9aaa7,
     orbitRadius: 0.36,
     periodDays: 27.32,
     inclination: 5.1,
@@ -72,7 +72,7 @@ export function createOrbitalSystem(world) {
       name: 'Sun',
       type: 'star',
       radius: 0.62,
-      color: 0xffd27a,
+      color: 0xffe7bd,
       position: { x: -origin.x, y: -origin.y, z: -origin.z },
     });
     return relative;
