@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -6,5 +7,11 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: false,
     assetsDir: 'assets',
+    rollupOptions: {
+      input: {
+        main: resolve(process.cwd(), 'index.html'),
+        cohesionLab: resolve(process.cwd(), 'cohesion-lab.html'),
+      },
+    },
   },
 });
