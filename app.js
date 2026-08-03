@@ -3,11 +3,8 @@ import { createWorld } from './core/world.js';
 import { createSphericalStepper } from './core/sphere.js';
 import { createModuleHost } from './core/module-host.js';
 import { createGlobeRenderer } from './core/globe-render-v4.js';
-import { createGalaxyRenderLayer } from './core/galaxy-render-layer.js';
 import { createGalaxySystem } from './core/galaxy-system.js';
 import { createGeologicalTime } from './core/geological-time.js';
-import { createHdTerrainLayer } from './core/hd-terrain-layer.js';
-import { createLocalSurfaceLayer } from './core/local-surface-layer.js';
 import { createOrbitalSystem } from './core/orbital-system.js';
 import { placeExistingEntitiesOnBiomes } from './core/planet.js';
 import { createLivingSystems } from './core/living-systems.js';
@@ -22,9 +19,9 @@ const saved = readSavedState();
 
 let world;
 let globe;
-let galaxyLayer;
-let hdTerrainLayer;
-let localSurfaceLayer;
+let galaxyLayer = null;
+let hdTerrainLayer = null;
+let localSurfaceLayer = null;
 let geologicalTime;
 let stepSphere;
 let moduleHost;
@@ -82,9 +79,9 @@ function loop(timestamp) {
 
   const cameraState = globe.getCameraState();
   globe.render(world);
-  hdTerrainLayer.render(cameraState);
-  localSurfaceLayer.render(cameraState);
-  galaxyLayer.render(cameraState.distance, timestamp);
+  hdTerrainLayer?.render(cameraState);
+  localSurfaceLayer?.render(cameraState);
+  galaxyLayer?.render(cameraState.distance, timestamp);
   moduleHost.render({
     world,
     globe,
@@ -108,6 +105,30 @@ function showError(error) {
   if (panel) {
     panel.textContent = error?.message || 'Unable to start the globe.';
     panel.hidden = false;
+  }
+}
+
+async function loadOptionalVisualLayers(worldElement, galaxySystem) {
+  const tasks = [
+    import('./core/hd-terrain-layer.js')
+      .then(({ createHdTerrainLayer }) => {
+        hdTerrainLayer = createHdTerrainLayer(worldElement);
+        window.realitySandboxTerrain = hdTerrainLayer;
+      }),
+    import('./core/local-surface-layer.js')
+      .then(({ createLocalSurfaceLayer }) => {
+        localSurfaceLayer = createLocalSurfaceLayer(worldElement, geologicalTime);
+        window.realitySandboxSurface = localSurfaceLayer;
+      }),
+    import('./core/galaxy-render-layer.js')
+      .then(({ createGalaxyRenderLayer }) => {
+        galaxyLayer = createGalaxyRenderLayer(worldElement, galaxySystem);
+      }),
+  ];
+
+  const results = await Promise.allSettled(tasks);
+  for (const result of results) {
+    if (result.status === 'rejected') console.warn('Optional visual layer disabled:', result.reason);
   }
 }
 
@@ -141,26 +162,13 @@ async function init() {
         orbitalSystem,
         onCameraChange: saveState,
         onError: showError,
-        onReady: () => {
-          const loader = document.getElementById('loadingState');
-          loader?.classList.add('ready');
-          setTimeout(() => loader?.remove(), 400);
-        },
       },
     );
-
-    hdTerrainLayer = createHdTerrainLayer(worldElement);
-    localSurfaceLayer = createLocalSurfaceLayer(worldElement, geologicalTime);
-    galaxyLayer = createGalaxyRenderLayer(worldElement, galaxySystem);
 
     moduleHost = createModuleHost({ world });
     moduleHost.register(geologicalTime);
     registerCurrentModules(moduleHost, {
       globe,
-      hdTerrainLayer,
-      localSurfaceLayer,
-      geologicalTime,
-      galaxyLayer,
       galaxySystem,
       orbitalSystem,
       living,
@@ -175,16 +183,15 @@ async function init() {
     window.realitySandboxModules = moduleHost;
     window.realitySandboxOrbits = orbitalSystem;
     window.realitySandboxGalaxy = galaxySystem;
-    window.realitySandboxTerrain = hdTerrainLayer;
-    window.realitySandboxSurface = localSurfaceLayer;
     window.realitySandboxGeology = geologicalTime;
 
     globe.render(world);
-    const cameraState = globe.getCameraState();
-    hdTerrainLayer.render(cameraState);
-    localSurfaceLayer.render(cameraState);
-    galaxyLayer.render(cameraState.distance);
     requestAnimationFrame(loop);
+
+    // Allow the base globe to display before requesting more WebGL contexts.
+    setTimeout(() => {
+      void loadOptionalVisualLayers(worldElement, galaxySystem);
+    }, 1200);
   } catch (error) {
     showError(error);
   }
