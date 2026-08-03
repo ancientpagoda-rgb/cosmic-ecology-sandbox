@@ -1,4 +1,7 @@
 import { integrationCatalog } from './catalog.js';
+import { createRapierAdapter } from './rapier-adapter.js';
+import { createReboundAdapter } from './rebound-adapter.js';
+import { createGdalAdapter } from './gdal-adapter.js';
 
 export function registerCurrentModules(host, systems) {
   const catalog = new Map(integrationCatalog.map(item => [item.id, item]));
@@ -10,6 +13,10 @@ export function registerCurrentModules(host, systems) {
       provideCapability('rendering.webgl', systems.globe);
     },
   }));
+
+  host.register(createRapierAdapter());
+  host.register(createReboundAdapter({ endpoint: systems.reboundEndpoint || null }));
+  host.register(createGdalAdapter());
 
   host.register({
     id: 'hydrology.browser',
