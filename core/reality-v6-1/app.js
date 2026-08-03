@@ -18,11 +18,13 @@ let daySpeedIndex = 1;
 let weatherEnabled = true;
 let cloudLayer;
 let stormSource;
+let activeStormCount = 0;
 let refreshingWeather = false;
 let refreshQueued = false;
 let lastFrame = performance.now();
 let lastTextureRefresh = 0;
 let lastLocalRefresh = 0;
+let lastWeatherSave = 0;
 
 const weatherStatus = document.getElementById('weatherStatus');
 const weatherSpeedButton = document.getElementById('weatherSpeed');
@@ -84,6 +86,7 @@ try {
   function buildStormSource() {
     const source = new Cesium.CustomDataSource('FastNoiseLite weather systems');
     const systems = weather.stormSystems();
+    activeStormCount = systems.length;
 
     for (let index = 0; index < systems.length; index += 1) {
       const system = systems[index];
@@ -159,6 +162,8 @@ try {
       stormSource = buildStormSource();
       await viewer.dataSources.add(stormSource);
       stormSource.show = weatherEnabled;
+      weather.save();
+      lastWeatherSave = performance.now();
       lastTextureRefresh = performance.now();
       viewer.scene.requestRender();
     } finally {
@@ -181,7 +186,7 @@ try {
       `FASTNOISELITE WEATHER · ${weather.condition(sample)}`,
       `${sample.temperatureC}°C · humidity ${Math.round(sample.humidity * 100)}%`,
       `wind ${Math.round(sample.windSpeed)} km/h ${compassDirection(sample.windAngle)}`,
-      `clouds ${weather.latestStats.cloudCover}% · ${weather.stormSystems().length} storm systems`,
+      `clouds ${weather.latestStats.cloudCover}% · ${activeStormCount} storm systems`,
     ].join('<br>');
   }
 
@@ -216,6 +221,11 @@ try {
     viewer.scene.requestRender();
   });
 
+  addEventListener('pagehide', () => weather.save());
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) weather.save();
+  });
+
   formatWeatherSpeed();
   formatDaySpeed();
   await refreshWeather({ force: true });
@@ -233,6 +243,10 @@ try {
     if (now - lastLocalRefresh > 700) {
       localWeather();
       lastLocalRefresh = now;
+    }
+    if (now - lastWeatherSave > 30_000) {
+      weather.save();
+      lastWeatherSave = now;
     }
   }
 
