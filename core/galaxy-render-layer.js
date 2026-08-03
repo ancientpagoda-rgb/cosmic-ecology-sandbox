@@ -3,7 +3,7 @@ import * as THREE from 'three';
 export function createGalaxyRenderLayer(container, galaxySystem, options = {}) {
   const mobile = options.mobile ?? matchMedia('(pointer: coarse)').matches;
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(mobile ? 48 : 42, 1, 0.1, 1200);
+  const camera = new THREE.PerspectiveCamera(mobile ? 46 : 40, 1, 0.1, 1200);
   camera.position.set(0, 82, 180);
   camera.lookAt(0, 0, 0);
 
@@ -14,7 +14,7 @@ export function createGalaxyRenderLayer(container, galaxySystem, options = {}) {
   });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, mobile ? 1 : 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity .25s ease;z-index:2';
+  renderer.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity .2s ease;z-index:2';
   container.append(renderer.domElement);
 
   const galaxy = new THREE.Group();
@@ -58,8 +58,8 @@ export function createGalaxyRenderLayer(container, galaxySystem, options = {}) {
       void main() {
         vColor = color;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        float distanceScale = clamp(180.0 / max(12.0, -mvPosition.z), 0.35, 3.2);
-        gl_PointSize = starSize * pixelRatio * distanceScale * 2.2;
+        float distanceScale = clamp(170.0 / max(12.0, -mvPosition.z), 0.35, 2.8);
+        gl_PointSize = starSize * pixelRatio * distanceScale * 2.0;
         gl_Position = projectionMatrix * mvPosition;
       }
     `,
@@ -71,7 +71,7 @@ export function createGalaxyRenderLayer(container, galaxySystem, options = {}) {
         float radius = length(centered);
         if (radius > 0.5) discard;
         float core = smoothstep(0.5, 0.0, radius);
-        float glow = pow(core, 2.2) + pow(core, 8.0) * 1.8;
+        float glow = pow(core, 2.0) + pow(core, 7.0) * 1.4;
         gl_FragColor = vec4(vColor * glow, opacity * core);
       }
     `,
@@ -139,28 +139,28 @@ export function createGalaxyRenderLayer(container, galaxySystem, options = {}) {
     camera.updateProjectionMatrix();
   }
 
-  function render(cameraDistance, timestamp = performance.now()) {
+  function render(cameraState = {}, timestamp = performance.now()) {
     resize();
-    visibleAmount = smoothstep(38, 52, cameraDistance);
+    const distance = cameraState.distance ?? 3;
+    visibleAmount = smoothstep(35, 50, distance);
     renderer.domElement.style.opacity = String(visibleAmount);
     if (visibleAmount < 0.005) return;
 
-    starMaterial.uniforms.opacity.value = visibleAmount * 0.92;
-    core.material.opacity = visibleAmount * 0.42;
-    dust.material.opacity = visibleAmount * 0.13;
-    localMarker.material.opacity = visibleAmount * (0.45 + Math.sin(timestamp * 0.004) * 0.2);
+    starMaterial.uniforms.opacity.value = visibleAmount * 0.9;
+    core.material.opacity = visibleAmount * 0.34;
+    dust.material.opacity = visibleAmount * 0.11;
+    localMarker.material.opacity = visibleAmount * (0.38 + Math.sin(timestamp * 0.003) * 0.12);
     for (const sprite of nebulae.children) {
       sprite.material.opacity = visibleAmount * sprite.userData.baseOpacity;
     }
 
-    const zoom = smoothstep(40, 52, cameraDistance);
-    camera.position.set(
-      0,
-      70 + zoom * 82,
-      150 + zoom * 115,
-    );
+    const zoom = smoothstep(35, 52, distance);
+    galaxy.rotation.x = -0.22 + (cameraState.systemRotationX ?? 0) * 0.55;
+    galaxy.rotation.y = (cameraState.systemRotationY ?? 0) + timestamp * (mobile ? 0.000004 : 0.000006);
+    galaxy.scale.setScalar(0.82 + zoom * 0.3);
+
+    camera.position.set(0, 68 + zoom * 96, 145 + zoom * 138);
     camera.lookAt(0, 0, 0);
-    galaxy.rotation.y += mobile ? 0.00008 : 0.00013;
     renderer.render(scene, camera);
   }
 
