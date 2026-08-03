@@ -1,6 +1,7 @@
 import FastNoiseLite from 'https://cdn.jsdelivr.net/npm/fastnoise-lite@1.1.1/FastNoiseLite.js';
 
 const TAU = Math.PI * 2;
+const STORAGE_KEY = 'reality-v6-1-weather-hours';
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const smoothstep = (edge0, edge1, value) => {
   const t = clamp((value - edge0) / (edge1 - edge0));
@@ -34,7 +35,11 @@ function normalizeLongitude(degrees) {
 export class FastNoiseWeather {
   constructor(simulation) {
     this.simulation = simulation;
-    this.hours = Number(localStorage.getItem('reality-v6-1-weather-hours')) || 0;
+    try {
+      this.hours = Number(localStorage.getItem(STORAGE_KEY)) || 0;
+    } catch (_) {
+      this.hours = 0;
+    }
     this.largeScale = configureNoise(77123, 0.61);
     this.detail = configureNoise(99173, 1.38);
     this.flow = configureNoise(44117, 0.83);
@@ -47,9 +52,15 @@ export class FastNoiseWeather {
 
   advance(hours) {
     this.hours += hours;
+  }
+
+  save() {
     try {
-      localStorage.setItem('reality-v6-1-weather-hours', String(this.hours));
-    } catch (_) {}
+      localStorage.setItem(STORAGE_KEY, String(this.hours));
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   sample(latitude, longitude, hours = this.hours) {
