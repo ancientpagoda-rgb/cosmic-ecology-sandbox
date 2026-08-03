@@ -7,6 +7,7 @@ import { createGalaxyRenderLayer } from './core/galaxy-render-layer.js';
 import { createGalaxySystem } from './core/galaxy-system.js';
 import { createOrbitalSystem } from './core/orbital-system.js';
 import { createSurfaceCharacter } from './core/surface-character.js';
+import { createCloseupPolish } from './core/closeup-polish.js';
 import { placeExistingEntitiesOnBiomes } from './core/planet.js';
 import { createLivingSystems } from './core/living-systems.js';
 import { createPlanetDynamics } from './core/planet-dynamics.js';
@@ -22,6 +23,7 @@ let world;
 let globe;
 let galaxyLayer;
 let surfaceCharacter;
+let closeupPolish;
 let stepSphere;
 let moduleHost;
 let accumulator = 0;
@@ -79,7 +81,7 @@ function loop(timestamp) {
   const cameraState = globe.getCameraState();
   globe.render(world);
   galaxyLayer.render(cameraState, timestamp);
-  moduleHost.render({ world, globe, galaxyLayer, surfaceCharacter, timestamp });
+  moduleHost.render({ world, globe, galaxyLayer, surfaceCharacter, closeupPolish, timestamp });
 
   if (timestamp - lastSave > 5000) {
     lastSave = timestamp;
@@ -127,6 +129,7 @@ async function init() {
     );
 
     galaxyLayer = createGalaxyRenderLayer(worldElement, galaxySystem);
+    closeupPolish = createCloseupPolish(globe);
     surfaceCharacter = createSurfaceCharacter(globe);
 
     moduleHost = createModuleHost({ world });
@@ -148,6 +151,7 @@ async function init() {
     window.realitySandboxOrbits = orbitalSystem;
     window.realitySandboxGalaxy = galaxySystem;
     window.realitySandboxCharacter = surfaceCharacter;
+    window.realitySandboxCloseup = closeupPolish;
     globe.render(world);
     galaxyLayer.render(globe.getCameraState());
     requestAnimationFrame(loop);
