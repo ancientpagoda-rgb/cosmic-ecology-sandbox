@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#02060b">
+<title>Reality Engine V6.4 · REBOUND Solar System</title>
+<script>window.CESIUM_BASE_URL='https://cdn.jsdelivr.net/npm/cesium@1.143.0/Build/Cesium/';</script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.143.0/Build/Cesium/Widgets/widgets.css">
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.143.0/Build/Cesium/Cesium.js"></script>
+<style>
+*{box-sizing:border-box}html,body,#cesium{margin:0;width:100%;height:100%;overflow:hidden;background:#02060b;color:#def3ff;font-family:system-ui,-apple-system,sans-serif}.glass{background:#07131dde;border:1px solid #91bdd03d;backdrop-filter:blur(11px)}.badge{position:fixed;z-index:5;top:max(12px,env(safe-area-inset-top));left:12px;padding:8px 11px;border-radius:999px;font-size:11px}.weather,.civilization,.biome,.stats{position:fixed;z-index:5;padding:9px 11px;border-radius:12px;font:10px/1.48 ui-monospace,SFMono-Regular,monospace}.weather{top:58px;left:12px;color:#c2e5f7;max-width:220px}.civilization{top:140px;left:12px;color:#efd9ff;max-width:225px}.stats{top:max(12px,env(safe-area-inset-top));right:12px;color:#bad9eb;text-align:right}.biome{top:115px;right:12px;color:#c8f0d2;text-align:right;max-width:235px}.hud{position:fixed;z-index:5;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));padding:9px 11px;border-radius:14px}.top{display:flex;justify-content:space-between;gap:10px;font-size:11px}.inspect{margin-top:5px;font:10px/1.35 ui-monospace,SFMono-Regular,monospace;color:#9fc5da;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.speed{display:grid;grid-template-columns:46px 1fr 88px;gap:8px;align-items:center;margin-top:7px}.speed label,.speed output{font-size:10px;color:#abc8d9}.speed input{width:100%;accent-color:#8fd0ff}.actions{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:7px}.actions button,.actions a{padding:7px 3px;border-radius:9px;border:1px solid #91bdd03d;background:#0b1c28;color:#dff4ff;text-align:center;text-decoration:none;font:9px system-ui}.actions .system-button{background:#15243c;border-color:#8ba6ff66;color:#e9edff}.loading{position:fixed;z-index:20;left:50%;top:50%;transform:translate(-50%,-50%);padding:12px 16px;border-radius:13px;font-size:13px}.cesium-viewer-bottom,.cesium-viewer-toolbar{display:none!important}
+.system-panel{display:none;position:fixed;z-index:40;inset:0;background:radial-gradient(circle at 50% 35%,#101d33 0,#030812 47%,#000 100%);color:#e7f3ff}.system-active .system-panel{display:block}.system-active .surface-ui{display:none!important}.system-top{position:absolute;z-index:4;top:max(10px,env(safe-area-inset-top));left:10px;right:10px;display:flex;gap:8px;align-items:flex-start;justify-content:space-between;pointer-events:none}.system-card{pointer-events:auto;padding:9px 11px;border-radius:12px;font:10px/1.5 ui-monospace,SFMono-Regular,monospace}.system-card strong{font-size:11px;color:#fff}.system-actions{display:flex;gap:7px;pointer-events:auto}.system-actions button,.system-actions a{border:1px solid #9db7ff55;border-radius:10px;background:#0a1424e8;color:#e9f1ff;padding:9px 11px;text-decoration:none;font:10px system-ui}.system-frame{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}.rebound-loading{position:absolute;z-index:3;left:50%;top:50%;transform:translate(-50%,-50%);padding:13px 17px;border-radius:13px;text-align:center;font:12px/1.5 system-ui}.system-footer{position:absolute;z-index:4;left:10px;right:10px;bottom:max(10px,env(safe-area-inset-bottom));display:flex;justify-content:space-between;gap:10px;align-items:flex-end;pointer-events:none}.system-status{pointer-events:auto;padding:8px 10px;border-radius:10px;font:10px/1.45 ui-monospace,SFMono-Regular,monospace;color:#cbd9f3}.system-note{pointer-events:auto;max-width:330px;padding:8px 10px;border-radius:10px;font:9px/1.4 system-ui;color:#b7c4dc;text-align:right}
+@media(max-width:650px){.biome{top:205px;right:12px;max-width:205px}.actions{grid-template-columns:repeat(4,1fr)}.system-top{display:grid;grid-template-columns:1fr}.system-actions{justify-content:flex-start;flex-wrap:wrap}.system-footer{display:grid;grid-template-columns:1fr}.system-note{text-align:left;max-width:none}}
+@media(max-height:760px){.weather{top:50px}.civilization{top:124px}.biome{top:105px}.actions button,.actions a{padding:5px 2px}.hud{padding:7px 9px}}
+@media(max-height:690px){.weather,.civilization,.biome{display:none}}
+</style>
+</head>
+<body>
+<div id="cesium"></div>
+<div id="loading" class="loading glass surface-ui">Loading the living planet and orbital bridge…</div>
+<div class="badge glass surface-ui">ENGINE V6.4 · REBOUND SOLAR SYSTEM</div>
+<div id="weatherStatus" class="weather glass surface-ui">Building planetary weather…</div>
+<div id="civilizationStatus" class="civilization glass surface-ui">Mapping civilizations…</div>
+<div id="biomeStatus" class="biome glass surface-ui">Tracing natural regions…</div>
+<div id="stats" class="stats glass surface-ui">Starting simulation…</div>
+<section class="hud glass surface-ui">
+  <div class="top"><span id="age">0 yr</span><span id="coords">0.0°, 0.0°</span></div>
+  <div id="inspect" class="inspect">Explore the planet, then enter the REBOUND system view.</div>
+  <div class="speed"><label>WORLD</label><input id="speed" type="range" min="0" max="5" step="1" value="0"><output id="speedOut">paused</output></div>
+  <div class="actions">
+    <button id="enterSystem" class="system-button" type="button">Enter system</button>
+    <button id="weatherSpeed" type="button">Weather ×1</button>
+    <button id="weatherToggle" type="button">Clouds on</button>
+    <button id="daySpeed" type="button">Sun natural</button>
+    <button id="politicsSpeed" type="button">Politics ×1</button>
+    <button id="seasonSpeed" type="button">Seasons ×1</button>
+    <button id="step100" type="button">+100 years</button>
+    <button id="step1000" type="button">+1,000 years</button>
+    <button id="advancePolitics" type="button">+250 politics</button>
+    <button id="advanceSeason" type="button">+1 season</button>
+    <button id="overlayToggle" type="button">Borders on</button>
+    <button id="biomeToggle" type="button">Biomes on</button>
+    <button id="save" type="button">Save world</button>
+    <button id="resetCamera" type="button">Reset camera</button>
+    <button id="resetWorld" type="button">Reset world</button>
+    <a href="./reality-engine-v6-3.html">Open V6.3</a>
+  </div>
+</section>
+
+<section id="systemPanel" class="system-panel" aria-label="REBOUND solar-system view">
+  <iframe id="reboundFrame" class="system-frame" title="REBOUND WebAssembly Solar System" allow="fullscreen; autoplay" allowfullscreen></iframe>
+  <div id="reboundLoading" class="rebound-loading glass">Starting the official REBOUND WebAssembly solar-system simulation…<br>This may take a moment on mobile.</div>
+  <header class="system-top">
+    <div id="surfaceSummary" class="system-card glass"><strong>Living planet</strong><br>Loading surface state…</div>
+    <nav class="system-actions">
+      <button id="returnSurface" type="button">Return to planet</button>
+      <button id="reloadRebound" type="button">Restart REBOUND</button>
+      <a id="openReboundStandalone" target="_blank" rel="noopener">Open standalone</a>
+    </nav>
+  </header>
+  <footer class="system-footer">
+    <div id="systemStatus" class="system-status glass">REBOUND WebAssembly orbital laboratory</div>
+    <div class="system-note glass">REBOUND is the orbital-physics engine. Cesium and the Reality simulation remain authoritative for the living planet surface. Their clocks are intentionally separate in this first bridge.</div>
+  </footer>
+</section>
+
+<script type="module" src="./core/reality-v6-4/app.js"></script>
+</body>
+</html>
