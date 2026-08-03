@@ -1,7 +1,7 @@
 import { createRng } from './core/rng.js';
 import { createWorld } from './core/world.js';
 import { createSphericalStepper } from './core/sphere.js';
-import { createGlobeRenderer } from './core/globe-render-v3.js';
+import { createGlobeRenderer } from './core/globe-render-v4.js';
 import { placeExistingEntitiesOnBiomes, randomHabitablePoint } from './core/planet.js';
 import { createLivingSystems } from './core/living-systems.js';
 import { createPlanetDynamics } from './core/planet-dynamics.js';
@@ -49,11 +49,7 @@ function setRunning(next) {
   document.getElementById('startButton').disabled = running;
   document.getElementById('pauseButton').disabled = !running;
   document.getElementById('stepButton').disabled = running;
-  if (running) {
-    lastTime = 0;
-    accumulator = 0;
-    requestAnimationFrame(mainLoop);
-  }
+  if (running) { lastTime = 0; accumulator = 0; requestAnimationFrame(mainLoop); }
   saveState();
 }
 
@@ -67,14 +63,8 @@ function saveState() {
   const positions = {};
   for (const [id, pos] of world.ecs.components.position.entries()) positions[id] = [pos.x, pos.y];
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      quality,
-      running,
-      tick: world.tick,
-      camera: globe?.getCameraState?.(),
-      positions,
-    }));
-  } catch { /* storage can be unavailable in private browsing */ }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ quality, running, tick: world.tick, camera: globe?.getCameraState?.(), positions }));
+  } catch {}
 }
 
 function restoreWorldState() {
@@ -90,12 +80,9 @@ function addHistory(event) {
   const list = document.getElementById('historyList');
   if (!list) return;
   const li = document.createElement('li');
-  const strong = document.createElement('strong');
-  strong.textContent = event.title;
-  const span = document.createElement('span');
-  span.textContent = event.description;
-  li.append(strong, span);
-  list.prepend(li);
+  const strong = document.createElement('strong'); strong.textContent = event.title;
+  const span = document.createElement('span'); span.textContent = event.description;
+  li.append(strong, span); list.prepend(li);
   while (list.children.length > 12) list.lastElementChild.remove();
 }
 
@@ -148,19 +135,17 @@ function init() {
         const loader = document.getElementById('loadingState');
         loader.classList.add('ready');
         setTimeout(() => loader.remove(), 400);
-        globe.resetView();
+        if (!saved.camera) globe.resetView();
         setRunning(saved.running !== false);
       },
     });
-  } catch (error) {
-    showError(error);
-    return;
-  }
+  } catch (error) { showError(error); return; }
 
   window.addEventListener('reality-history', event => renderHistory(event.detail));
   window.addEventListener('biosphere-event', event => addHistory(event.detail));
   window.addEventListener('planet-event', event => addHistory(event.detail));
   renderHistory(living.getHistory());
+  addHistory({ title: 'HD planet active', description: 'Terrain displacement, layered clouds, animated oceans, sharper textures, and adaptive zoom detail are running.' });
 
   document.getElementById('startButton').addEventListener('click', () => setRunning(true));
   document.getElementById('pauseButton').addEventListener('click', () => setRunning(false));
@@ -172,11 +157,7 @@ function init() {
   document.getElementById('deepZoomButton').addEventListener('click', globe.deepZoom);
   document.getElementById('resetViewButton').addEventListener('click', globe.resetView);
   document.getElementById('retryButton').addEventListener('click', () => location.reload());
-  document.getElementById('qualitySelect').addEventListener('change', event => {
-    quality = event.target.value;
-    saveState();
-    location.reload();
-  });
+  document.getElementById('qualitySelect').addEventListener('change', event => { quality = event.target.value; saveState(); location.reload(); });
   document.getElementById('closeInspector').addEventListener('click', () => document.getElementById('inspector').classList.remove('visible'));
 
   const brush = document.getElementById('forceBrushButton');
@@ -186,7 +167,6 @@ function init() {
     brush.textContent = brushActive ? 'Force Brush: ON' : 'Force Brush';
     globe.element.dataset.brush = brushActive ? 'on' : 'off';
   });
-
   let painting = false;
   const paint = event => {
     if (!brushActive) return;
