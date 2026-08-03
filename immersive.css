@@ -1,0 +1,116 @@
+.main-panel {
+  position: relative;
+}
+
+.narrator {
+  position: absolute;
+  left: 50%;
+  bottom: 1.1rem;
+  width: min(680px, calc(100% - 2rem));
+  transform: translate(-50%, 18px);
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(145, 187, 255, 0.35);
+  border-radius: 14px;
+  background: rgba(4, 8, 20, 0.82);
+  color: #e8efff;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  backdrop-filter: blur(12px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.narrator.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.inspector {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  width: min(320px, calc(100% - 2rem));
+  max-height: calc(100% - 2rem);
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid rgba(145, 187, 255, 0.3);
+  border-radius: 16px;
+  background: rgba(4, 8, 20, 0.88);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(14px);
+  opacity: 0;
+  transform: translateX(-16px);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.inspector.visible {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.inspector h2 {
+  margin: 0 2rem 0.8rem 0;
+  font-size: 1rem;
+  color: #dfeaff;
+}
+
+#closeInspector {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.55rem;
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+#inspectorBody {
+  display: grid;
+  gap: 0.45rem;
+}
+
+#inspectorBody > div {
+  display: grid;
+  grid-template-columns: 105px 1fr;
+  gap: 0.7rem;
+  padding: 0.45rem 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+#inspectorBody b {
+  color: #8fcfff;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+#inspectorBody span {
+  color: #d2d9ef;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 800px) {
+  .inspector {
+    top: auto;
+    bottom: 0.75rem;
+    left: 0.75rem;
+    width: calc(100% - 1.5rem);
+    max-height: 52%;
+    transform: translateY(16px);
+  }
+
+  .inspector.visible {
+    transform: translateY(0);
+  }
+
+  .narrator {
+    bottom: 0.75rem;
+    width: calc(100% - 1.5rem);
+    font-size: 0.78rem;
+  }
+}
