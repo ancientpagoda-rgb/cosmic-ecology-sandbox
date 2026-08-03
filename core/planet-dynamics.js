@@ -18,21 +18,10 @@ export function createPlanetDynamics(world, living) {
     weatherClock += dt;
     geologyClock += dt;
     narratorClock += dt;
-
     updateWeather(dt);
-
-    if (weatherClock >= 5) {
-      weatherClock = 0;
-      spawnWeather();
-    }
-    if (geologyClock >= 14) {
-      geologyClock = 0;
-      geologicalCycle();
-    }
-    if (narratorClock >= 20) {
-      narratorClock = 0;
-      narrateMeaningfulChange();
-    }
+    if (weatherClock >= 5) { weatherClock = 0; spawnWeather(); }
+    if (geologyClock >= 14) { geologyClock = 0; geologicalCycle(); }
+    if (narratorClock >= 20) { narratorClock = 0; narrateMeaningfulChange(); }
   }
 
   function seedWeather() {
@@ -99,7 +88,6 @@ export function createPlanetDynamics(world, living) {
       site.age += 14;
       site.activity = clamp(site.activity + (Math.random() - 0.48) * 0.18, 0, 1);
     }
-
     const active = geology.filter(g => g.activity > 0.76);
     if (!active.length) return;
     const site = active[Math.floor(Math.random() * active.length)];
@@ -120,17 +108,11 @@ export function createPlanetDynamics(world, living) {
     const plants = [...c.resource.values()].filter(r => r.amount > 0).length;
     const animals = c.agent.size + c.predator.size + c.apex.size;
     const strongestStorm = weather.reduce((best, w) => !best || w.strength > best.strength ? w : best, null);
-
     let message;
-    if (strongestStorm?.type === 'storm' && strongestStorm.strength > 0.8) {
-      message = 'A large storm is reorganizing rainfall across one of the major ocean basins.';
-    } else if (plants > animals * 2) {
-      message = 'Vegetation is expanding faster than animal populations, creating new ecological opportunities.';
-    } else if (animals > plants * 1.2) {
-      message = 'Animal pressure is rising while plant abundance falls, increasing competition for food.';
-    } else {
-      message = 'The planet is in a relatively stable interval, though climate and evolution continue to reshape its ecosystems.';
-    }
+    if (strongestStorm?.type === 'storm' && strongestStorm.strength > 0.8) message = 'A large storm is reorganizing rainfall across one of the major ocean basins.';
+    else if (plants > animals * 2) message = 'Vegetation is expanding faster than animal populations, creating new ecological opportunities.';
+    else if (animals > plants * 1.2) message = 'Animal pressure is rising while plant abundance falls, increasing competition for food.';
+    else message = 'The planet is in a relatively stable interval, though climate and evolution continue to reshape its ecosystems.';
     emit('Planet narrator', message, strongestStorm || { x: world.width / 2, y: world.height / 2 }, true);
   }
 
@@ -140,8 +122,9 @@ export function createPlanetDynamics(world, living) {
     const nearbyWeather = nearest(weather, x, y, world.width);
     const nearbyGeology = nearest(geology, x, y, world.width);
     const counts = countNearbyLife(x, y, 90);
-
     return {
+      x,
+      y,
       title: regionName(x, y, p),
       biome: prettify(p.biome),
       elevation: Math.round((p.elevation - 0.53) * 6500),
