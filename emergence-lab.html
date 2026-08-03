@@ -12,23 +12,16 @@
 <body>
   <main class="shell">
     <header class="head">
-      <div><h1 class="title">Emergence Lab</h1><p class="sub">The viewer now runs on modular World Core systems for geology, water, ecology, fire, agriculture, settlements, roads, and trade.</p><span class="badge">World Core migration</span></div>
+      <div><h1 class="title">Emergence Lab</h1><p class="sub">The stable flat viewer is active while the spherical version is rebuilt separately.</p><span class="badge">World Core migration</span></div>
     </header>
     <section class="panel">
       <canvas id="world" width="640" height="440" aria-label="Emergent terrain and civilization simulation"></canvas>
-      <div class="controls">
-        <div class="control"><label>Uplift</label><input id="uplift" type="range" min="0" max="1" step="0.01" value="0.55"></div>
-        <div class="control"><label>Rainfall</label><input id="rain" type="range" min="0" max="1" step="0.01" value="0.62"></div>
-        <div class="control"><label>Temperature</label><input id="temp" type="range" min="0" max="1" step="0.01" value="0.58"></div>
-        <div class="control"><label>Time speed</label><input id="speed" type="range" min="0" max="6" step="1" value="2"></div>
-      </div>
-      <div class="stats">
-        <div class="stat"><b>Age</b><span id="age">0</span></div><div class="stat"><b>River cells</b><span id="rivers">0</span></div><div class="stat"><b>Forest cover</b><span id="forest">0%</span></div><div class="stat"><b>Settlements</b><span id="cities">0</span></div><div class="stat"><b>Population</b><span id="population">0</span></div><div class="stat"><b>Farm cover</b><span id="farms">0%</span></div><div class="stat"><b>Road links</b><span id="roads">0</span></div><div class="stat"><b>Active fires</b><span id="fires">0</span></div><div class="stat"><b>Flooded cells</b><span id="floods">0</span></div><div class="stat"><b>Collapsed cities</b><span id="collapsed">0</span></div>
-      </div>
+      <div class="controls"><div class="control"><label>Uplift</label><input id="uplift" type="range" min="0" max="1" step="0.01" value="0.55"></div><div class="control"><label>Rainfall</label><input id="rain" type="range" min="0" max="1" step="0.01" value="0.62"></div><div class="control"><label>Temperature</label><input id="temp" type="range" min="0" max="1" step="0.01" value="0.58"></div><div class="control"><label>Time speed</label><input id="speed" type="range" min="0" max="6" step="1" value="2"></div></div>
+      <div class="stats"><div class="stat"><b>Age</b><span id="age">0</span></div><div class="stat"><b>River cells</b><span id="rivers">0</span></div><div class="stat"><b>Forest cover</b><span id="forest">0%</span></div><div class="stat"><b>Settlements</b><span id="cities">0</span></div><div class="stat"><b>Population</b><span id="population">0</span></div><div class="stat"><b>Farm cover</b><span id="farms">0%</span></div><div class="stat"><b>Road links</b><span id="roads">0</span></div><div class="stat"><b>Active fires</b><span id="fires">0</span></div><div class="stat"><b>Flooded cells</b><span id="floods">0</span></div><div class="stat"><b>Collapsed cities</b><span id="collapsed">0</span></div></div>
       <div class="actions"><button id="reset">New world</button><button id="step">Step 100 years</button></div>
       <div class="legend"><span style="--c:#2580ad">River</span><span style="--c:#447b48">Forest</span><span style="--c:#b69b58">Farm</span><span style="--c:#d1b17b">City</span><span style="--c:#c56b3c">Fire</span><span style="--c:#777d83">Road</span></div>
     </section>
   </main>
-  <script type="module" src="./emergence-modular-lab.js?v=1"></script>
+  <script type="module" src="./emergence-modular-lab.js?v=flat-republish2"></script>
 </body>
 </html>
