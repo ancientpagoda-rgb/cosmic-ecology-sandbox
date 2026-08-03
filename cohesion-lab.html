@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#06080d" />
+  <title>Reality Sandbox — Cohesion Lab</title>
+  <style>
+    :root{color-scheme:dark}*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#06080d;color:#e9eef8;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}body{padding:max(18px,env(safe-area-inset-top)) 18px max(24px,env(safe-area-inset-bottom))}.shell{max-width:720px;margin:0 auto}.eyebrow{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:#93a2b9}.title{margin:.4rem 0 .25rem;font-size:clamp(1.65rem,7vw,2.5rem)}.sub{margin:0 0 1.25rem;color:#9eabbd;line-height:1.45}.card{background:#0d1119;border:1px solid #202938;border-radius:16px;padding:16px;margin:12px 0;box-shadow:0 18px 50px rgba(0,0,0,.24)}.status{display:flex;align-items:center;gap:10px;font-weight:650}.dot{width:10px;height:10px;border-radius:50%;background:#6be28d;box-shadow:0 0 16px rgba(107,226,141,.75)}.error .dot{background:#ff7272;box-shadow:0 0 16px rgba(255,114,114,.75)}label{display:block;font-size:.78rem;color:#9eabbd;margin-bottom:8px}.value{font-variant-numeric:tabular-nums;color:#f4f7fb}input[type=range]{width:100%;accent-color:#8ab4ff}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric{background:#090c12;border:1px solid #192231;border-radius:12px;padding:12px}.metric b{display:block;font-size:.76rem;color:#8f9db1;margin-bottom:5px}.metric span{font-variant-numeric:tabular-nums}.lod{display:grid;gap:9px}.lod-row{display:grid;grid-template-columns:72px 1fr 48px;align-items:center;gap:9px}.track{height:9px;border-radius:999px;background:#171e2a;overflow:hidden}.fill{height:100%;border-radius:inherit;background:linear-gradient(90deg,#6f8fd8,#a6c0ff);transition:width .12s linear}.lod-row output{text-align:right;font-variant-numeric:tabular-nums;color:#b8c4d5}.json{white-space:pre-wrap;word-break:break-word;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;color:#aab9cc;background:#070a0f;border:1px solid #18202d;border-radius:12px;padding:12px;max-height:260px;overflow:auto}.good{color:#77e49a}.bad{color:#ff8d8d}@media(max-width:520px){.grid{grid-template-columns:1fr}.lod-row{grid-template-columns:62px 1fr 44px}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="eyebrow">Isolated test build</div>
+    <h1 class="title">Scale Cohesion Lab</h1>
+    <p class="sub">This page tests the shared universe coordinate and LOD runtime without loading the globe, galaxy, or extra WebGL contexts.</p>
+
+    <section class="card">
+      <div id="status" class="status"><span class="dot"></span><span>Starting runtime…</span></div>
+    </section>
+
+    <section class="card">
+      <label for="distance">Camera distance: <span id="distanceValue" class="value">3.00</span></label>
+      <input id="distance" type="range" min="1.18" max="52" step="0.01" value="3" />
+    </section>
+
+    <section class="card lod" id="lod"></section>
+
+    <section class="card grid">
+      <div class="metric"><b>Active tier</b><span id="tier">—</span></div>
+      <div class="metric"><b>Altitude</b><span id="altitude">—</span></div>
+      <div class="metric"><b>Longitude</b><span id="longitude">—</span></div>
+      <div class="metric"><b>Latitude</b><span id="latitude">—</span></div>
+      <div class="metric"><b>Tile key</b><span id="tile">—</span></div>
+      <div class="metric"><b>Entity persistence</b><span id="entity">—</span></div>
+    </section>
+
+    <section class="card">
+      <label>Simulation budget</label>
+      <pre id="budget" class="json"></pre>
+    </section>
+
+    <section class="card">
+      <label>Runtime snapshot</label>
+      <pre id="snapshot" class="json"></pre>
+    </section>
+  </main>
+  <script type="module" src="./cohesion-lab.js?v=1"></script>
+</body>
+</html>
