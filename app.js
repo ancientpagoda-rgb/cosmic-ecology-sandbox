@@ -8,6 +8,7 @@ import { createGalaxySystem } from './core/galaxy-system.js';
 import { createOrbitalSystem } from './core/orbital-system.js';
 import { createCosmicOrigin } from './core/cosmic-origin.js';
 import { createOriginSurfaceVisuals } from './core/origin-surface-visuals.js';
+import { createEmbodiedEvolution } from './core/embodied-evolution.js';
 import { createSurfaceCharacter } from './core/surface-character.js';
 import { createCloseupPolish } from './core/closeup-polish.js';
 import { createGroundLevelPhase } from './core/ground-level-phase.js';
@@ -30,6 +31,7 @@ let closeupPolish;
 let groundLevelPhase;
 let originSystem;
 let originSurfaceVisuals;
+let embodiedEvolution;
 let stepSphere;
 let moduleHost;
 let accumulator = 0;
@@ -96,6 +98,7 @@ function loop(timestamp) {
     groundLevelPhase,
     originSystem,
     originSurfaceVisuals,
+    embodiedEvolution,
     timestamp,
   });
 
@@ -160,6 +163,10 @@ async function init() {
     originSurfaceVisuals = createOriginSurfaceVisuals(originSystem, groundLevelPhase, {
       mobile: matchMedia('(max-width: 720px), (pointer: coarse)').matches,
     });
+    embodiedEvolution = createEmbodiedEvolution(world, originSystem, groundLevelPhase, {
+      mobile: matchMedia('(max-width: 720px), (pointer: coarse)').matches,
+      seed: 20260805,
+    });
     closeupPolish = createCloseupPolish(globe);
     surfaceCharacter = createSurfaceCharacter(globe, {
       groundLevel: groundLevelPhase,
@@ -180,6 +187,7 @@ async function init() {
     });
     moduleHost.register(groundLevelPhase);
     moduleHost.register(originSurfaceVisuals);
+    moduleHost.register(embodiedEvolution);
     await moduleHost.initialize();
     await moduleHost.load(saved.modules || {});
 
@@ -188,6 +196,7 @@ async function init() {
     window.realitySandboxGalaxy = galaxySystem;
     window.realitySandboxOrigin = originSystem;
     window.realitySandboxOriginSurface = originSurfaceVisuals;
+    window.realitySandboxEvolution = embodiedEvolution;
     window.realitySandboxCharacter = surfaceCharacter;
     window.realitySandboxCloseup = closeupPolish;
     window.realitySandboxGround = groundLevelPhase;
