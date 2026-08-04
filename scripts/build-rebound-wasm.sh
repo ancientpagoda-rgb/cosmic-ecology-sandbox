@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-REBOUND_REF="${REBOUND_REF:-5.1.1}"
+REBOUND_REF="${REBOUND_REF:-5.0.0}"
 REBOUND_DIR="${ROOT_DIR}/.cache/rebound-${REBOUND_REF}"
 OUTPUT_DIR="${ROOT_DIR}/public/rebound-v6-6"
 
