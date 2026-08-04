@@ -11,9 +11,10 @@ Reality Sandbox includes a rewritten, mobile-oriented tectonic plate adapter bas
 
 ## Three.js
 
-Reality Sandbox uses Three.js for WebGL rendering.
+Reality Sandbox uses Three.js for WebGL rendering and its maintained AnimationMixer/AnimationClip system for procedural breathing and body motion in Phase 6 creatures.
 
 - Project: https://github.com/mrdoob/three.js
+- Version: 0.184.0
 - License: MIT
 
 ## Yuka 0.7.8
@@ -26,3 +27,12 @@ Reality Sandbox uses Yuka, an open-source JavaScript game-AI library by Mugen87,
 - Runtime modules are loaded from version-pinned jsDelivr and unpkg URLs, with the second source used as a fallback.
 
 Yuka remains subject to its MIT license. Reality Sandbox-specific morphology, inheritance, ecology integration, rendering, and simulation code remain subject to this project's license.
+
+## Rapier 3D
+
+Reality Sandbox uses Rapier's JavaScript/WebAssembly bindings for local creature-ground contacts, gravity, collision bodies, friction, and mobile-aware nearby physics.
+
+- Project: https://github.com/dimforge/rapier.js
+- Package: @dimforge/rapier3d-compat
+- Version: 0.19.3
+- License: Apache-2.0
