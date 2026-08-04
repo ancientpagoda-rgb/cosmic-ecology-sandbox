@@ -46,7 +46,7 @@ body.lofi-living-root [id*="panel" i] {
 
 #unifiedRuntimePanel,
 .unified-runtime-grid,
-[data-unified-view],
+select[data-unified-view],
 [data-unified-sound],
 [data-unified-volume],
 [data-unified-pixel],
