@@ -143,7 +143,9 @@ async function init() {
       mobile: matchMedia('(max-width: 720px), (pointer: coarse)').matches,
     });
     closeupPolish = createCloseupPolish(globe);
-    surfaceCharacter = createSurfaceCharacter(globe);
+    surfaceCharacter = createSurfaceCharacter(globe, {
+      groundLevel: groundLevelPhase,
+    });
 
     moduleHost = createModuleHost({ world });
     registerCurrentModules(moduleHost, {
