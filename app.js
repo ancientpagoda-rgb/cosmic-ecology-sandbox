@@ -216,6 +216,7 @@ async function init() {
     moduleHost.register(phase8Engine);
     await moduleHost.initialize();
     await moduleHost.load(saved.modules || {});
+    moduleHost.list = moduleHost.getStatus;
 
     window.realitySandboxModules = moduleHost;
     window.realitySandboxOrbits = orbitalSystem;
