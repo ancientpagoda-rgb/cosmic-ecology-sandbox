@@ -1,7 +1,9 @@
-// V6.7 deliberately boots the proven living planet before touching Three.js.
-// The optional GPU universe is imported only after the user requests it.
+import '../reality-v6-5/app.js';
 
-const surfaceLoading = document.getElementById('loading');
+// The living planet above uses the exact proven V6.5 startup chain.
+// Three.js, Desktop Ultra, and REBOUND remain completely unloaded until the
+// user explicitly enters the 3D universe.
+
 const universeLoading = document.getElementById('reboundLoading');
 const buildStatus = document.getElementById('systemBuildStatus');
 const enterButton = document.getElementById('enterSystem');
@@ -12,15 +14,6 @@ let universePromise;
 
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
-}
-
-function showSurfaceError(error) {
-  const message = errorMessage(error);
-  console.error('[Reality V6.7 surface startup]', error);
-  if (surfaceLoading) {
-    surfaceLoading.textContent = `Living planet failed to start: ${message}`;
-  }
-  if (buildStatus) buildStatus.textContent = 'Living planet startup failed';
 }
 
 function showUniverseError(error) {
@@ -56,32 +49,20 @@ async function waitForSurface(milliseconds = 45_000) {
   throw new Error('The living-planet runtime did not report ready.');
 }
 
-async function startSurface() {
-  await Promise.race([
-    import('../reality-v6-5/app.js'),
-    timeout(45_000, 'Living planet startup'),
-  ]);
-  await waitForSurface();
-
-  // The base runtime normally removes this. Remove a stale overlay only after
-  // the Cesium viewer, world simulation, and Astronomy coupling are confirmed.
-  if (surfaceLoading?.isConnected) surfaceLoading.remove();
-  if (buildStatus) buildStatus.textContent = 'Living planet ready · Three.js loads on demand';
-}
-
 async function loadUniverse() {
   if (universeReady) return globalThis.realityV67;
   if (universePromise) return universePromise;
 
   universePromise = (async () => {
+    await waitForSurface();
     if (universeLoading) {
       universeLoading.hidden = false;
       universeLoading.textContent = 'Loading Three.js, Desktop Ultra, and local REBOUND WebAssembly…';
     }
     if (buildStatus) buildStatus.textContent = 'Loading optional 3D universe…';
 
-    // Import Three.js only now. app.js currently reads THREE.REVISION from the
-    // global namespace, so expose the dynamically loaded module before app.js.
+    // app.js imports Three.js through three-universe.js. The namespace is also
+    // exposed for its revision label, without making Three.js part of surface boot.
     const threeModule = await Promise.race([
       import('three'),
       timeout(30_000, 'Three.js module'),
@@ -111,8 +92,8 @@ function installLazyUniverseButton() {
   enterButton.addEventListener('click', async (event) => {
     if (universeReady) return;
 
-    // Intercept V6.4's legacy iframe listener until V6.7 registers its own
-    // capture-phase handler.
+    // This capture listener blocks V6.4's legacy iframe action until V6.7's
+    // Three.js runtime has registered its own system-view handler.
     event.preventDefault();
     event.stopImmediatePropagation();
     enterButton.disabled = true;
@@ -136,9 +117,13 @@ addEventListener('unhandledrejection', (event) => {
   console.error('[Reality V6.7 unhandled rejection]', event.reason);
 });
 
-try {
-  await startSurface();
-  installLazyUniverseButton();
-} catch (error) {
-  showSurfaceError(error);
-}
+waitForSurface()
+  .then(() => {
+    if (buildStatus) buildStatus.textContent = 'Living planet ready · Three.js loads on demand';
+    installLazyUniverseButton();
+  })
+  .catch((error) => {
+    console.error('[Reality V6.7 surface readiness]', error);
+    const loading = document.getElementById('loading');
+    if (loading?.isConnected) loading.textContent = `Living planet failed to start: ${errorMessage(error)}`;
+  });
