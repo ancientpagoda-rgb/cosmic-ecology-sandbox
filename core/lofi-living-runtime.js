@@ -48,9 +48,9 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     impacts: 0,
   };
 
-  function initialize({ provideCapability }) {
+  async function initialize({ provideCapability }) {
     installCanvas();
-    void ensurePixi();
+    await ensurePixi();
     provideCapability('runtime.unified', api);
     provideCapability('presentation.pixi-root', api);
     provideCapability('presentation.lofi-living', api);
@@ -63,6 +63,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     canvas = document.getElementById('lofiLivingCanvas') || document.createElement('canvas');
     canvas.id = 'lofiLivingCanvas';
     canvas.setAttribute('aria-hidden', 'true');
+    canvas.style.imageRendering = 'pixelated';
     if (!canvas.isConnected) host.append(canvas);
 
     document.getElementById('unifiedRuntimePanel')?.remove();
