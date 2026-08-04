@@ -339,7 +339,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     const failures = [];
     if (document.body.dataset.unifiedView !== 'living') failures.push('Root view is not the living world.');
     if (document.getElementById('unifiedRuntimePanel')) failures.push('The removed runtime control panel is still present.');
-    if (document.querySelector('[data-unified-sound], [data-unified-view], [data-unified-volume]')) failures.push('Removed runtime controls are still present.');
+    if (document.querySelector('[data-unified-sound], select[data-unified-view], input[data-unified-volume]')) failures.push('Removed runtime controls are still present.');
     if (app?.ticker?.started) failures.push('PixiJS started a private ticker.');
     if (duplicateClockViolations > 0) failures.push('The presentation observed a reversed root clock.');
     if (canvas && canvas.style.imageRendering !== 'pixelated') failures.push('The living-world canvas is not pixelated.');
