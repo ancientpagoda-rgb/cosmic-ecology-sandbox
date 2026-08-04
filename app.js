@@ -186,7 +186,6 @@ async function init() {
       },
     };
     phase11Engine = createPhase11Engine(world, phase10Engine, galaxySystem, { mobile, seed: 20260810 });
-    phase11Engine.step(0);
     phase11Module = {
       ...phase11Engine,
       step(dt) {
@@ -222,6 +221,7 @@ async function init() {
     moduleHost.register(phase11Module);
     await moduleHost.initialize();
     await moduleHost.load(saved.modules || {});
+    phase11Engine.step(0);
     moduleHost.list = moduleHost.getStatus;
 
     window.realitySandboxModules = moduleHost;
