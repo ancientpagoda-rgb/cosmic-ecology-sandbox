@@ -26,20 +26,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          jq -n \
-            --arg state "pending" \
-            --arg target_url "https://ancientpagoda-rgb.github.io/reality-sandbox/reality-engine-v6-9.html?verify=${GITHUB_SHA}" \
-            --arg description "Building and deploying V6.9" \
-            --arg context "pages/v6.9-live" \
-            '{state:$state,target_url:$target_url,description:$description,context:$context}' \
-            > /tmp/status.json
-          curl --fail --silent --show-error --location \
-            --request POST \
-            --header "Authorization: Bearer ${GH_TOKEN}" \
-            --header "Accept: application/vnd.github+json" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
-            --data-binary @/tmp/status.json
+          jq -n --arg state pending --arg target_url "https://ancientpagoda-rgb.github.io/reality-sandbox/reality-engine-v6-9.html?verify=${GITHUB_SHA}" --arg description "Building and deploying V6.9" --arg context "pages/v6.9-live" '{state:$state,target_url:$target_url,description:$description,context:$context}' > /tmp/status.json
+          curl --fail --silent --show-error --location --request POST --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" --data-binary @/tmp/status.json
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -48,6 +36,13 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Report dependencies ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          jq -n --arg state success --arg target_url "https://github.com/${GITHUB_REPOSITORY}/actions" --arg description "npm dependencies installed" --arg context "pages/v6.9-dependencies" '{state:$state,target_url:$target_url,description:$description,context:$context}' > /tmp/status.json
+          curl --fail --silent --show-error --location --request POST --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" --data-binary @/tmp/status.json
 
       - name: Cache Emscripten SDK
         uses: actions/cache@v4
@@ -68,8 +63,22 @@ jobs:
           source .cache/emsdk/emsdk_env.sh
           bash scripts/build-rebound-wasm.sh
 
+      - name: Report REBOUND ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          jq -n --arg state success --arg target_url "https://github.com/${GITHUB_REPOSITORY}/actions" --arg description "REBOUND WebAssembly compiled" --arg context "pages/v6.9-rebound" '{state:$state,target_url:$target_url,description:$description,context:$context}' > /tmp/status.json
+          curl --fail --silent --show-error --location --request POST --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" --data-binary @/tmp/status.json
+
       - name: Build
         run: npm run build
+
+      - name: Report Vite build ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          jq -n --arg state success --arg target_url "https://github.com/${GITHUB_REPOSITORY}/actions" --arg description "Vite production build completed" --arg context "pages/v6.9-build" '{state:$state,target_url:$target_url,description:$description,context:$context}' > /tmp/status.json
+          curl --fail --silent --show-error --location --request POST --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" --data-binary @/tmp/status.json
 
       - name: Smoke test V6.9 artifact
         run: |
@@ -84,6 +93,13 @@ jobs:
           grep -R -q "automatic astronomical scaling" dist/assets
           grep -R -q "Cinematic" dist/assets
           test -s dist/rebound-v6-6/rebound.wasm
+
+      - name: Report artifact ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          jq -n --arg state success --arg target_url "https://github.com/${GITHUB_REPOSITORY}/actions" --arg description "V6.9 artifact smoke tests passed" --arg context "pages/v6.9-artifact" '{state:$state,target_url:$target_url,description:$description,context:$context}' > /tmp/status.json
+          curl --fail --silent --show-error --location --request POST --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" --data-binary @/tmp/status.json
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -119,23 +135,12 @@ jobs:
           BASE_URL="${PAGE_URL%/}/"
           V69_URL="${BASE_URL}reality-engine-v6-9.html"
           for attempt in 1 2 3 4 5 6; do
-            if curl --fail --silent --show-error --location \
-              --max-time 30 \
-              "${V69_URL}?verify=${GITHUB_SHA}" \
-              --output /tmp/reality-engine-v6-9.html; then
-              break
-            fi
+            if curl --fail --silent --show-error --location --max-time 30 "${V69_URL}?verify=${GITHUB_SHA}" --output /tmp/reality-engine-v6-9.html; then break; fi
             sleep 10
           done
           grep -q "HOWLER.JS SOUNDSCAPE" /tmp/reality-engine-v6-9.html
-          curl --fail --silent --show-error --location \
-            --max-time 30 \
-            "${BASE_URL}rebound-v6-6/rebound.js?verify=${GITHUB_SHA}" \
-            --output /tmp/rebound.js
-          curl --fail --silent --show-error --location \
-            --max-time 30 \
-            "${BASE_URL}rebound-v6-6/rebound.wasm?verify=${GITHUB_SHA}" \
-            --output /tmp/rebound.wasm
+          curl --fail --silent --show-error --location --max-time 30 "${BASE_URL}rebound-v6-6/rebound.js?verify=${GITHUB_SHA}" --output /tmp/rebound.js
+          curl --fail --silent --show-error --location --max-time 30 "${BASE_URL}rebound-v6-6/rebound.wasm?verify=${GITHUB_SHA}" --output /tmp/rebound.wasm
           test -s /tmp/rebound.js
           test -s /tmp/rebound.wasm
           echo "Verified live V6.9 Howler.js soundscape: ${V69_URL}"
@@ -149,27 +154,9 @@ jobs:
         run: |
           BASE_URL="${PAGE_URL%/}/"
           TARGET_URL="${BASE_URL}reality-engine-v6-9.html?verify=${GITHUB_SHA}"
-          if [ "$VERIFY_OUTCOME" = "success" ]; then
-            STATE=success
-            DESCRIPTION="V6.9 HTML and REBOUND assets verified live"
-          else
-            STATE=failure
-            DESCRIPTION="V6.9 live verification failed"
-          fi
-          jq -n \
-            --arg state "$STATE" \
-            --arg target_url "$TARGET_URL" \
-            --arg description "$DESCRIPTION" \
-            --arg context "pages/v6.9-live" \
-            '{state:$state,target_url:$target_url,description:$description,context:$context}' \
-            > /tmp/status.json
-          curl --fail --silent --show-error --location \
-            --request POST \
-            --header "Authorization: Bearer ${GH_TOKEN}" \
-            --header "Accept: application/vnd.github+json" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
-            --data-binary @/tmp/status.json
+          if [ "$VERIFY_OUTCOME" = success ]; then STATE=success; DESCRIPTION="V6.9 HTML and REBOUND assets verified live"; else STATE=failure; DESCRIPTION="V6.9 live verification failed"; fi
+          jq -n --arg state "$STATE" --arg target_url "$TARGET_URL" --arg description "$DESCRIPTION" --arg context "pages/v6.9-live" '{state:$state,target_url:$target_url,description:$description,context:$context}' > /tmp/status.json
+          curl --fail --silent --show-error --location --request POST --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" --data-binary @/tmp/status.json
 
   report-failure:
     name: Report V6.9 deployment failure
@@ -185,17 +172,5 @@ jobs:
           VERIFY_RESULT: ${{ needs.verify-live.result }}
         run: |
           DESCRIPTION="V6.9 failed: build ${BUILD_RESULT}, deploy ${DEPLOY_RESULT}, verify ${VERIFY_RESULT}"
-          jq -n \
-            --arg state "failure" \
-            --arg target_url "https://github.com/${GITHUB_REPOSITORY}/actions" \
-            --arg description "$DESCRIPTION" \
-            --arg context "pages/v6.9-live" \
-            '{state:$state,target_url:$target_url,description:$description,context:$context}' \
-            > /tmp/status.json
-          curl --fail --silent --show-error --location \
-            --request POST \
-            --header "Authorization: Bearer ${GH_TOKEN}" \
-            --header "Accept: application/vnd.github+json" \
-            --header "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
-            --data-binary @/tmp/status.json
+          jq -n --arg state failure --arg target_url "https://github.com/${GITHUB_REPOSITORY}/actions" --arg description "$DESCRIPTION" --arg context "pages/v6.9-live" '{state:$state,target_url:$target_url,description:$description,context:$context}' > /tmp/status.json
+          curl --fail --silent --show-error --location --request POST --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" --data-binary @/tmp/status.json
