@@ -1,7 +1,7 @@
 {
   "name": "reality-sandbox",
   "private": true,
-  "version": "2.2.0",
+  "version": "2.3.0",
   "type": "module",
   "description": "A modular living planetary and universe simulation sandbox.",
   "scripts": {
@@ -13,6 +13,7 @@
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",
     "gdal3.js": "^2.8.1",
+    "howler": "2.2.4",
     "pixi.js": "8.19.0",
     "three": "0.184.0"
   },
