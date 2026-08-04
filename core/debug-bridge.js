@@ -1,17 +1,7 @@
 const SPECTOR_URL = 'https://cdn.jsdelivr.net/npm/spectorjs@0.9.30/dist/spector.bundle.js';
 
 export function createDebugBridge(options) {
-  const {
-    world,
-    moduleHost,
-    globe,
-    groundLevel,
-    origin,
-    evolution,
-    civilization,
-    phase8,
-    controls,
-  } = options;
+  const { world, moduleHost, globe, groundLevel, origin, evolution, civilization, phase8, phase9, controls } = options;
   const errors = [];
   const warnings = [];
   const events = [];
@@ -25,29 +15,21 @@ export function createDebugBridge(options) {
 
   function store(collection, values) {
     collection.push({ at: performance.now(), values: values.map(serializeValue) });
-    if (collection.length > 120) collection.splice(0, collection.length - 120);
+    if (collection.length > 160) collection.splice(0, collection.length - 160);
   }
 
-  console.error = (...values) => {
-    store(errors, values);
-    originalError(...values);
-  };
-  console.warn = (...values) => {
-    store(warnings, values);
-    originalWarn(...values);
-  };
+  console.error = (...values) => { store(errors, values); originalError(...values); };
+  console.warn = (...values) => { store(warnings, values); originalWarn(...values); };
 
   const onError = event => store(errors, [event.error || event.message]);
   const onRejection = event => store(errors, [event.reason]);
   const onHistory = event => {
     events.unshift(event.detail);
-    if (events.length > 150) events.length = 150;
+    if (events.length > 220) events.length = 220;
   };
   window.addEventListener('error', onError);
   window.addEventListener('unhandledrejection', onRejection);
-  window.addEventListener('phase8-history', onHistory);
-  window.addEventListener('civilization-history', onHistory);
-  window.addEventListener('evolution-event', onHistory);
+  for (const name of ['phase9-history', 'phase8-history', 'civilization-history', 'evolution-event']) window.addEventListener(name, onHistory);
 
   function snapshot() {
     return {
@@ -67,27 +49,29 @@ export function createDebugBridge(options) {
       evolution: sanitize(evolution.getState?.()),
       civilization: sanitize(civilization.getState?.()),
       phase8: sanitize(phase8.getSnapshot?.()),
+      phase9: sanitize(phase9.getSnapshot?.()),
       modules: moduleHost.list?.().map(item => ({ id: item.id, name: item.name, version: item.version })) || [],
-      errors: errors.slice(-40),
-      warnings: warnings.slice(-40),
-      events: events.slice(0, 80),
+      errors: errors.slice(-60),
+      warnings: warnings.slice(-60),
+      events: events.slice(0, 120),
       webgl: inspectCanvases(),
     };
   }
 
   function diagnostics() {
     const phase8Check = phase8.runInvariants?.() || { ok: true, failures: [] };
-    const failures = [...phase8Check.failures];
+    const phase9Check = phase9.runInvariants?.() || { ok: true, failures: [] };
+    const failures = [...phase8Check.failures, ...phase9Check.failures];
     const state = snapshot();
     if (!state.modules.length) failures.push('no-modules');
     if (!Number.isFinite(state.tick)) failures.push('invalid-world-tick');
-    if (!state.webgl.length) failures.push('no-webgl-canvas');
+    if (!state.webgl.some(item => item.context.startsWith('webgl'))) failures.push('no-webgl-canvas');
     if (errors.length) failures.push(`runtime-errors:${errors.length}`);
-    if (state.phase8?.state && state.phase8.state.communities < 0) failures.push('negative-community-count');
     return {
       ok: failures.length === 0,
       failures,
       phase8: phase8Check,
+      phase9: phase9Check,
       errorCount: errors.length,
       warningCount: warnings.length,
       canvasCount: state.webgl.length,
@@ -95,20 +79,11 @@ export function createDebugBridge(options) {
     };
   }
 
-  function pause() {
-    controls.setPaused(true);
-    refreshPanel();
-    return true;
-  }
-
-  function resume() {
-    controls.setPaused(false);
-    refreshPanel();
-    return true;
-  }
+  function pause() { controls.setPaused(true); refreshPanel(); return true; }
+  function resume() { controls.setPaused(false); refreshPanel(); return true; }
 
   function advance(steps = 1) {
-    const count = clamp(Math.floor(steps), 1, 10000);
+    const count = clamp(Math.floor(steps), 1, 20000);
     const wasPaused = controls.isPaused();
     controls.setPaused(true);
     for (let index = 0; index < count; index++) controls.stepOnce();
@@ -127,6 +102,18 @@ export function createDebugBridge(options) {
     const result = phase8.debugSeedScenario?.(kind) || { ok: false, reason: 'phase8-debug-unavailable' };
     refreshPanel();
     return result;
+  }
+
+  function seedPhase9Scenario(kind) {
+    const result = phase9.debugSeedScenario?.(kind) || { ok: false, reason: 'phase9-debug-unavailable' };
+    refreshPanel();
+    return result;
+  }
+
+  function runScenario(kind, steps = 600) {
+    const result = seedPhase9Scenario(kind);
+    if (result.ok) advance(steps);
+    return { result, diagnostics: diagnostics(), state: phase9.getState?.() };
   }
 
   function resetStorage() {
@@ -150,11 +137,8 @@ export function createDebugBridge(options) {
   async function captureWebGL(canvasIndex = 0) {
     const instance = await loadSpector(false);
     const canvases = [...document.querySelectorAll('canvas')].filter(canvas => {
-      try {
-        return Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl'));
-      } catch {
-        return false;
-      }
+      try { return Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')); }
+      catch { return false; }
     });
     const canvas = canvases[clamp(Math.floor(canvasIndex), 0, Math.max(0, canvases.length - 1))];
     if (!canvas) throw new Error('No WebGL canvas is available for capture.');
@@ -163,13 +147,7 @@ export function createDebugBridge(options) {
       const listener = capture => {
         clearTimeout(timeout);
         lastCapture = capture;
-        resolve({
-          canvasIndex,
-          width: canvas.width,
-          height: canvas.height,
-          commandCount: capture?.commands?.length || 0,
-          capture,
-        });
+        resolve({ canvasIndex, width: canvas.width, height: canvas.height, commandCount: capture?.commands?.length || 0, capture });
       };
       instance.onCapture.addOnce?.(listener);
       if (!instance.onCapture.addOnce) instance.onCapture.add(listener);
@@ -177,21 +155,9 @@ export function createDebugBridge(options) {
     });
   }
 
-  async function showSpector() {
-    await loadSpector(true);
-    return true;
-  }
-
-  function downloadDiagnostics() {
-    downloadJson(`reality-sandbox-diagnostics-${Date.now()}.json`, snapshot());
-    return true;
-  }
-
-  function downloadLastCapture() {
-    if (!lastCapture) return false;
-    downloadJson(`reality-sandbox-spector-${Date.now()}.json`, lastCapture);
-    return true;
-  }
+  async function showSpector() { await loadSpector(true); return true; }
+  function downloadDiagnostics() { downloadJson(`reality-sandbox-diagnostics-${Date.now()}.json`, snapshot()); return true; }
+  function downloadLastCapture() { if (!lastCapture) return false; downloadJson(`reality-sandbox-spector-${Date.now()}.json`, lastCapture); return true; }
 
   function inspectCanvases() {
     return [...document.querySelectorAll('canvas')].map((canvas, index) => {
@@ -199,18 +165,8 @@ export function createDebugBridge(options) {
       try {
         if (canvas.getContext('webgl2')) context = 'webgl2';
         else if (canvas.getContext('webgl')) context = 'webgl';
-      } catch {
-        context = 'context-unavailable';
-      }
-      return {
-        index,
-        className: canvas.className,
-        width: canvas.width,
-        height: canvas.height,
-        clientWidth: canvas.clientWidth,
-        clientHeight: canvas.clientHeight,
-        context,
-      };
+      } catch { context = 'context-unavailable'; }
+      return { index, className: canvas.className, width: canvas.width, height: canvas.height, clientWidth: canvas.clientWidth, clientHeight: canvas.clientHeight, context };
     });
   }
 
@@ -218,61 +174,49 @@ export function createDebugBridge(options) {
     if (panel || !new URLSearchParams(location.search).has('debug')) return;
     panel = document.createElement('aside');
     panel.setAttribute('aria-label', 'Reality Sandbox debug console');
-    panel.style.cssText = 'position:fixed;right:10px;top:10px;z-index:10000;width:min(390px,calc(100vw - 20px));max-height:calc(100vh - 20px);overflow:auto;padding:12px;border:1px solid rgba(117,207,255,.4);border-radius:12px;background:rgba(0,7,13,.92);color:#dff5ff;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;box-shadow:0 18px 60px rgba(0,0,0,.48);backdrop-filter:blur(12px)';
+    panel.style.cssText = 'position:fixed;right:10px;top:10px;z-index:10000;width:min(420px,calc(100vw - 20px));max-height:calc(100vh - 20px);overflow:auto;padding:12px;border:1px solid rgba(176,138,255,.45);border-radius:12px;background:rgba(5,3,13,.93);color:#f1eaff;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;box-shadow:0 18px 60px rgba(0,0,0,.48);backdrop-filter:blur(12px)';
     panel.innerHTML = `
-      <header style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:9px"><strong style="color:#91d7ff">REALITY DEBUG BRIDGE</strong><button data-close type="button">×</button></header>
+      <header style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:9px"><strong style="color:#d6baff">REALITY DEBUG BRIDGE · P9</strong><button data-close type="button">×</button></header>
       <div data-buttons style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px"></div>
       <label style="display:flex;gap:8px;align-items:center;margin:9px 0">Speed <input data-speed type="range" min="0.05" max="20" step="0.05" value="1"><output data-speed-output>1×</output></label>
-      <pre data-output style="white-space:pre-wrap;word-break:break-word;margin:0;padding:9px;border-radius:8px;background:rgba(134,213,255,.06);max-height:42vh;overflow:auto"></pre>
+      <pre data-output style="white-space:pre-wrap;word-break:break-word;margin:0;padding:9px;border-radius:8px;background:rgba(184,140,255,.07);max-height:42vh;overflow:auto"></pre>
     `;
     document.body.append(panel);
     panelOutput = panel.querySelector('[data-output]');
     const buttons = [
       ['Pause', pause], ['Resume', resume], ['Step', () => advance(1)], ['+100', () => advance(100)],
-      ['Check', () => diagnostics()], ['Industry', () => seedScenario('industrial')], ['Outbreak', () => seedScenario('outbreak')], ['Crisis', () => seedScenario('crisis')],
-      ['Snapshot', () => snapshot()], ['Export', downloadDiagnostics], ['Spector', showSpector], ['Capture', () => captureWebGL(0)],
+      ['Check', diagnostics], ['Colony', () => seedPhase9Scenario('orbital-colony')], ['Machines', () => seedPhase9Scenario('machine-economy')], ['Supply fail', () => seedPhase9Scenario('supply-failure')],
+      ['Hab collapse', () => seedPhase9Scenario('habitat-collapse')], ['Contact', () => seedPhase9Scenario('first-contact')], ['Snapshot', snapshot], ['Export', downloadDiagnostics],
+      ['Spector', showSpector], ['Capture', () => captureWebGL(0)], ['P8 industry', () => seedScenario('industrial')], ['P8 outbreak', () => seedScenario('outbreak')],
     ];
-    const buttonRoot = panel.querySelector('[data-buttons]');
+    const root = panel.querySelector('[data-buttons]');
     for (const [label, action] of buttons) {
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = label;
-      button.style.cssText = 'padding:7px 4px;border:1px solid rgba(145,215,255,.25);border-radius:7px;background:rgba(145,215,255,.08);color:#e8f8ff;font:inherit';
+      button.style.cssText = 'padding:7px 4px;border:1px solid rgba(214,186,255,.25);border-radius:7px;background:rgba(214,186,255,.08);color:#f4edff;font:inherit';
       button.addEventListener('click', async () => {
-        try {
-          const result = await action();
-          showPanelResult(result);
-        } catch (error) {
-          showPanelResult({ error: error.message });
-        }
+        try { showPanelResult(await action()); }
+        catch (error) { showPanelResult({ error: error.message }); }
       });
-      buttonRoot.append(button);
+      root.append(button);
     }
     const speed = panel.querySelector('[data-speed]');
-    const speedOutput = panel.querySelector('[data-speed-output]');
+    const output = panel.querySelector('[data-speed-output]');
     speed.value = String(controls.getTimeScale());
-    speedOutput.textContent = `${Number(speed.value).toFixed(2)}×`;
-    speed.addEventListener('input', () => {
-      setTimeScale(speed.value);
-      speedOutput.textContent = `${Number(speed.value).toFixed(2)}×`;
-    });
+    output.textContent = `${Number(speed.value).toFixed(2)}×`;
+    speed.addEventListener('input', () => { setTimeScale(speed.value); output.textContent = `${Number(speed.value).toFixed(2)}×`; });
     panel.querySelector('[data-close]').addEventListener('click', () => panel.remove());
     refreshPanel();
   }
 
   function showPanelResult(value) {
-    if (!panelOutput) return;
-    panelOutput.textContent = JSON.stringify(sanitize(value), null, 2).slice(0, 20000);
+    if (panelOutput) panelOutput.textContent = JSON.stringify(sanitize(value), null, 2).slice(0, 24000);
   }
 
   function refreshPanel() {
     if (!panelOutput) return;
-    showPanelResult({
-      paused: controls.isPaused(),
-      timeScale: controls.getTimeScale(),
-      diagnostics: diagnostics(),
-      phase8: phase8.getState?.(),
-    });
+    showPanelResult({ paused: controls.isPaused(), timeScale: controls.getTimeScale(), diagnostics: diagnostics(), phase8: phase8.getState?.(), phase9: phase9.getState?.() });
   }
 
   function destroy() {
@@ -282,35 +226,16 @@ export function createDebugBridge(options) {
     console.warn = originalWarn;
     window.removeEventListener('error', onError);
     window.removeEventListener('unhandledrejection', onRejection);
-    window.removeEventListener('phase8-history', onHistory);
-    window.removeEventListener('civilization-history', onHistory);
-    window.removeEventListener('evolution-event', onHistory);
+    for (const name of ['phase9-history', 'phase8-history', 'civilization-history', 'evolution-event']) window.removeEventListener(name, onHistory);
     panel?.remove();
   }
 
   const api = {
-    version: '1.0.0',
-    ready: true,
-    pause,
-    resume,
-    advance,
-    setTimeScale,
-    snapshot,
-    diagnostics,
-    seedScenario,
-    resetStorage,
-    inspectCanvases,
-    loadSpector,
-    showSpector,
-    captureWebGL,
-    downloadDiagnostics,
-    downloadLastCapture,
-    getErrors: () => errors.slice(),
-    getWarnings: () => warnings.slice(),
-    getLastCapture: () => lastCapture,
-    destroy,
+    version: '2.0.0', ready: true, pause, resume, advance, setTimeScale, snapshot, diagnostics,
+    seedScenario, seedPhase9Scenario, runScenario, resetStorage, inspectCanvases, loadSpector, showSpector,
+    captureWebGL, downloadDiagnostics, downloadLastCapture,
+    getErrors: () => errors.slice(), getWarnings: () => warnings.slice(), getLastCapture: () => lastCapture, destroy,
   };
-
   createPanel();
   window.realitySandboxDebug = api;
   window.realitySandboxReady = Promise.resolve(api);
@@ -319,12 +244,13 @@ export function createDebugBridge(options) {
 }
 
 function populationCounts(world) {
+  const components = world.ecs.components;
   return {
-    resources: world.ecs.components.resource.size,
-    plants: world.ecs.components.plant.size,
-    grazers: world.ecs.components.agent.size,
-    predators: world.ecs.components.predator.size,
-    apex: world.ecs.components.apex.size,
+    resources: components.resource?.size || 0,
+    plants: components.plant?.size || 0,
+    grazers: components.agent?.size || 0,
+    predators: components.predator?.size || 0,
+    apex: components.apex?.size || 0,
   };
 }
 
@@ -340,11 +266,11 @@ function sanitize(value, depth = 0, seen = new WeakSet()) {
   if (typeof value !== 'object') return String(value);
   if (seen.has(value)) return '[circular]';
   seen.add(value);
-  if (value instanceof Map) return Object.fromEntries([...value].slice(0, 200).map(([key, item]) => [String(key), sanitize(item, depth + 1, seen)]));
-  if (value instanceof Set) return [...value].slice(0, 200).map(item => sanitize(item, depth + 1, seen));
-  if (Array.isArray(value)) return value.slice(0, 300).map(item => sanitize(item, depth + 1, seen));
+  if (value instanceof Map) return Object.fromEntries([...value].slice(0, 240).map(([key, item]) => [String(key), sanitize(item, depth + 1, seen)]));
+  if (value instanceof Set) return [...value].slice(0, 240).map(item => sanitize(item, depth + 1, seen));
+  if (Array.isArray(value)) return value.slice(0, 360).map(item => sanitize(item, depth + 1, seen));
   const result = {};
-  for (const [key, item] of Object.entries(value).slice(0, 300)) result[key] = sanitize(item, depth + 1, seen);
+  for (const [key, item] of Object.entries(value).slice(0, 360)) result[key] = sanitize(item, depth + 1, seen);
   return result;
 }
 
@@ -352,10 +278,7 @@ function loadScript(src, id) {
   const existing = document.getElementById(id);
   if (existing) return new Promise((resolve, reject) => {
     if (window.SPECTOR) resolve();
-    else {
-      existing.addEventListener('load', resolve, { once: true });
-      existing.addEventListener('error', reject, { once: true });
-    }
+    else { existing.addEventListener('load', resolve, { once: true }); existing.addEventListener('error', reject, { once: true }); }
   });
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
