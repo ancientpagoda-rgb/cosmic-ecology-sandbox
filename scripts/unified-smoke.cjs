@@ -30,7 +30,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     await page.waitForTimeout(1200);
 
     const initial = await page.evaluate(() => {
-      const controls = [...document.querySelectorAll('button, select, input, output, [data-unified-view], [data-unified-sound]')]
+      const controls = [...document.querySelectorAll('button, select, input, output, [data-unified-sound]')]
         .filter(element => {
           const style = getComputedStyle(element);
           const rect = element.getBoundingClientRect();
