@@ -20,9 +20,9 @@ static int rs_asteroids_requested = 48;
 static int rs_living_index = -1;
 static int rs_impact_count = 0;
 static double rs_initial_energy = 0.0;
-static double rs_last_impact_energy = 0.0;
-static double rs_last_impact_speed = 0.0;
-static int rs_last_impact_target = -1;
+static double rs_last_impact_energy_value = 0.0;
+static double rs_last_impact_speed_value = 0.0;
+static int rs_last_impact_target_value = -1;
 static double rs_state[RS_MAX_PARTICLES * RS_STATE_STRIDE];
 
 static uint32_t rs_rand_u32(void){
@@ -127,16 +127,16 @@ static enum REB_COLLISION_RESOLVE_OUTCOME rs_collision_resolve(
         const double speed_au_day = sqrt(dvx*dvx + dvy*dvy + dvz*dvz);
         const double speed_m_s = speed_au_day * RS_AU_METERS / 86400.0;
         const double mass_kg = projectile->m * RS_SOLAR_KG;
-        rs_last_impact_speed = speed_m_s;
-        rs_last_impact_energy = 0.5 * mass_kg * speed_m_s * speed_m_s;
-        rs_last_impact_target = rs_type_from_name(target->name);
+        rs_last_impact_speed_value = speed_m_s;
+        rs_last_impact_energy_value = 0.5 * mass_kg * speed_m_s * speed_m_s;
+        rs_last_impact_target_value = rs_type_from_name(target->name);
         rs_impact_count += 1;
         return asteroid1
             ? REB_COLLISION_RESOLVE_OUTCOME_REMOVE_P1
             : REB_COLLISION_RESOLVE_OUTCOME_REMOVE_P2;
     }
 
-    rs_last_impact_target = type1 == 0 ? type2 : type1;
+    rs_last_impact_target_value = type1 == 0 ? type2 : type1;
     rs_impact_count += 1;
     return reb_collision_resolve_merge(simulation, collision);
 }
@@ -240,9 +240,9 @@ int rs_init(uint32_t seed, int planet_count, int asteroid_count){
     rs_asteroids_requested = asteroid_count;
     rs_living_index = -1;
     rs_impact_count = 0;
-    rs_last_impact_energy = 0.0;
-    rs_last_impact_speed = 0.0;
-    rs_last_impact_target = -1;
+    rs_last_impact_energy_value = 0.0;
+    rs_last_impact_speed_value = 0.0;
+    rs_last_impact_target_value = -1;
 
     rs_sim = reb_simulation_create();
     if (!rs_sim) return 0;
@@ -367,17 +367,17 @@ int rs_impacts(void){
 
 EMSCRIPTEN_KEEPALIVE
 double rs_last_impact_energy(void){
-    return rs_last_impact_energy;
+    return rs_last_impact_energy_value;
 }
 
 EMSCRIPTEN_KEEPALIVE
 double rs_last_impact_speed(void){
-    return rs_last_impact_speed;
+    return rs_last_impact_speed_value;
 }
 
 EMSCRIPTEN_KEEPALIVE
 int rs_last_impact_target(void){
-    return rs_last_impact_target;
+    return rs_last_impact_target_value;
 }
 
 EMSCRIPTEN_KEEPALIVE
