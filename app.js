@@ -13,6 +13,7 @@ import { createCivilizationEngine } from './core/civilization-engine.js';
 import { createPhase8Engine } from './core/phase8-engine.js';
 import { createPhase9Engine } from './core/phase9-engine.js';
 import { createPhase10Engine } from './core/phase10-engine.js';
+import { createPhase11Engine } from './core/phase11-engine.js';
 import { createDebugBridge } from './core/debug-bridge.js';
 import { createSurfaceCharacter } from './core/surface-character.js';
 import { createCloseupPolish } from './core/closeup-polish.js';
@@ -42,6 +43,8 @@ let phase8Engine;
 let phase9Engine;
 let phase10Engine;
 let phase10Module;
+let phase11Engine;
+let phase11Module;
 let debugBridge;
 let stepSphere;
 let moduleHost;
@@ -97,6 +100,7 @@ function renderFrame(timestamp) {
     phase8Engine,
     phase9Engine,
     phase10Engine,
+    phase11Engine,
     debugBridge,
     timestamp,
   });
@@ -181,6 +185,16 @@ async function init() {
         if ((phase9State.population || 0) > 0 || explicitlySeeded) phase10Engine.step(dt);
       },
     };
+    phase11Engine = createPhase11Engine(world, phase10Engine, galaxySystem, { mobile, seed: 20260810 });
+    phase11Module = {
+      ...phase11Engine,
+      step(dt) {
+        const phase10State = phase10Engine.getState?.() || {};
+        const phase11State = phase11Engine.getState?.() || {};
+        const explicitlySeeded = phase11State.signals > 0 || phase11State.gravitationalWaves > 0 || phase11State.causalEvents > 0 || phase11State.distanceSamples > 0;
+        if ((phase10State.simulatedYears || 0) > 0 || explicitlySeeded) phase11Engine.step(dt);
+      },
+    };
     closeupPolish = createCloseupPolish(globe);
     surfaceCharacter = createSurfaceCharacter(globe, { groundLevel: groundLevelPhase });
 
@@ -204,6 +218,7 @@ async function init() {
     moduleHost.register(phase8Engine);
     moduleHost.register(phase9Engine);
     moduleHost.register(phase10Module);
+    moduleHost.register(phase11Module);
     await moduleHost.initialize();
     await moduleHost.load(saved.modules || {});
     moduleHost.list = moduleHost.getStatus;
@@ -218,7 +233,8 @@ async function init() {
     window.realitySandboxPhase8 = phase8Engine;
     window.realitySandboxPhase9 = phase9Engine;
     window.realitySandboxPhase10 = phase10Engine;
-    window.realitySandboxFactories = { createPhase8Engine, createPhase9Engine, createPhase10Engine };
+    window.realitySandboxPhase11 = phase11Engine;
+    window.realitySandboxFactories = { createPhase8Engine, createPhase9Engine, createPhase10Engine, createPhase11Engine };
     window.realitySandboxCharacter = surfaceCharacter;
     window.realitySandboxCloseup = closeupPolish;
     window.realitySandboxGround = groundLevelPhase;
@@ -234,6 +250,7 @@ async function init() {
       phase8: phase8Engine,
       phase9: phase9Engine,
       phase10: phase10Engine,
+      phase11: phase11Engine,
       controls: {
         isPaused: () => paused,
         setPaused: value => { paused = Boolean(value); },
