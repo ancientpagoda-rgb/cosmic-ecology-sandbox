@@ -186,15 +186,40 @@ jobs:
         env:
           PAGE_URL: ${{ needs.deploy.outputs.page_url }}
         run: |
+          set -euo pipefail
+          test -n "${PAGE_URL}"
           BASE_URL="${PAGE_URL%/}/"
-          V69_URL="${BASE_URL}reality-engine-v6-9.html"
-          for attempt in 1 2 3 4 5 6; do
-            if curl --fail --silent --show-error --location --max-time 30 "${V69_URL}?verify=${GITHUB_SHA}" --output /tmp/reality-engine-v6-9.html; then break; fi
-            sleep 10
-          done
+
+          fetch_live() {
+            local relative_path="$1"
+            local output_path="$2"
+            local url="${BASE_URL}${relative_path}?verify=${GITHUB_SHA}"
+            rm -f "${output_path}"
+
+            for attempt in $(seq 1 18); do
+              echo "Live verification attempt ${attempt}/18: ${url}"
+              if curl --fail --silent --show-error --location --connect-timeout 15 --max-time 45 \
+                --header 'Cache-Control: no-cache' \
+                --header 'Pragma: no-cache' \
+                "${url}" --output "${output_path}"; then
+                if test -s "${output_path}"; then
+                  echo "Fetched ${relative_path} ($(wc -c < "${output_path}") bytes)"
+                  return 0
+                fi
+              fi
+              rm -f "${output_path}"
+              sleep 10
+            done
+
+            echo "Failed to fetch ${relative_path} after Pages propagation window" >&2
+            curl --silent --show-error --location --head "${url}" || true
+            return 1
+          }
+
+          fetch_live "reality-engine-v6-9.html" /tmp/reality-engine-v6-9.html
           grep -q "HOWLER.JS SOUNDSCAPE" /tmp/reality-engine-v6-9.html
-          curl --fail --silent --show-error --location --max-time 30 "${BASE_URL}rebound-v6-6/rebound.js?verify=${GITHUB_SHA}" --output /tmp/rebound.js
-          curl --fail --silent --show-error --location --max-time 30 "${BASE_URL}rebound-v6-6/rebound.wasm?verify=${GITHUB_SHA}" --output /tmp/rebound.wasm
+          fetch_live "rebound-v6-6/rebound.js" /tmp/rebound.js
+          fetch_live "rebound-v6-6/rebound.wasm" /tmp/rebound.wasm
           test -s /tmp/rebound.js
           test -s /tmp/rebound.wasm
 
