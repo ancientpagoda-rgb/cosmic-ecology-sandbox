@@ -68,12 +68,89 @@ fs.mkdirSync(artifactDir, { recursive: true });
     writeJson('stepped.json', stepped);
     if (!stepped.diagnostics.ok) throw new Error(`Post-step diagnostics failed: ${stepped.diagnostics.failures.join(', ')}`);
 
+    const isolatedPhase8 = await page.evaluate(async () => {
+      const communities = [
+        {
+          id: 'test-hearth-a', name: 'Test Hearth A', status: 'flourishing', population: 42,
+          stability: 0.82, trade: 0.75, technologies: ['writing', 'agriculture', 'metallurgy', 'transport'],
+          knowledge: 1.4, food: 1.1, conflict: 0.05, polityId: 'test-league', x: 180, y: 220,
+        },
+        {
+          id: 'test-hearth-b', name: 'Test Hearth B', status: 'stable', population: 28,
+          stability: 0.68, trade: 0.62, technologies: ['writing', 'agriculture', 'metallurgy', 'transport'],
+          knowledge: 1.1, food: 0.8, conflict: 0.08, polityId: 'test-league', x: 320, y: 245,
+        },
+      ];
+      const routes = [
+        {
+          id: 'test-route-a-b', from: 'test-hearth-a', to: 'test-hearth-b', kind: 'trade',
+          flow: 0.82, knowledge: 0.72, hostility: 0.04, trust: 0.74,
+        },
+      ];
+      const mockWorld = {
+        width: 1200,
+        height: 720,
+        tick: 0,
+        globals: { civilizationPressure: 0.3, anthropogenicImpact: 0 },
+      };
+      const mockCivilization = {
+        getCommunities: () => communities,
+        getRoutes: () => routes,
+      };
+      const mockOrbits = {
+        getBodies: () => [
+          { id: 'gaia', name: 'Gaia' },
+          { id: 'selene', name: 'Selene' },
+          { id: 'ember', name: 'Ember' },
+          { id: 'sun', name: 'Local Star' },
+        ],
+      };
+      const mockGround = { getState: () => ({ active: false }) };
+      const engine = window.realitySandboxFactories.createPhase8Engine(
+        mockWorld,
+        mockCivilization,
+        mockOrbits,
+        mockGround,
+        { mobile: false, seed: 20260807 },
+      );
+      await engine.initialize({ provideCapability() {} });
+      engine.debugSeedScenario('industrial');
+      engine.debugSeedScenario('outbreak');
+      for (let index = 0; index < 1200; index++) {
+        mockWorld.tick++;
+        engine.step(0.06);
+      }
+      engine.debugSeedScenario('crisis');
+      for (let index = 0; index < 400; index++) {
+        mockWorld.tick++;
+        engine.step(0.06);
+      }
+      const result = {
+        state: engine.getState(),
+        diagnostics: engine.runInvariants(),
+        institutions: engine.getInstitutions(),
+        economies: engine.getEconomies(),
+        sciences: engine.getSciences(),
+        cities: engine.getCities(),
+        outbreaks: engine.getOutbreaks(),
+        missions: engine.getMissions(),
+      };
+      engine.destroy();
+      return result;
+    });
+    writeJson('phase8-isolated.json', isolatedPhase8);
+    if (!isolatedPhase8.diagnostics.ok) throw new Error(`Isolated Phase 8 diagnostics failed: ${isolatedPhase8.diagnostics.failures.join(', ')}`);
+    if (isolatedPhase8.state.communities !== 2) throw new Error(`Expected two isolated Phase 8 communities, received ${isolatedPhase8.state.communities}.`);
+    if (!isolatedPhase8.state.xstate) throw new Error('XState did not initialize inside the isolated Phase 8 test.');
+    if (isolatedPhase8.outbreaks.length < 1) throw new Error('The isolated epidemiology scenario did not create an outbreak.');
+    if (isolatedPhase8.economies.length !== 2 || isolatedPhase8.sciences.length !== 2) throw new Error('The isolated economic or science systems did not synchronize communities.');
+
     const scenario = await page.evaluate(() => ({
       industrial: window.realitySandboxDebug.seedScenario('industrial'),
       outbreak: window.realitySandboxDebug.seedScenario('outbreak'),
       crisis: window.realitySandboxDebug.seedScenario('crisis'),
     }));
-    writeJson('scenario-results.json', scenario);
+    writeJson('live-world-scenario-results.json', scenario);
 
     const spector = await page.evaluate(async () => {
       try {
@@ -85,6 +162,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
       }
     });
     writeJson('spector-summary.json', spector);
+    if (!spector.ok || spector.commandCount < 1) throw new Error(`Spector WebGL capture failed: ${spector.error || 'no draw commands'}`);
 
     await page.screenshot({ path: path.join(artifactDir, 'reality-sandbox.png'), fullPage: true });
     const snapshot = await page.evaluate(() => window.realitySandboxDebug.snapshot());
