@@ -315,7 +315,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
           id: canvas.id,
           hidden: canvas.hidden,
           connected: canvas.isConnected,
-          imageRendering: canvas.style.imageRendering,
+          imageRendering: getComputedStyle(canvas).imageRendering,
         } : null,
       },
       audio: {
@@ -342,7 +342,10 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     if (document.querySelector('[data-unified-sound], select[data-unified-view], input[data-unified-volume]')) failures.push('Removed runtime controls are still present.');
     if (app?.ticker?.started) failures.push('PixiJS started a private ticker.');
     if (duplicateClockViolations > 0) failures.push('The presentation observed a reversed root clock.');
-    if (canvas && canvas.style.imageRendering !== 'pixelated') failures.push('The living-world canvas is not pixelated.');
+    if (canvas) {
+      const imageRendering = getComputedStyle(canvas).imageRendering;
+      if (imageRendering !== 'pixelated' && imageRendering !== 'crisp-edges') failures.push('The living-world canvas is not pixelated.');
+    }
     return { ok: failures.length === 0, failures };
   }
 
