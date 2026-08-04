@@ -9,6 +9,7 @@ import { createOrbitalSystem } from './core/orbital-system.js';
 import { createCosmicOrigin } from './core/cosmic-origin.js';
 import { createOriginSurfaceVisuals } from './core/origin-surface-visuals.js';
 import { createEmbodiedEvolution } from './core/embodied-evolution.js';
+import { createCivilizationEngine } from './core/civilization-engine.js';
 import { createSurfaceCharacter } from './core/surface-character.js';
 import { createCloseupPolish } from './core/closeup-polish.js';
 import { createGroundLevelPhase } from './core/ground-level-phase.js';
@@ -32,6 +33,7 @@ let groundLevelPhase;
 let originSystem;
 let originSurfaceVisuals;
 let embodiedEvolution;
+let civilizationEngine;
 let stepSphere;
 let moduleHost;
 let accumulator = 0;
@@ -99,6 +101,7 @@ function loop(timestamp) {
     originSystem,
     originSurfaceVisuals,
     embodiedEvolution,
+    civilizationEngine,
     timestamp,
   });
 
@@ -141,6 +144,7 @@ async function init() {
     const waterCycle = createWaterCycle(world, orbitalSystem);
     const dynamics = createPlanetDynamics(world, living, waterCycle, orbitalSystem);
     const worldElement = document.getElementById('world');
+    const mobile = matchMedia('(max-width: 720px), (pointer: coarse)').matches;
 
     globe = createGlobeRenderer(
       worldElement,
@@ -157,15 +161,17 @@ async function init() {
     originSystem.attachGlobe(globe);
 
     galaxyLayer = createGalaxyRenderLayer(worldElement, galaxySystem);
-    groundLevelPhase = createGroundLevelPhase(worldElement, globe, {
-      mobile: matchMedia('(max-width: 720px), (pointer: coarse)').matches,
-    });
-    originSurfaceVisuals = createOriginSurfaceVisuals(originSystem, groundLevelPhase, {
-      mobile: matchMedia('(max-width: 720px), (pointer: coarse)').matches,
-    });
+    groundLevelPhase = createGroundLevelPhase(worldElement, globe, { mobile });
+    originSurfaceVisuals = createOriginSurfaceVisuals(originSystem, groundLevelPhase, { mobile });
     embodiedEvolution = createEmbodiedEvolution(world, originSystem, groundLevelPhase, {
-      mobile: matchMedia('(max-width: 720px), (pointer: coarse)').matches,
+      mobile,
       seed: 20260805,
+      container: worldElement,
+    });
+    civilizationEngine = createCivilizationEngine(world, embodiedEvolution, groundLevelPhase, {
+      mobile,
+      seed: 20260806,
+      container: worldElement,
     });
     closeupPolish = createCloseupPolish(globe);
     surfaceCharacter = createSurfaceCharacter(globe, {
@@ -188,6 +194,7 @@ async function init() {
     moduleHost.register(groundLevelPhase);
     moduleHost.register(originSurfaceVisuals);
     moduleHost.register(embodiedEvolution);
+    moduleHost.register(civilizationEngine);
     await moduleHost.initialize();
     await moduleHost.load(saved.modules || {});
 
@@ -197,6 +204,7 @@ async function init() {
     window.realitySandboxOrigin = originSystem;
     window.realitySandboxOriginSurface = originSurfaceVisuals;
     window.realitySandboxEvolution = embodiedEvolution;
+    window.realitySandboxCivilization = civilizationEngine;
     window.realitySandboxCharacter = surfaceCharacter;
     window.realitySandboxCloseup = closeupPolish;
     window.realitySandboxGround = groundLevelPhase;
