@@ -54,7 +54,7 @@ requireText('app.js', "import { createPhase8Engine }", 'Phase 8 runtime import')
 requireText('app.js', "import { createPhase9Engine }", 'Phase 9 runtime import');
 requireText('app.js', "import { createPhase10Engine }", 'Phase 10 runtime import');
 requireText('app.js', "import { createPhase11Engine }", 'Phase 11 runtime import');
-requireText('app.js', 'window.realitySandboxDebug', 'debug bridge exposure');
+requireText('app.js', 'createDebugBridge({', 'debug bridge construction');
 requireText('app.js', 'window.realitySandboxFactories', 'deterministic factory exposure');
 requireOrder('app.js', [
   'moduleHost.register(phase8Engine)',
@@ -74,6 +74,7 @@ for (const [file, id] of [
   ['core/phase11-engine.js', 'civilization.phase11-cosmological-evolution'],
 ]) requireText(file, id, `${id} module id`);
 
+requireText('core/debug-bridge.js', 'window.realitySandboxDebug = api', 'debug API exposure');
 requireText('core/debug-bridge.js', 'seedPhase11Scenario', 'Phase 11 scenario injection');
 requireText('core/debug-bridge.js', 'captureWebGL', 'Spector WebGL capture hook');
 requireText('scripts/browser-smoke.cjs', "debugSeedScenario('galaxy-merger')", 'Phase 11 deterministic scenario suite');
