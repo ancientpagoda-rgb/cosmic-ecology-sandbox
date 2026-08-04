@@ -170,3 +170,32 @@ jobs:
             --header "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
             --data-binary @/tmp/status.json
+
+  report-failure:
+    name: Report V6.9 deployment failure
+    runs-on: ubuntu-latest
+    needs: [build, deploy, verify-live]
+    if: always() && needs.verify-live.result != 'success'
+    steps:
+      - name: Publish failure status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          VERIFY_RESULT: ${{ needs.verify-live.result }}
+        run: |
+          DESCRIPTION="V6.9 failed: build ${BUILD_RESULT}, deploy ${DEPLOY_RESULT}, verify ${VERIFY_RESULT}"
+          jq -n \
+            --arg state "failure" \
+            --arg target_url "https://github.com/${GITHUB_REPOSITORY}/actions" \
+            --arg description "$DESCRIPTION" \
+            --arg context "pages/v6.9-live" \
+            '{state:$state,target_url:$target_url,description:$description,context:$context}' \
+            > /tmp/status.json
+          curl --fail --silent --show-error --location \
+            --request POST \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            --data-binary @/tmp/status.json
