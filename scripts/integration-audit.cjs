@@ -20,6 +20,12 @@ function requireText(relativePath, marker, description = marker) {
   else passes.push(`${relativePath}: ${description}`);
 }
 
+function forbidText(relativePath, marker, description = marker) {
+  const content = read(relativePath);
+  if (content.includes(marker)) failures.push(`${relativePath}: contains forbidden ${description}`);
+  else passes.push(`${relativePath}: no ${description}`);
+}
+
 function requireOrder(relativePath, markers, description) {
   const content = read(relativePath);
   let previous = -1;
@@ -48,16 +54,18 @@ for (const dependency of ['three', 'pixi.js', 'howler', '@dimforge/rapier3d-comp
   requireDependency(dependency);
 }
 
-requireText('index.html', 'unified-v69-phase11', 'unified root entry point');
-requireText('index.html', 'Unified interactive observable universe', 'unified accessibility description');
-requireText('index.html', 'unified-runtime.css', 'unified presentation stylesheet');
+requireText('index.html', '20260804-lofi-living-root', 'lo-fi living root entry point');
+requireText('index.html', 'single deterministic lo-fi pixel living world', 'simplified accessibility description');
+requireText('index.html', 'unified-runtime.css', 'living-world presentation stylesheet');
+forbidText('index.html', 'reality-v6-9-audio-volume', 'root audio preference bootstrap');
+
 requireText('app.js', "import { createPhase8Engine }", 'Phase 8 runtime import');
 requireText('app.js', "import { createPhase9Engine }", 'Phase 9 runtime import');
 requireText('app.js', "import { createPhase10Engine }", 'Phase 10 runtime import');
 requireText('app.js', "import { createPhase11Engine }", 'Phase 11 runtime import');
-requireText('app.js', "import { createUnifiedRuntime }", 'unified runtime import');
+requireText('app.js', "import { createLofiLivingRuntime }", 'lo-fi living runtime import');
 requireText('app.js', 'installUnifiedDebugExtension', 'unified debug bridge extension');
-requireText('app.js', 'window.realitySandboxUnified', 'unified runtime exposure');
+requireText('app.js', 'window.realitySandboxUnified', 'living runtime exposure');
 requireText('app.js', 'window.realitySandboxFactories', 'deterministic factory exposure');
 requireOrder('app.js', [
   'moduleHost.register(phase8Engine)',
@@ -65,7 +73,7 @@ requireOrder('app.js', [
   'moduleHost.register(phase10Module)',
   'moduleHost.register(phase11Module)',
   'moduleHost.register(unifiedRuntime)',
-], 'Phase 8 → 11 → unified module registration order');
+], 'Phase 8 → 11 → living runtime registration order');
 
 requireText('core/module-host.js', 'topologicalOrder', 'capability dependency ordering');
 requireText('core/module-host.js', 'module.save?.()', 'module save support');
@@ -76,19 +84,26 @@ for (const [file, id] of [
   ['core/phase9-engine.js', 'civilization.phase9-multiworld-ai-contact'],
   ['core/phase10-engine.js', 'civilization.phase10-relativistic-deep-time'],
   ['core/phase11-engine.js', 'civilization.phase11-cosmological-evolution'],
-  ['core/unified-runtime.js', 'runtime.unified-v69-phase11'],
+  ['core/lofi-living-runtime.js', 'runtime.lofi-living-world'],
 ]) requireText(file, id, `${id} module id`);
 
-requireText('core/unified-runtime.js', "from 'pixi.js'", 'root PixiJS presentation');
-requireText('core/unified-runtime.js', "from 'howler'", 'root Howler.js soundscape');
-requireText('core/unified-runtime.js', 'astronomy-engine@2.1.19', 'root Astronomy Engine reference');
-requireText('core/unified-runtime.js', 'ReboundWasmSystem', 'root REBOUND WebAssembly client');
-requireText('core/unified-runtime.js', 'root-module-host-fixed-step', 'single authoritative clock');
-requireText('core/unified-runtime.js', 'reality-engine-v6-9.html', 'V6.9 compatibility path');
-requireText('core/unified-debug-extension.js', 'seedUnifiedScenario', 'unified debug scenarios');
+requireText('core/lofi-living-runtime.js', "from 'pixi.js'", 'root PixiJS presentation');
+requireText('core/lofi-living-runtime.js', 'ReboundWasmSystem', 'hidden REBOUND verification client');
+requireText('core/lofi-living-runtime.js', 'root-module-host-fixed-step', 'single authoritative clock');
+requireText('core/lofi-living-runtime.js', "availableViews: ['living']", 'one-view contract');
+requireText('core/lofi-living-runtime.js', 'audioEnabled: false', 'audio disabled contract');
+requireText('core/lofi-living-runtime.js', 'controls: 0', 'zero-control contract');
+forbidText('core/lofi-living-runtime.js', "from 'howler'", 'root Howler import');
+requireText('unified-runtime.css', '#lofiLivingCanvas', 'lo-fi root canvas styling');
+requireText('unified-runtime.css', 'image-rendering: pixelated', 'pixelated scaling');
+requireText('unified-runtime.css', '#unifiedRuntimePanel', 'legacy controls hidden');
+
+requireText('core/unified-debug-extension.js', 'seedUnifiedScenario', 'living runtime debug scenarios');
 requireText('scripts/unified-smoke.cjs', "seedUnifiedScenario('shared-clock')", 'shared-clock browser scenario');
+requireText('scripts/unified-smoke.cjs', "seedUnifiedScenario('scene')", 'simplified scene browser scenario');
 requireText('scripts/unified-smoke.cjs', "seedUnifiedScenario('rebound')", 'REBOUND browser scenario');
-requireText('scripts/unified-smoke.cjs', "seedUnifiedScenario('save-migration')", 'legacy save migration scenario');
+requireText('scripts/unified-smoke.cjs', "initial.controls === 0", 'zero visible controls assertion');
+requireText('scripts/unified-smoke.cjs', 'initial.unified.audio.enabled === false', 'audio absence assertion');
 requireText('.github/workflows/unified-live.yml', 'REALITY_REQUIRE_REBOUND: "1"', 'live REBOUND requirement');
 
 requireText('core/debug-bridge.js', 'window.realitySandboxDebug = api', 'debug API exposure');
@@ -114,10 +129,10 @@ for (const notice of ['Three.js', 'PixiJS', 'Howler.js', 'Astronomy Engine', 'Ra
 }
 
 requireText('README.md', '# Reality Sandbox', 'project overview');
-requireText('README.md', 'Unified root universe', 'unified architecture overview');
+requireText('README.md', 'Lo-fi living root', 'simplified root overview');
 requireText('README.md', 'npm run audit:integration', 'documented integration audit');
 requireText('package.json', '"audit:integration"', 'integration audit npm script');
-requireText('.github/workflows/browser-smoke.yml', 'node scripts/unified-smoke.cjs', 'unified CI browser step');
+requireText('.github/workflows/browser-smoke.yml', 'node scripts/unified-smoke.cjs', 'living runtime CI browser step');
 
 if (failures.length) {
   console.error('Reality Sandbox integration audit failed:\n');
