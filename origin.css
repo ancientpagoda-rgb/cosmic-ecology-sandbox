@@ -59,6 +59,31 @@
   transition: transform 0.25s linear;
 }
 
+.origin-hud__signals {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.origin-hud__signals span {
+  padding: 4px 5px;
+  border: 1px solid rgba(157, 194, 220, 0.12);
+  border-radius: 6px;
+  background: rgba(126, 170, 202, 0.055);
+  color: #7f94aa;
+  font-size: 7px;
+  letter-spacing: 0.045em;
+  text-align: center;
+}
+
+.origin-hud__signals b {
+  display: block;
+  color: #c5e4f5;
+  font-size: 9px;
+  font-weight: 650;
+}
+
 .origin-hud__meta {
   margin-top: 5px;
   color: #73879e;
@@ -66,6 +91,16 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.origin-surface-canvas {
+  mix-blend-mode: normal;
+  filter: saturate(1.08) contrast(1.02);
+}
+
+body[data-origin-stage='prebiotic-chemistry'] .origin-surface-canvas,
+body[data-origin-stage='protocells'] .origin-surface-canvas {
+  mix-blend-mode: screen;
 }
 
 body::after {
@@ -119,6 +154,19 @@ body.origin-surface-locked .ground-level-reticle {
     -webkit-line-clamp: 2;
   }
 
+  .origin-hud__signals {
+    gap: 3px;
+  }
+
+  .origin-hud__signals span {
+    padding: 3px;
+    font-size: 6px;
+  }
+
+  .origin-hud__signals b {
+    font-size: 8px;
+  }
+
   .origin-hud__meta {
     font-size: 7px;
   }
@@ -126,7 +174,8 @@ body.origin-surface-locked .ground-level-reticle {
 
 @media (prefers-reduced-motion: reduce) {
   .origin-hud__bar i,
-  body::after {
+  body::after,
+  .origin-surface-canvas {
     transition: none;
   }
 }
