@@ -41,6 +41,7 @@ let civilizationEngine;
 let phase8Engine;
 let phase9Engine;
 let phase10Engine;
+let phase10Module;
 let debugBridge;
 let stepSphere;
 let moduleHost;
@@ -171,6 +172,15 @@ async function init() {
     phase8Engine = createPhase8Engine(world, civilizationEngine, orbitalSystem, groundLevelPhase, { mobile, seed: 20260807, container: worldElement });
     phase9Engine = createPhase9Engine(world, phase8Engine, orbitalSystem, galaxySystem, { mobile, seed: 20260808, container: worldElement });
     phase10Engine = createPhase10Engine(world, phase9Engine, galaxySystem, orbitalSystem, { mobile, seed: 20260809, container: worldElement });
+    phase10Module = {
+      ...phase10Engine,
+      step(dt) {
+        const phase9State = phase9Engine.getState?.() || {};
+        const phase10State = phase10Engine.getState?.() || {};
+        const explicitlySeeded = phase10State.missions > 0 || phase10State.projects > 0 || phase10State.ruins > 0 || phase10State.signals > 0;
+        if ((phase9State.population || 0) > 0 || explicitlySeeded) phase10Engine.step(dt);
+      },
+    };
     closeupPolish = createCloseupPolish(globe);
     surfaceCharacter = createSurfaceCharacter(globe, { groundLevel: groundLevelPhase });
 
@@ -193,7 +203,7 @@ async function init() {
     moduleHost.register(civilizationEngine);
     moduleHost.register(phase8Engine);
     moduleHost.register(phase9Engine);
-    moduleHost.register(phase10Engine);
+    moduleHost.register(phase10Module);
     await moduleHost.initialize();
     await moduleHost.load(saved.modules || {});
     moduleHost.list = moduleHost.getStatus;
