@@ -75,7 +75,7 @@ jobs:
               repo: context.repo.repo,
               sha: context.sha,
               state: ok ? 'success' : 'failure',
-              context: 'browser/phase10-smoke',
-              description: ok ? 'Phase 10 relativity, stellar, archaeology, causality, trace, and WebGL checks passed' : 'Phase 10 browser diagnostics failed',
+              context: 'browser/phase11-smoke',
+              description: ok ? 'Phase 11 FLRW, galaxy, GW, horizon, frame, trace, and WebGL checks passed' : 'Phase 11 browser diagnostics failed',
               target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions`,
             });
