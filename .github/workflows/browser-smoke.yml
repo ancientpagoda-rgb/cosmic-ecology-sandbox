@@ -75,7 +75,7 @@ jobs:
               repo: context.repo.repo,
               sha: context.sha,
               state: ok ? 'success' : 'failure',
-              context: 'browser/phase8-smoke',
-              description: ok ? 'Playwright trace, invariants, and WebGL diagnostics passed' : 'Browser simulation diagnostics failed',
+              context: 'browser/phase9-smoke',
+              description: ok ? 'Phase 9 scenarios, invariants, trace, and WebGL capture passed' : 'Phase 9 browser diagnostics failed',
               target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions`,
             });
