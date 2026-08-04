@@ -115,6 +115,7 @@ export function createDebugBridge(options) {
   }
 
   function seedPhase10Scenario(kind) {
+    if ((phase9.getState?.().population || 0) < 1) phase9.debugSeedScenario?.('orbital-colony');
     const result = phase10.debugSeedScenario?.(kind) || { ok: false, reason: 'phase10-debug-unavailable' };
     refreshPanel();
     return result;
