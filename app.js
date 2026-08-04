@@ -10,6 +10,8 @@ import { createCosmicOrigin } from './core/cosmic-origin.js';
 import { createOriginSurfaceVisuals } from './core/origin-surface-visuals.js';
 import { createEmbodiedEvolution } from './core/embodied-evolution.js';
 import { createCivilizationEngine } from './core/civilization-engine.js';
+import { createPhase8Engine } from './core/phase8-engine.js';
+import { createDebugBridge } from './core/debug-bridge.js';
 import { createSurfaceCharacter } from './core/surface-character.js';
 import { createCloseupPolish } from './core/closeup-polish.js';
 import { createGroundLevelPhase } from './core/ground-level-phase.js';
@@ -34,12 +36,16 @@ let originSystem;
 let originSurfaceVisuals;
 let embodiedEvolution;
 let civilizationEngine;
+let phase8Engine;
+let debugBridge;
 let stepSphere;
 let moduleHost;
 let accumulator = 0;
 let lastTime = 0;
 let lastSave = 0;
 let running = true;
+let paused = false;
+let timeScale = 1;
 
 function readSavedState() {
   try {
@@ -66,28 +72,12 @@ function restoreWorldState() {
   if (Number.isFinite(saved.tick)) world.tick = saved.tick;
 }
 
-function stepSimulation() {
-  stepSphere(FIXED_DT);
-  moduleHost.step(FIXED_DT);
+function stepSimulation(dt = FIXED_DT) {
+  stepSphere(dt);
+  moduleHost.step(dt);
 }
 
-function loop(timestamp) {
-  requestAnimationFrame(loop);
-  if (!running || document.hidden) return;
-
-  if (!lastTime) lastTime = timestamp;
-  accumulator += Math.min(0.12, (timestamp - lastTime) / 1000);
-  lastTime = timestamp;
-
-  let steps = 0;
-  const maxSteps = matchMedia('(pointer: coarse)').matches ? 2 : 4;
-  while (accumulator >= FIXED_DT && steps < maxSteps) {
-    stepSimulation();
-    accumulator -= FIXED_DT;
-    steps++;
-  }
-  if (steps === maxSteps) accumulator = 0;
-
+function renderFrame(timestamp) {
   const cameraState = globe.getCameraState();
   globe.render(world);
   galaxyLayer.render(cameraState, timestamp);
@@ -102,8 +92,31 @@ function loop(timestamp) {
     originSurfaceVisuals,
     embodiedEvolution,
     civilizationEngine,
+    phase8Engine,
+    debugBridge,
     timestamp,
   });
+}
+
+function loop(timestamp) {
+  requestAnimationFrame(loop);
+  if (!running || document.hidden) return;
+
+  if (!lastTime) lastTime = timestamp;
+  if (!paused) accumulator += Math.min(0.12, (timestamp - lastTime) / 1000) * timeScale;
+  lastTime = timestamp;
+
+  let steps = 0;
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  const maxSteps = coarse ? 2 : 4;
+  while (!paused && accumulator >= FIXED_DT && steps < maxSteps) {
+    stepSimulation();
+    accumulator -= FIXED_DT;
+    steps++;
+  }
+  if (steps === maxSteps) accumulator = 0;
+
+  renderFrame(timestamp);
 
   if (timestamp - lastSave > 5000) {
     lastSave = timestamp;
@@ -173,6 +186,11 @@ async function init() {
       seed: 20260806,
       container: worldElement,
     });
+    phase8Engine = createPhase8Engine(world, civilizationEngine, orbitalSystem, groundLevelPhase, {
+      mobile,
+      seed: 20260807,
+      container: worldElement,
+    });
     closeupPolish = createCloseupPolish(globe);
     surfaceCharacter = createSurfaceCharacter(globe, {
       groundLevel: groundLevelPhase,
@@ -195,6 +213,7 @@ async function init() {
     moduleHost.register(originSurfaceVisuals);
     moduleHost.register(embodiedEvolution);
     moduleHost.register(civilizationEngine);
+    moduleHost.register(phase8Engine);
     await moduleHost.initialize();
     await moduleHost.load(saved.modules || {});
 
@@ -205,14 +224,35 @@ async function init() {
     window.realitySandboxOriginSurface = originSurfaceVisuals;
     window.realitySandboxEvolution = embodiedEvolution;
     window.realitySandboxCivilization = civilizationEngine;
+    window.realitySandboxPhase8 = phase8Engine;
     window.realitySandboxCharacter = surfaceCharacter;
     window.realitySandboxCloseup = closeupPolish;
     window.realitySandboxGround = groundLevelPhase;
+
+    debugBridge = createDebugBridge({
+      world,
+      moduleHost,
+      globe,
+      groundLevel: groundLevelPhase,
+      origin: originSystem,
+      evolution: embodiedEvolution,
+      civilization: civilizationEngine,
+      phase8: phase8Engine,
+      controls: {
+        isPaused: () => paused,
+        setPaused: value => { paused = Boolean(value); },
+        getTimeScale: () => timeScale,
+        setTimeScale: value => { timeScale = Math.max(0.05, Math.min(100, Number(value) || 1)); },
+        stepOnce: () => stepSimulation(),
+      },
+    });
+
     globe.render(world);
     galaxyLayer.render(globe.getCameraState());
     requestAnimationFrame(loop);
   } catch (error) {
     showError(error);
+    window.realitySandboxReady = Promise.reject(error);
   }
 }
 
