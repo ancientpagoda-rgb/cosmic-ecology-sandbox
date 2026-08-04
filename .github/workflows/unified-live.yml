@@ -58,16 +58,34 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const fs = require('fs');
             const deployOk = '${{ github.event.workflow_run.conclusion }}' === 'success';
             const runtimeOk = '${{ steps.unified_live.outcome }}' === 'success';
             const ok = deployOk && runtimeOk;
             const sha = '${{ github.event.workflow_run.head_sha }}';
+            let failure = 'Unified runtime live verification failed';
+            if (!ok) {
+              const fatalPath = 'artifacts/unified-live/fatal-error.txt';
+              const scenarioPath = 'artifacts/unified-live/scenarios.json';
+              if (fs.existsSync(fatalPath)) {
+                failure = fs.readFileSync(fatalPath, 'utf8').split(/\r?\n/).find(Boolean) || failure;
+              } else if (fs.existsSync(scenarioPath)) {
+                try {
+                  const scenarios = JSON.parse(fs.readFileSync(scenarioPath, 'utf8'));
+                  const rebound = scenarios?.rebound?.status;
+                  if (rebound?.error) failure = `REBOUND: ${rebound.error}`;
+                } catch {}
+              }
+            }
+            const description = ok
+              ? 'Unified Pixi, Howler, Astronomy, REBOUND, and V6.9 compatibility verified live'
+              : failure.replace(/^Error:\s*/i, '').replace(/\s+/g, ' ').slice(0, 140);
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha,
               state: ok ? 'success' : 'failure',
               context: 'pages/unified-runtime-live',
-              description: ok ? 'Unified Pixi, Howler, Astronomy, REBOUND, and V6.9 compatibility verified live' : 'Unified runtime live verification failed',
+              description,
               target_url: `https://ancientpagoda-rgb.github.io/reality-sandbox/?verify=${sha}`,
             });
