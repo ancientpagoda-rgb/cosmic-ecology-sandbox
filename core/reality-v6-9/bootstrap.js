@@ -4,6 +4,59 @@ const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, mil
 const badge = document.querySelector('.badge');
 const loading = document.getElementById('loading');
 const buildStatus = document.getElementById('systemBuildStatus');
+const hud = document.getElementById('hud');
+const hudToggle = document.getElementById('hudToggle');
+const worldSpeed = document.getElementById('speed');
+const HUD_COLLAPSED_KEY = 'reality-v6-9-hud-collapsed';
+let lastWorldSpeed = '1';
+
+function loadHudPreference() {
+  try {
+    const stored = localStorage.getItem(HUD_COLLAPSED_KEY);
+    if (stored !== null) return stored === 'true';
+  } catch (_) {}
+  return matchMedia('(max-width: 720px), (max-height: 700px)').matches;
+}
+
+function setHudCollapsed(collapsed, persist = true) {
+  hud?.classList.toggle('is-collapsed', collapsed);
+  if (hudToggle) {
+    hudToggle.textContent = collapsed ? 'Show controls' : 'Hide controls';
+    hudToggle.setAttribute('aria-expanded', String(!collapsed));
+  }
+  if (persist) {
+    try { localStorage.setItem(HUD_COLLAPSED_KEY, String(collapsed)); } catch (_) {}
+  }
+}
+
+function interactiveControlFocused() {
+  const tagName = document.activeElement?.tagName;
+  return tagName === 'INPUT' || tagName === 'SELECT' || tagName === 'TEXTAREA'
+    || tagName === 'BUTTON' || tagName === 'A'
+    || document.activeElement?.isContentEditable;
+}
+
+setHudCollapsed(loadHudPreference(), false);
+hudToggle?.addEventListener('click', () => {
+  setHudCollapsed(!hud?.classList.contains('is-collapsed'));
+});
+document.addEventListener('keydown', (event) => {
+  if (event.ctrlKey || event.metaKey || event.altKey || interactiveControlFocused()) return;
+  if (event.code === 'KeyH') {
+    event.preventDefault();
+    setHudCollapsed(!hud?.classList.contains('is-collapsed'));
+  } else if (event.code === 'Space' && !document.body.classList.contains('system-active')) {
+    event.preventDefault();
+    if (!worldSpeed) return;
+    if (worldSpeed.value === '0') worldSpeed.value = lastWorldSpeed;
+    else {
+      lastWorldSpeed = worldSpeed.value;
+      worldSpeed.value = '0';
+    }
+    worldSpeed.dispatchEvent(new Event('input', { bubbles: true }));
+    worldSpeed.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+});
 
 try {
   if (localStorage.getItem('reality-v6-9-audio-volume') === null) {

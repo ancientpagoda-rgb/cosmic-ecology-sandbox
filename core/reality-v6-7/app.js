@@ -402,7 +402,7 @@ function updateMetrics(world, now = performance.now()) {
     `${universe.qualityLabel()} · automatic astronomical scaling ${universe.autoScale ? 'on' : 'off'}`,
   ].join('<br>');
   surfaceSummary.innerHTML = [
-    `<strong>Living planet</strong>`,
+    '<strong>Living planet</strong>',
     `${world.coupling.date.toISOString().slice(0, 10)} shared date`,
     `${compact(surfaceStats.population)} population · ${surfaceStats.settlements} cities`,
     `${surfaceStats.forestPercent}% forest · ${impactLog.length} recorded impacts`,

@@ -5,13 +5,21 @@
   },
   "extends": "eslint:recommended",
   "parserOptions": {
-    "ecmaVersion": 12,
+    "ecmaVersion": 2022,
     "sourceType": "module"
+  },
+  "globals": {
+    "Cesium": "readonly",
+    "Howl": "readonly",
+    "Howler": "readonly",
+    "THREE": "readonly"
   },
   "rules": {
     "indent": ["error", 2],
-    "quotes": ["error", "double"],
+    "quotes": ["error", "single", { "avoidEscape": true }],
     "semi": ["error", "always"],
+    "no-empty": ["error", { "allowEmptyCatch": true }],
+    "no-inner-declarations": "off",
     "no-unused-vars": "warn",
     "no-console": "off"
   }

@@ -13,6 +13,11 @@ async function waitForWorld() {
 
 const WEATHER_SPEEDS = [0, 1, 4, 16];
 const DAY_SPEEDS = [0, 600, 2_400];
+const mobileWeather = matchMedia('(max-width: 720px), (pointer: coarse)').matches
+  || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+const CLOUD_TEXTURE_SIZE = mobileWeather ? [160, 80] : [256, 128];
+const WEATHER_REFRESH_MS = mobileWeather ? 5_500 : 3_500;
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let weatherSpeedIndex = 1;
 let daySpeedIndex = 1;
 let weatherEnabled = true;
@@ -70,17 +75,60 @@ try {
   }
 
   async function createCloudLayer() {
-    const canvas = weather.createCloudTexture(256, 128);
+    const canvas = weather.createCloudTexture(...CLOUD_TEXTURE_SIZE);
     const provider = await Cesium.SingleTileImageryProvider.fromUrl(canvas.toDataURL('image/png'), {
       rectangle: Cesium.Rectangle.MAX_VALUE,
       credit: 'Cloud fields generated with FastNoiseLite 1.1.1',
     });
     const layer = new Cesium.ImageryLayer(provider);
-    layer.alpha = 0.78;
+    layer.alpha = 0.68;
     layer.brightness = 1.08;
     layer.contrast = 1.12;
     layer.gamma = 0.96;
     return layer;
+  }
+
+  async function crossfadeCloudLayer(nextLayer) {
+    const previousLayer = cloudLayer;
+    const targetAlpha = nextLayer.alpha;
+    nextLayer.alpha = previousLayer ? 0 : targetAlpha;
+    viewer.imageryLayers.add(nextLayer);
+    nextLayer.show = weatherEnabled;
+    cloudLayer = nextLayer;
+
+    if (!previousLayer || !viewer.imageryLayers.contains(previousLayer)) return;
+    if (reducedMotion) {
+      nextLayer.alpha = targetAlpha;
+      viewer.imageryLayers.remove(previousLayer, true);
+      return;
+    }
+    const previousAlpha = previousLayer.alpha;
+    await new Promise((resolve) => {
+      const started = performance.now();
+      const animate = (now) => {
+        const progress = Math.min(1, (now - started) / 900);
+        const eased = progress * progress * (3 - 2 * progress);
+        nextLayer.alpha = targetAlpha * eased;
+        previousLayer.alpha = previousAlpha * (1 - eased);
+        viewer.scene.requestRender();
+        if (progress < 1) requestAnimationFrame(animate);
+        else resolve();
+      };
+      requestAnimationFrame(animate);
+    });
+    if (viewer.imageryLayers.contains(previousLayer)) viewer.imageryLayers.remove(previousLayer, true);
+  }
+
+  function stormHash(seed, salt) {
+    let value = (seed + Math.imul(salt + 1, 0x9e3779b9)) | 0;
+    value = Math.imul(value ^ (value >>> 16), 0x21f0aaad);
+    value = Math.imul(value ^ (value >>> 15), 0x735a2d97);
+    return ((value ^ (value >>> 15)) >>> 0) / 4294967296;
+  }
+
+  function stormCartesian(system, alongDegrees, crossDegrees, height) {
+    const position = weather.offsetStormPosition(system, alongDegrees, crossDegrees);
+    return Cesium.Cartesian3.fromDegrees(position.longitude, position.latitude, height);
   }
 
   function buildStormSource() {
@@ -90,49 +138,68 @@ try {
 
     for (let index = 0; index < systems.length; index += 1) {
       const system = systems[index];
-      const endpoint = weather.windEndpoint(system, 4 + system.windSpeed * 0.07);
-      const radius = 150_000 + system.storm * 520_000;
+      const radius = 75_000 + system.storm * 190_000;
+      const extentDegrees = radius / 111_000;
       const severe = system.storm > 0.72;
       const color = severe
         ? Cesium.Color.fromCssColorString('#a8c7df')
         : Cesium.Color.fromCssColorString('#d6e3eb');
 
-      source.entities.add({
-        id: `storm-area-${index}`,
-        position: Cesium.Cartesian3.fromDegrees(system.longitude, system.latitude, 72_000),
-        ellipse: {
-          semiMajorAxis: radius * 1.35,
-          semiMinorAxis: radius,
-          height: 72_000,
-          rotation: system.windAngle,
-          material: color.withAlpha(0.055 + system.storm * 0.07),
-          outline: severe,
-          outlineColor: Cesium.Color.fromCssColorString('#b9ddf5').withAlpha(0.25),
-          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 8_500_000),
-        },
-      });
+      const lobeCount = severe ? 4 : 3;
+      for (let lobe = 0; lobe < lobeCount; lobe += 1) {
+        const along = (stormHash(system.shapeSeed, lobe * 4) - 0.5) * extentDegrees * 1.15;
+        const cross = (stormHash(system.shapeSeed, lobe * 4 + 1) - 0.5) * extentDegrees * 1.3;
+        const lobeRadius = radius * (0.42 + stormHash(system.shapeSeed, lobe * 4 + 2) * 0.38);
+        const aspect = 0.44 + stormHash(system.shapeSeed, lobe * 4 + 3) * 0.3;
+        source.entities.add({
+          id: `${system.id}-lobe-${lobe}`,
+          position: new Cesium.CallbackProperty(
+            () => stormCartesian(system, along, cross, 72_000 + lobe * 900),
+            false,
+          ),
+          ellipse: {
+            semiMajorAxis: lobeRadius,
+            semiMinorAxis: lobeRadius * aspect,
+            height: 72_000 + lobe * 900,
+            rotation: system.windAngle + (stormHash(system.shapeSeed, 20 + lobe) - 0.5) * 0.72,
+            material: color.withAlpha(0.045 + system.storm * 0.055),
+            outline: false,
+            distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 8_500_000),
+          },
+        });
+      }
 
       source.entities.add({
-        id: `storm-wind-${index}`,
+        id: `${system.id}-front`,
         polyline: {
-          positions: Cesium.Cartesian3.fromDegreesArrayHeights([
-            system.longitude, system.latitude, 105_000,
-            endpoint.longitude, endpoint.latitude, 105_000,
-          ]),
-          width: severe ? 2.1 : 1.2,
-          material: color.withAlpha(0.28),
+          positions: new Cesium.CallbackProperty(() => {
+            const points = [];
+            for (let pointIndex = -2; pointIndex <= 2; pointIndex += 1) {
+              const cross = pointIndex * extentDegrees * 0.42;
+              const curve = (1 - Math.abs(pointIndex) / 2) * extentDegrees * 0.28;
+              const irregularity = (stormHash(system.shapeSeed, 40 + pointIndex + 2) - 0.5) * extentDegrees * 0.22;
+              const point = weather.offsetStormPosition(system, curve + irregularity, cross);
+              points.push(point.longitude, point.latitude, 103_000);
+            }
+            return Cesium.Cartesian3.fromDegreesArrayHeights(points);
+          }, false),
+          width: severe ? 1.7 : 1.05,
+          material: color.withAlpha(0.2),
           distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 4_200_000),
         },
       });
 
       if (severe) {
         source.entities.add({
-          id: `storm-core-${index}`,
-          position: Cesium.Cartesian3.fromDegrees(system.longitude, system.latitude, 112_000),
+          id: `${system.id}-core`,
+          position: new Cesium.CallbackProperty(
+            () => stormCartesian(system, 0, 0, 112_000),
+            false,
+          ),
           point: {
-            pixelSize: 4 + system.storm * 5,
-            color: Cesium.Color.fromCssColorString('#d9efff').withAlpha(0.82),
-            outlineColor: Cesium.Color.fromCssColorString('#597991').withAlpha(0.7),
+            pixelSize: 3 + system.storm * 3,
+            color: Cesium.Color.fromCssColorString('#d9efff').withAlpha(0.58),
+            outlineColor: Cesium.Color.fromCssColorString('#597991').withAlpha(0.45),
             outlineWidth: 1,
             distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 5_500_000),
           },
@@ -151,12 +218,7 @@ try {
     refreshingWeather = true;
     try {
       const nextCloudLayer = await createCloudLayer();
-      if (cloudLayer && viewer.imageryLayers.contains(cloudLayer)) {
-        viewer.imageryLayers.remove(cloudLayer, true);
-      }
-      cloudLayer = nextCloudLayer;
-      viewer.imageryLayers.add(cloudLayer);
-      cloudLayer.show = weatherEnabled;
+      await crossfadeCloudLayer(nextCloudLayer);
 
       if (stormSource) await viewer.dataSources.remove(stormSource, true);
       stormSource = buildStormSource();
@@ -239,7 +301,7 @@ try {
     if (weatherSpeed > 0) weather.advance(deltaSeconds * weatherSpeed);
 
     const cloudMissing = weatherEnabled && (!cloudLayer || !viewer.imageryLayers.contains(cloudLayer));
-    if (weatherEnabled && (cloudMissing || now - lastTextureRefresh > 3_500)) refreshWeather();
+    if (weatherEnabled && (cloudMissing || now - lastTextureRefresh > WEATHER_REFRESH_MS)) refreshWeather();
     if (now - lastLocalRefresh > 700) {
       localWeather();
       lastLocalRefresh = now;

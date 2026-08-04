@@ -3,7 +3,6 @@ import { GRID_WIDTH, GRID_HEIGHT, CELL_COUNT } from '../reality-v6/simulation.js
 
 const STORAGE_KEY = 'reality-v6-5-orbital-climate';
 const AU_KM = 149_597_870.7;
-const TAU = Math.PI * 2;
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 
 function wrapX(x) {

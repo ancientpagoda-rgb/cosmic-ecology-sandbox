@@ -63,6 +63,13 @@ function seededRandom(seed) {
   };
 }
 
+function hash01(seed, salt = 0) {
+  let value = ((seed || 1) + Math.imul(salt + 1, 0x9e3779b9)) | 0;
+  value = Math.imul(value ^ (value >>> 16), 0x21f0aaad);
+  value = Math.imul(value ^ (value >>> 15), 0x735a2d97);
+  return ((value ^ (value >>> 15)) >>> 0) / 4294967296;
+}
+
 function sortSettlements(simulation) {
   return [...(simulation?.settlements || [])]
     .sort((a, b) => (b.population || 0) - (a.population || 0))
@@ -345,6 +352,15 @@ export class PixiPresentation {
     graphics.rect(x - Math.round(width * 0.2), y - height * 2, Math.max(2, Math.round(width * 0.55)), height).fill({ color: this.palette.cloud, alpha: alpha * 0.78 });
   }
 
+  pixelStorm(graphics, x, y, size, alpha, seed) {
+    for (let lobe = 0; lobe < 3; lobe += 1) {
+      const offsetX = Math.round((hash01(seed, lobe * 3) - 0.5) * size * 8);
+      const offsetY = Math.round((hash01(seed, lobe * 3 + 1) - 0.5) * size * 4);
+      const lobeSize = size * (0.5 + hash01(seed, lobe * 3 + 2) * 0.42);
+      this.pixelCloud(graphics, x + offsetX, y + offsetY, lobeSize, alpha * (0.72 + lobe * 0.1));
+    }
+  }
+
   pixelBracket(graphics, x, y, radius, color, alpha = 0.92) {
     const arm = Math.max(2, Math.round(radius * 0.45));
     const r = Math.round(radius);
@@ -374,26 +390,29 @@ export class PixiPresentation {
     const decorativeCount = Math.round(this.decorativeClouds.length * clamp(cloudCover + 0.18, 0.2, 1));
     for (let index = 0; index < decorativeCount; index += 1) {
       const cloud = this.decorativeClouds[index];
-      cloud.x = (cloud.x + cloud.speed * delta * 20) % 1.12;
+      cloud.x = (cloud.x + cloud.speed * delta * 12) % 1.12;
       const x = Math.round((cloud.x - 0.06) * this.width);
-      const y = Math.round(cloud.y * this.height + Math.sin(this.fixedTicks * 0.025 + cloud.phase) * 2);
+      const y = Math.round(cloud.y * this.height + Math.sin(this.fixedTicks * 0.014 + cloud.phase) * 1.5);
       this.pixelCloud(clouds, x, y, cloud.size, 0.12 + cloudCover * 0.2);
     }
 
-    for (let index = 0; index < Math.min(20, this.cachedStorms.length); index += 1) {
+    const weather = globalThis.realityV61?.weather;
+    for (let index = 0; index < Math.min(9, this.cachedStorms.length); index += 1) {
       const storm = this.cachedStorms[index];
-      const point = this.projectCesium(storm.longitude, storm.latitude, 115_000);
+      const position = weather?.stormPosition?.(storm) || storm;
+      const point = this.projectCesium(position.longitude, position.latitude, 115_000);
       if (!point) continue;
-      const size = 0.7 + storm.storm * 1.55;
-      this.pixelCloud(clouds, point.x, point.y, size, 0.35 + storm.storm * 0.5);
-      const drops = Math.round(2 + storm.precipitation * 7);
+      const size = 0.5 + storm.storm * 1.02;
+      this.pixelStorm(clouds, point.x, point.y, size, 0.3 + storm.storm * 0.42, storm.shapeSeed);
+      const drops = Math.round(1 + storm.precipitation * 5);
       for (let drop = 0; drop < drops; drop += 1) {
         const offset = ((drop * 7 + this.fixedTicks * 2) % 22) - 11;
         const phase = (drop * 5 + this.fixedTicks) % 9;
-        rain.rect(point.x + offset, point.y + 4 + phase, 1, 2 + Math.round(storm.precipitation * 3))
+        const slant = Math.round(Math.cos(storm.windAngle) * phase * 0.35);
+        rain.rect(point.x + offset + slant, point.y + 4 + phase, 1, 2 + Math.round(storm.precipitation * 2))
           .fill({ color: this.palette.rain, alpha: 0.35 + storm.precipitation * 0.55 });
       }
-      if (storm.storm > 0.73) {
+      if (storm.storm > 0.78) {
         labelIndex = this.showLabel(this.surfaceLabels, labelIndex, 'STORM', point.x, point.y - 8, this.palette.danger);
       }
     }

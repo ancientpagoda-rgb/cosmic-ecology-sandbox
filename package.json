@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint \"core/reality-v6*/**/*.js\"",
+    "lint:all": "eslint ."
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",

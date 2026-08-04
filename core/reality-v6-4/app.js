@@ -97,7 +97,7 @@ try {
     lastSummary = now;
     const stats = simulation.stats();
     surfaceSummary.innerHTML = [
-      `<strong>Living planet</strong>`,
+      '<strong>Living planet</strong>',
       `${formatYears(stats.years)} old`,
       `${compactNumber(stats.population)} population`,
       `${stats.settlements} cities · ${stats.rivers} river links`,
