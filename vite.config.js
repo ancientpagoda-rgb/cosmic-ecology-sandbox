@@ -37,6 +37,7 @@ export default defineConfig({
         realityEngineV65: resolve(process.cwd(), 'reality-engine-v6-5.html'),
         realityEngineV66: resolve(process.cwd(), 'reality-engine-v6-6.html'),
         realityEngineV67: resolve(process.cwd(), 'reality-engine-v6-7.html'),
+        realityEngineV68: resolve(process.cwd(), 'reality-engine-v6-8.html'),
       },
     },
   },
