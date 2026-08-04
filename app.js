@@ -7,6 +7,7 @@ import { createGalaxyRenderLayer } from './core/galaxy-render-layer.js';
 import { createGalaxySystem } from './core/galaxy-system.js';
 import { createOrbitalSystem } from './core/orbital-system.js';
 import { createCosmicOrigin } from './core/cosmic-origin.js';
+import { createOriginSurfaceVisuals } from './core/origin-surface-visuals.js';
 import { createSurfaceCharacter } from './core/surface-character.js';
 import { createCloseupPolish } from './core/closeup-polish.js';
 import { createGroundLevelPhase } from './core/ground-level-phase.js';
@@ -28,6 +29,7 @@ let surfaceCharacter;
 let closeupPolish;
 let groundLevelPhase;
 let originSystem;
+let originSurfaceVisuals;
 let stepSphere;
 let moduleHost;
 let accumulator = 0;
@@ -93,6 +95,7 @@ function loop(timestamp) {
     closeupPolish,
     groundLevelPhase,
     originSystem,
+    originSurfaceVisuals,
     timestamp,
   });
 
@@ -154,6 +157,9 @@ async function init() {
     groundLevelPhase = createGroundLevelPhase(worldElement, globe, {
       mobile: matchMedia('(max-width: 720px), (pointer: coarse)').matches,
     });
+    originSurfaceVisuals = createOriginSurfaceVisuals(originSystem, groundLevelPhase, {
+      mobile: matchMedia('(max-width: 720px), (pointer: coarse)').matches,
+    });
     closeupPolish = createCloseupPolish(globe);
     surfaceCharacter = createSurfaceCharacter(globe, {
       groundLevel: groundLevelPhase,
@@ -173,6 +179,7 @@ async function init() {
       reboundEndpoint: null,
     });
     moduleHost.register(groundLevelPhase);
+    moduleHost.register(originSurfaceVisuals);
     await moduleHost.initialize();
     await moduleHost.load(saved.modules || {});
 
@@ -180,6 +187,7 @@ async function init() {
     window.realitySandboxOrbits = orbitalSystem;
     window.realitySandboxGalaxy = galaxySystem;
     window.realitySandboxOrigin = originSystem;
+    window.realitySandboxOriginSurface = originSurfaceVisuals;
     window.realitySandboxCharacter = surfaceCharacter;
     window.realitySandboxCloseup = closeupPolish;
     window.realitySandboxGround = groundLevelPhase;
