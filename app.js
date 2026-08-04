@@ -11,6 +11,7 @@ import { createOriginSurfaceVisuals } from './core/origin-surface-visuals.js';
 import { createEmbodiedEvolution } from './core/embodied-evolution.js';
 import { createCivilizationEngine } from './core/civilization-engine.js';
 import { createPhase8Engine } from './core/phase8-engine.js';
+import { createPhase9Engine } from './core/phase9-engine.js';
 import { createDebugBridge } from './core/debug-bridge.js';
 import { createSurfaceCharacter } from './core/surface-character.js';
 import { createCloseupPolish } from './core/closeup-polish.js';
@@ -37,6 +38,7 @@ let originSurfaceVisuals;
 let embodiedEvolution;
 let civilizationEngine;
 let phase8Engine;
+let phase9Engine;
 let debugBridge;
 let stepSphere;
 let moduleHost;
@@ -48,11 +50,8 @@ let paused = false;
 let timeScale = 1;
 
 function readSavedState() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-  } catch {
-    return {};
-  }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+  catch { return {}; }
 }
 
 function saveState() {
@@ -93,6 +92,7 @@ function renderFrame(timestamp) {
     embodiedEvolution,
     civilizationEngine,
     phase8Engine,
+    phase9Engine,
     debugBridge,
     timestamp,
   });
@@ -101,21 +101,18 @@ function renderFrame(timestamp) {
 function loop(timestamp) {
   requestAnimationFrame(loop);
   if (!running || document.hidden) return;
-
   if (!lastTime) lastTime = timestamp;
   if (!paused) accumulator += Math.min(0.12, (timestamp - lastTime) / 1000) * timeScale;
   lastTime = timestamp;
 
   let steps = 0;
-  const coarse = matchMedia('(pointer: coarse)').matches;
-  const maxSteps = coarse ? 2 : 4;
+  const maxSteps = matchMedia('(pointer: coarse)').matches ? 2 : 4;
   while (!paused && accumulator >= FIXED_DT && steps < maxSteps) {
     stepSimulation();
     accumulator -= FIXED_DT;
     steps++;
   }
   if (steps === maxSteps) accumulator = 0;
-
   renderFrame(timestamp);
 
   if (timestamp - lastSave > 5000) {
@@ -140,14 +137,10 @@ async function init() {
     world = createWorld(rng);
     restoreWorldState();
 
-    const galaxySystem = createGalaxySystem({ seed: 20260802 });
-    const orbitalSystem = createOrbitalSystem(world, {
-      star: galaxySystem.getLocalStar(),
-      seed: 20260804,
-    });
-    originSystem = createCosmicOrigin(world, galaxySystem, orbitalSystem, {
-      seed: 20260804,
-    });
+    const mobile = matchMedia('(max-width: 720px), (pointer: coarse)').matches;
+    const galaxySystem = createGalaxySystem({ seed: 20260802, mobile });
+    const orbitalSystem = createOrbitalSystem(world, { star: galaxySystem.getLocalStar(), seed: 20260804 });
+    originSystem = createCosmicOrigin(world, galaxySystem, orbitalSystem, { seed: 20260804 });
     originSystem.prepare();
 
     placeExistingEntitiesOnBiomes(world, Math.random);
@@ -157,44 +150,25 @@ async function init() {
     const waterCycle = createWaterCycle(world, orbitalSystem);
     const dynamics = createPlanetDynamics(world, living, waterCycle, orbitalSystem);
     const worldElement = document.getElementById('world');
-    const mobile = matchMedia('(max-width: 720px), (pointer: coarse)').matches;
 
-    globe = createGlobeRenderer(
-      worldElement,
-      dynamics,
-      null,
-      {
-        quality: 'auto',
-        cameraState: saved.camera,
-        orbitalSystem,
-        onCameraChange: saveState,
-        onError: showError,
-      },
-    );
+    globe = createGlobeRenderer(worldElement, dynamics, null, {
+      quality: 'auto',
+      cameraState: saved.camera,
+      orbitalSystem,
+      onCameraChange: saveState,
+      onError: showError,
+    });
     originSystem.attachGlobe(globe);
 
     galaxyLayer = createGalaxyRenderLayer(worldElement, galaxySystem);
     groundLevelPhase = createGroundLevelPhase(worldElement, globe, { mobile });
     originSurfaceVisuals = createOriginSurfaceVisuals(originSystem, groundLevelPhase, { mobile });
-    embodiedEvolution = createEmbodiedEvolution(world, originSystem, groundLevelPhase, {
-      mobile,
-      seed: 20260805,
-      container: worldElement,
-    });
-    civilizationEngine = createCivilizationEngine(world, embodiedEvolution, groundLevelPhase, {
-      mobile,
-      seed: 20260806,
-      container: worldElement,
-    });
-    phase8Engine = createPhase8Engine(world, civilizationEngine, orbitalSystem, groundLevelPhase, {
-      mobile,
-      seed: 20260807,
-      container: worldElement,
-    });
+    embodiedEvolution = createEmbodiedEvolution(world, originSystem, groundLevelPhase, { mobile, seed: 20260805, container: worldElement });
+    civilizationEngine = createCivilizationEngine(world, embodiedEvolution, groundLevelPhase, { mobile, seed: 20260806, container: worldElement });
+    phase8Engine = createPhase8Engine(world, civilizationEngine, orbitalSystem, groundLevelPhase, { mobile, seed: 20260807, container: worldElement });
+    phase9Engine = createPhase9Engine(world, phase8Engine, orbitalSystem, galaxySystem, { mobile, seed: 20260808, container: worldElement });
     closeupPolish = createCloseupPolish(globe);
-    surfaceCharacter = createSurfaceCharacter(globe, {
-      groundLevel: groundLevelPhase,
-    });
+    surfaceCharacter = createSurfaceCharacter(globe, { groundLevel: groundLevelPhase });
 
     moduleHost = createModuleHost({ world });
     moduleHost.register(originSystem);
@@ -214,6 +188,7 @@ async function init() {
     moduleHost.register(embodiedEvolution);
     moduleHost.register(civilizationEngine);
     moduleHost.register(phase8Engine);
+    moduleHost.register(phase9Engine);
     await moduleHost.initialize();
     await moduleHost.load(saved.modules || {});
     moduleHost.list = moduleHost.getStatus;
@@ -226,7 +201,8 @@ async function init() {
     window.realitySandboxEvolution = embodiedEvolution;
     window.realitySandboxCivilization = civilizationEngine;
     window.realitySandboxPhase8 = phase8Engine;
-    window.realitySandboxFactories = { createPhase8Engine };
+    window.realitySandboxPhase9 = phase9Engine;
+    window.realitySandboxFactories = { createPhase8Engine, createPhase9Engine };
     window.realitySandboxCharacter = surfaceCharacter;
     window.realitySandboxCloseup = closeupPolish;
     window.realitySandboxGround = groundLevelPhase;
@@ -240,6 +216,7 @@ async function init() {
       evolution: embodiedEvolution,
       civilization: civilizationEngine,
       phase8: phase8Engine,
+      phase9: phase9Engine,
       controls: {
         isPaused: () => paused,
         setPaused: value => { paused = Boolean(value); },
@@ -258,8 +235,6 @@ async function init() {
   }
 }
 
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) lastTime = 0;
-});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) lastTime = 0; });
 window.addEventListener('pagehide', saveState);
 window.addEventListener('DOMContentLoaded', init);
