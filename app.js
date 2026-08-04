@@ -14,6 +14,8 @@ import { createPhase8Engine } from './core/phase8-engine.js';
 import { createPhase9Engine } from './core/phase9-engine.js';
 import { createPhase10Engine } from './core/phase10-engine.js';
 import { createPhase11Engine } from './core/phase11-engine.js';
+import { createUnifiedRuntime } from './core/unified-runtime.js';
+import { installUnifiedDebugExtension } from './core/unified-debug-extension.js';
 import { createDebugBridge } from './core/debug-bridge.js';
 import { createSurfaceCharacter } from './core/surface-character.js';
 import { createCloseupPolish } from './core/closeup-polish.js';
@@ -45,6 +47,7 @@ let phase10Engine;
 let phase10Module;
 let phase11Engine;
 let phase11Module;
+let unifiedRuntime;
 let debugBridge;
 let stepSphere;
 let moduleHost;
@@ -101,6 +104,7 @@ function renderFrame(timestamp) {
     phase9Engine,
     phase10Engine,
     phase11Engine,
+    unifiedRuntime,
     debugBridge,
     timestamp,
   });
@@ -195,6 +199,15 @@ async function init() {
         if ((phase10State.simulatedYears || 0) > 0 || explicitlySeeded) phase11Engine.step(dt);
       },
     };
+    unifiedRuntime = createUnifiedRuntime(world, {
+      orbitalSystem,
+      dynamics,
+      phase8: phase8Engine,
+      phase9: phase9Engine,
+      phase10: phase10Engine,
+      phase11: phase11Engine,
+    }, { mobile, seed: 20260811 });
+    unifiedRuntime.requires = ['orbits.system', 'cosmology.flrw'];
     closeupPolish = createCloseupPolish(globe);
     surfaceCharacter = createSurfaceCharacter(globe, { groundLevel: groundLevelPhase });
 
@@ -219,6 +232,7 @@ async function init() {
     moduleHost.register(phase9Engine);
     moduleHost.register(phase10Module);
     moduleHost.register(phase11Module);
+    moduleHost.register(unifiedRuntime);
     await moduleHost.initialize();
     await moduleHost.load(saved.modules || {});
     phase11Engine.step(0);
@@ -235,7 +249,8 @@ async function init() {
     window.realitySandboxPhase9 = phase9Engine;
     window.realitySandboxPhase10 = phase10Engine;
     window.realitySandboxPhase11 = phase11Engine;
-    window.realitySandboxFactories = { createPhase8Engine, createPhase9Engine, createPhase10Engine, createPhase11Engine };
+    window.realitySandboxUnified = unifiedRuntime;
+    window.realitySandboxFactories = { createPhase8Engine, createPhase9Engine, createPhase10Engine, createPhase11Engine, createUnifiedRuntime };
     window.realitySandboxCharacter = surfaceCharacter;
     window.realitySandboxCloseup = closeupPolish;
     window.realitySandboxGround = groundLevelPhase;
@@ -260,6 +275,7 @@ async function init() {
         stepOnce: () => stepSimulation(),
       },
     });
+    installUnifiedDebugExtension(debugBridge, unifiedRuntime);
 
     globe.render(world);
     galaxyLayer.render(globe.getCameraState());

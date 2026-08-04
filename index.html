@@ -10,11 +10,27 @@
   <title>Reality Sandbox</title>
   <link rel="stylesheet" href="globe-only.css?v=20260804-ground-phase2" />
   <link rel="stylesheet" href="origin.css?v=20260804-emergent-origin2" />
+  <link rel="stylesheet" href="unified-runtime.css?v=20260804-unified-runtime" />
 </head>
-<body>
-  <main id="world" aria-label="Interactive observable universe with planetary formation, abiogenesis, evolving life, civilizations, colonies, autonomous machines, relativistic missions, stellar evolution, astroengineering, cosmic archaeology, galaxy evolution, cosmological expansion, gravitational waves, causal horizons, large-scale structure, and continuous ground exploration">
+<body data-unified-view="living">
+  <main id="world" aria-label="Unified interactive observable universe with planetary formation, abiogenesis, evolving life, civilizations, colonies, autonomous machines, relativistic missions, stellar and galaxy evolution, cosmological expansion, Howler.js sound, PixiJS presentation, Astronomy Engine validation, REBOUND orbital physics, gravitational waves, causal horizons, large-scale structure, and continuous ground exploration">
     <div id="errorState" role="alert" hidden>Unable to start the universe.</div>
   </main>
-  <script type="module" src="/app.js?v=20260804-phase11-observable-universe"></script>
+  <script>
+    try {
+      const compatibilityDefaults = {
+        'reality-v6-9-audio-volume': '0.58',
+        'reality-v6-9-audio-muted': 'false',
+        'reality-v6-8-pixi-palette': 'phosphor',
+        'reality-v6-8-pixi-enabled': 'on',
+      };
+      for (const [key, value] of Object.entries(compatibilityDefaults)) {
+        if (localStorage.getItem(key) === null) localStorage.setItem(key, value);
+      }
+    } catch {
+      // Storage can be unavailable in private browsing.
+    }
+  </script>
+  <script type="module" src="/app.js?v=20260804-unified-v69-phase11"></script>
 </body>
 </html>

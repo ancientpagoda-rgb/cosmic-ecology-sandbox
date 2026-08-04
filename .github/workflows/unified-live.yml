@@ -1,0 +1,73 @@
+name: Verify live unified runtime
+
+on:
+  workflow_run:
+    workflows: ["Deploy Vite site to Pages"]
+    types: [completed]
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  verify-unified-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify deploy workflow succeeded
+        env:
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: test "${CONCLUSION}" = "success"
+
+      - name: Checkout deployed commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.0
+          npx playwright install --with-deps chromium
+
+      - name: Run live unified runtime diagnostics
+        id: unified_live
+        env:
+          REALITY_BASE_URL: https://ancientpagoda-rgb.github.io/reality-sandbox/?verify=${{ github.event.workflow_run.head_sha }}
+          REALITY_UNIFIED_ARTIFACT_DIR: artifacts/unified-live
+          REALITY_REQUIRE_REBOUND: "1"
+        run: node scripts/unified-smoke.cjs
+
+      - name: Upload live unified evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unified-live-${{ github.event.workflow_run.head_sha }}
+          path: artifacts/unified-live
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Publish unified live status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployOk = '${{ github.event.workflow_run.conclusion }}' === 'success';
+            const runtimeOk = '${{ steps.unified_live.outcome }}' === 'success';
+            const ok = deployOk && runtimeOk;
+            const sha = '${{ github.event.workflow_run.head_sha }}';
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha,
+              state: ok ? 'success' : 'failure',
+              context: 'pages/unified-runtime-live',
+              description: ok ? 'Unified Pixi, Howler, Astronomy, REBOUND, and V6.9 compatibility verified live' : 'Unified runtime live verification failed',
+              target_url: `https://ancientpagoda-rgb.github.io/reality-sandbox/?verify=${sha}`,
+            });

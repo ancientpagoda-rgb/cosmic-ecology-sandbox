@@ -48,20 +48,24 @@ for (const dependency of ['three', 'pixi.js', 'howler', '@dimforge/rapier3d-comp
   requireDependency(dependency);
 }
 
-requireText('index.html', 'phase11-observable-universe', 'Phase 11 root entry point');
-requireText('index.html', 'Interactive observable universe', 'observable-universe accessibility description');
+requireText('index.html', 'unified-v69-phase11', 'unified root entry point');
+requireText('index.html', 'Unified interactive observable universe', 'unified accessibility description');
+requireText('index.html', 'unified-runtime.css', 'unified presentation stylesheet');
 requireText('app.js', "import { createPhase8Engine }", 'Phase 8 runtime import');
 requireText('app.js', "import { createPhase9Engine }", 'Phase 9 runtime import');
 requireText('app.js', "import { createPhase10Engine }", 'Phase 10 runtime import');
 requireText('app.js', "import { createPhase11Engine }", 'Phase 11 runtime import');
-requireText('app.js', 'createDebugBridge({', 'debug bridge construction');
+requireText('app.js', "import { createUnifiedRuntime }", 'unified runtime import');
+requireText('app.js', 'installUnifiedDebugExtension', 'unified debug bridge extension');
+requireText('app.js', 'window.realitySandboxUnified', 'unified runtime exposure');
 requireText('app.js', 'window.realitySandboxFactories', 'deterministic factory exposure');
 requireOrder('app.js', [
   'moduleHost.register(phase8Engine)',
   'moduleHost.register(phase9Engine)',
   'moduleHost.register(phase10Module)',
   'moduleHost.register(phase11Module)',
-], 'Phase 8 → 11 module registration order');
+  'moduleHost.register(unifiedRuntime)',
+], 'Phase 8 → 11 → unified module registration order');
 
 requireText('core/module-host.js', 'topologicalOrder', 'capability dependency ordering');
 requireText('core/module-host.js', 'module.save?.()', 'module save support');
@@ -72,7 +76,20 @@ for (const [file, id] of [
   ['core/phase9-engine.js', 'civilization.phase9-multiworld-ai-contact'],
   ['core/phase10-engine.js', 'civilization.phase10-relativistic-deep-time'],
   ['core/phase11-engine.js', 'civilization.phase11-cosmological-evolution'],
+  ['core/unified-runtime.js', 'runtime.unified-v69-phase11'],
 ]) requireText(file, id, `${id} module id`);
+
+requireText('core/unified-runtime.js', "from 'pixi.js'", 'root PixiJS presentation');
+requireText('core/unified-runtime.js', "from 'howler'", 'root Howler.js soundscape');
+requireText('core/unified-runtime.js', 'astronomy-engine@2.1.19', 'root Astronomy Engine reference');
+requireText('core/unified-runtime.js', 'ReboundWasmSystem', 'root REBOUND WebAssembly client');
+requireText('core/unified-runtime.js', 'root-module-host-fixed-step', 'single authoritative clock');
+requireText('core/unified-runtime.js', 'reality-engine-v6-9.html', 'V6.9 compatibility path');
+requireText('core/unified-debug-extension.js', 'seedUnifiedScenario', 'unified debug scenarios');
+requireText('scripts/unified-smoke.cjs', "seedUnifiedScenario('shared-clock')", 'shared-clock browser scenario');
+requireText('scripts/unified-smoke.cjs', "seedUnifiedScenario('rebound')", 'REBOUND browser scenario');
+requireText('scripts/unified-smoke.cjs', "seedUnifiedScenario('save-migration')", 'legacy save migration scenario');
+requireText('.github/workflows/unified-live.yml', 'REALITY_REQUIRE_REBOUND: "1"', 'live REBOUND requirement');
 
 requireText('core/debug-bridge.js', 'window.realitySandboxDebug = api', 'debug API exposure');
 requireText('core/debug-bridge.js', 'seedPhase11Scenario', 'Phase 11 scenario injection');
@@ -83,12 +100,12 @@ requireText('scripts/browser-smoke.cjs', "debugSeedScenario('distance-frames')",
 requireText('reality-engine-v6-9.html', 'ENGINE V6.9 · HOWLER.JS SOUNDSCAPE', 'preserved V6.9 experience');
 requireText('reality-engine-v6-9.html', 'pixiPresentationCanvas', 'V6.9 Pixi presentation canvas');
 requireText('reality-engine-v6-9.html', 'audioToggle', 'V6.9 sound controls');
-requireText('core/reality-v6-9/soundscape.js', "from 'howler'", 'Howler.js integration');
-requireText('core/reality-v6-8/pixi-presentation.js', "from 'pixi.js'", 'PixiJS integration');
-requireText('core/reality-v6-5/orbit-climate.js', 'astronomy-engine@2.1.19', 'Astronomy Engine integration');
+requireText('core/reality-v6-9/soundscape.js', "from 'howler'", 'V6.9 Howler.js integration');
+requireText('core/reality-v6-8/pixi-presentation.js', "from 'pixi.js'", 'V6.9 PixiJS integration');
+requireText('core/reality-v6-5/orbit-climate.js', 'astronomy-engine@2.1.19', 'V6.9 Astronomy Engine integration');
 requireText('scripts/build-rebound-wasm.sh', 'REBOUND_REF="${REBOUND_REF:-5.0.0}"', 'pinned REBOUND source');
 requireText('scripts/build-rebound-wasm.sh', 'rebound.wasm', 'REBOUND WebAssembly output');
-requireText('integrations/rebound-adapter.js', 'orbit.rebound', 'REBOUND runtime adapter');
+requireText('integrations/rebound-adapter.js', 'orbit.rebound', 'REBOUND fallback adapter');
 requireText('integrations/rapier-adapter.js', '@dimforge/rapier3d-compat', 'Rapier runtime adapter');
 requireText('integrations/gdal-adapter.js', "from 'gdal3.js'", 'GDAL runtime adapter');
 
@@ -97,10 +114,10 @@ for (const notice of ['Three.js', 'PixiJS', 'Howler.js', 'Astronomy Engine', 'Ra
 }
 
 requireText('README.md', '# Reality Sandbox', 'project overview');
-requireText('README.md', 'Root Phase 11 universe', 'root/legacy architecture boundary');
+requireText('README.md', 'Unified root universe', 'unified architecture overview');
 requireText('README.md', 'npm run audit:integration', 'documented integration audit');
 requireText('package.json', '"audit:integration"', 'integration audit npm script');
-requireText('.github/workflows/browser-smoke.yml', 'npm run audit:integration', 'CI integration audit step');
+requireText('.github/workflows/browser-smoke.yml', 'node scripts/unified-smoke.cjs', 'unified CI browser step');
 
 if (failures.length) {
   console.error('Reality Sandbox integration audit failed:\n');

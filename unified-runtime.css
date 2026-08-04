@@ -1,0 +1,131 @@
+#unifiedPixiCanvas {
+  position: fixed;
+  inset: 0;
+  z-index: 16;
+  width: 100vw;
+  height: 100vh;
+  image-rendering: pixelated;
+  pointer-events: none;
+  opacity: 0.72;
+  transition: opacity 180ms ease, background 180ms ease;
+}
+
+body[data-unified-view="living"] #unifiedPixiCanvas {
+  opacity: 0.38;
+}
+
+body[data-unified-view="pixel"] #unifiedPixiCanvas {
+  opacity: 0.96;
+  background: rgba(0, 6, 8, 0.46);
+}
+
+body[data-unified-view="orbital"] #unifiedPixiCanvas,
+body[data-unified-view="universe"] #unifiedPixiCanvas {
+  opacity: 0.98;
+  background: rgba(0, 2, 8, 0.88);
+}
+
+body[data-unified-view="pixel"] #world > canvas:not(#unifiedPixiCanvas),
+body[data-unified-view="orbital"] #world > canvas:not(#unifiedPixiCanvas),
+body[data-unified-view="universe"] #world > canvas:not(#unifiedPixiCanvas) {
+  opacity: 0.24;
+  transition: opacity 180ms ease;
+}
+
+body[data-unified-view="living"] #world > canvas:not(#unifiedPixiCanvas) {
+  opacity: 1;
+}
+
+#unifiedRuntimePanel {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 90;
+  width: min(390px, calc(100vw - 24px));
+  padding: 10px;
+  border: 1px solid rgba(139, 233, 255, 0.34);
+  border-radius: 12px;
+  background: rgba(1, 9, 14, 0.84);
+  color: #e8fbff;
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(12px);
+  font: 600 10px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.035em;
+}
+
+#unifiedRuntimePanel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: #8defff;
+}
+
+#unifiedRuntimePanel header a {
+  color: #ffe293;
+  text-decoration: none;
+}
+
+.unified-runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+#unifiedRuntimePanel label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+#unifiedRuntimePanel button,
+#unifiedRuntimePanel select,
+#unifiedRuntimePanel input {
+  min-width: 0;
+  border: 1px solid rgba(141, 239, 255, 0.23);
+  border-radius: 7px;
+  background: rgba(141, 239, 255, 0.075);
+  color: #f2fdff;
+  font: inherit;
+}
+
+#unifiedRuntimePanel button,
+#unifiedRuntimePanel select {
+  min-height: 31px;
+  padding: 6px;
+}
+
+#unifiedRuntimePanel button:active {
+  transform: translateY(1px);
+}
+
+#unifiedRuntimePanel output {
+  display: block;
+  margin-top: 8px;
+  color: rgba(232, 251, 255, 0.68);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px), (pointer: coarse) {
+  #unifiedRuntimePanel {
+    width: min(330px, calc(100vw - 18px));
+    right: 9px;
+    bottom: 9px;
+    padding: 8px;
+    font-size: 9px;
+  }
+
+  .unified-runtime-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  #unifiedRuntimePanel button,
+  #unifiedRuntimePanel select {
+    min-height: 28px;
+    padding: 4px;
+  }
+}
