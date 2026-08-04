@@ -51,14 +51,15 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Smoke test V6.8 artifact
+      - name: Smoke test V6.9 artifact
         run: |
-          test -f dist/reality-engine-v6-7.html
           test -f dist/reality-engine-v6-8.html
+          test -f dist/reality-engine-v6-9.html
           test -f dist/rebound-v6-6/rebound.js
           test -f dist/rebound-v6-6/rebound.wasm
-          grep -q "PIXIJS PIXEL WORLD" dist/reality-engine-v6-8.html
-          grep -R -q "reality-v6-8-pixi-palette" dist/assets
+          grep -q "HOWLER.JS SOUNDSCAPE" dist/reality-engine-v6-9.html
+          grep -R -q "reality-v6-9-audio-volume" dist/assets
+          grep -R -q "Synthesizing deterministic sound loops" dist/assets
           grep -R -q "PixiJS pixel weather" dist/assets
           grep -R -q "automatic astronomical scaling" dist/assets
           grep -R -q "Cinematic" dist/assets
@@ -86,26 +87,26 @@ jobs:
         uses: actions/deploy-pages@v4
 
   verify-live:
-    name: Verify live V6.8
+    name: Verify live V6.9
     runs-on: ubuntu-latest
     needs: deploy
     steps:
-      - name: Check deployed V6.8 and REBOUND assets
+      - name: Check deployed V6.9 and REBOUND assets
         env:
           PAGE_URL: ${{ needs.deploy.outputs.page_url }}
         run: |
           BASE_URL="${PAGE_URL%/}/"
-          V68_URL="${BASE_URL}reality-engine-v6-8.html"
+          V69_URL="${BASE_URL}reality-engine-v6-9.html"
           for attempt in 1 2 3 4 5 6; do
             if curl --fail --silent --show-error --location \
               --max-time 30 \
-              "${V68_URL}?verify=${GITHUB_SHA}" \
-              --output /tmp/reality-engine-v6-8.html; then
+              "${V69_URL}?verify=${GITHUB_SHA}" \
+              --output /tmp/reality-engine-v6-9.html; then
               break
             fi
             sleep 10
           done
-          grep -q "PIXIJS PIXEL WORLD" /tmp/reality-engine-v6-8.html
+          grep -q "HOWLER.JS SOUNDSCAPE" /tmp/reality-engine-v6-9.html
           curl --fail --silent --show-error --location \
             --max-time 30 \
             "${BASE_URL}rebound-v6-6/rebound.js?verify=${GITHUB_SHA}" \
@@ -116,4 +117,4 @@ jobs:
             --output /tmp/rebound.wasm
           test -s /tmp/rebound.js
           test -s /tmp/rebound.wasm
-          echo "Verified live V6.8 PixiJS presentation: ${V68_URL}"
+          echo "Verified live V6.9 Howler.js soundscape: ${V69_URL}"
