@@ -1,9 +1,5 @@
-import * as THREE from 'three';
-
-// Keep the proven living-planet boot path independent from the optional
-// Three.js/REBOUND universe. A universe rendering failure must never prevent
-// Cesium, weather, ecology, civilizations, or orbital climate from starting.
-globalThis.THREE = THREE;
+// V6.7 deliberately boots the proven living planet before touching Three.js.
+// The optional GPU universe is imported only after the user requests it.
 
 const surfaceLoading = document.getElementById('loading');
 const universeLoading = document.getElementById('reboundLoading');
@@ -67,8 +63,8 @@ async function startSurface() {
   ]);
   await waitForSurface();
 
-  // The V6 runtime normally removes this itself. Remove any stale overlay as a
-  // final safeguard once the viewer and simulation are definitely available.
+  // The base runtime normally removes this. Remove a stale overlay only after
+  // the Cesium viewer, world simulation, and Astronomy coupling are confirmed.
   if (surfaceLoading?.isConnected) surfaceLoading.remove();
   if (buildStatus) buildStatus.textContent = 'Living planet ready · Three.js loads on demand';
 }
@@ -84,9 +80,14 @@ async function loadUniverse() {
     }
     if (buildStatus) buildStatus.textContent = 'Loading optional 3D universe…';
 
-    // app.js may still import V6.5, but ES modules are cached, so the living
-    // planet is not initialized twice. Its Three.js dependency is now isolated
-    // behind this user-triggered boundary.
+    // Import Three.js only now. app.js currently reads THREE.REVISION from the
+    // global namespace, so expose the dynamically loaded module before app.js.
+    const threeModule = await Promise.race([
+      import('three'),
+      timeout(30_000, 'Three.js module'),
+    ]);
+    globalThis.THREE = threeModule;
+
     await Promise.race([
       import('./app.js'),
       timeout(60_000, 'Three.js universe startup'),
@@ -110,8 +111,8 @@ function installLazyUniverseButton() {
   enterButton.addEventListener('click', async (event) => {
     if (universeReady) return;
 
-    // Intercept V6.4's legacy iframe handler until the local V6.7 universe has
-    // registered its own capture-phase handler.
+    // Intercept V6.4's legacy iframe listener until V6.7 registers its own
+    // capture-phase handler.
     event.preventDefault();
     event.stopImmediatePropagation();
     enterButton.disabled = true;
@@ -121,8 +122,6 @@ function installLazyUniverseButton() {
       await loadUniverse();
       enterButton.disabled = false;
       enterButton.textContent = ORIGINAL_ENTER_LABEL;
-      // Re-dispatch after V6.7's handler exists. This listener now passes the
-      // event through because universeReady is true.
       queueMicrotask(() => enterButton.click());
     } catch (error) {
       showUniverseError(error);
