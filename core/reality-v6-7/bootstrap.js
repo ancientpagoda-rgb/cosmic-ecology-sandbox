@@ -1,8 +1,8 @@
 import '../reality-v6-5/app.js';
 
-// The living planet above uses the exact proven V6.5 startup chain.
-// Three.js, Desktop Ultra, and REBOUND remain completely unloaded until the
-// user explicitly enters the 3D universe.
+// The living planet uses the proven V6.5 startup chain. The low-fi surface
+// patch is applied only after that runtime reports ready. Three.js, REBOUND,
+// and post-processing remain unloaded until the user enters the universe.
 
 const universeLoading = document.getElementById('reboundLoading');
 const buildStatus = document.getElementById('systemBuildStatus');
@@ -23,10 +23,10 @@ function showUniverseError(error) {
     universeLoading.hidden = false;
     universeLoading.textContent = `3D universe failed to load: ${message}`;
   }
-  if (buildStatus) buildStatus.textContent = 'Living planet ready · 3D universe unavailable';
+  if (buildStatus) buildStatus.textContent = 'Living planet ready · pixel universe unavailable';
   if (enterButton) {
     enterButton.disabled = false;
-    enterButton.textContent = 'Retry 3D universe';
+    enterButton.textContent = 'Retry pixel universe';
   }
 }
 
@@ -57,12 +57,10 @@ async function loadUniverse() {
     await waitForSurface();
     if (universeLoading) {
       universeLoading.hidden = false;
-      universeLoading.textContent = 'Loading Three.js, Desktop Ultra, and local REBOUND WebAssembly…';
+      universeLoading.textContent = 'Loading Three.js pixel mode and local REBOUND WebAssembly…';
     }
-    if (buildStatus) buildStatus.textContent = 'Loading optional 3D universe…';
+    if (buildStatus) buildStatus.textContent = 'Loading optional pixel universe…';
 
-    // app.js imports Three.js through three-universe.js. The namespace is also
-    // exposed for its revision label, without making Three.js part of surface boot.
     const threeModule = await Promise.race([
       import('three'),
       timeout(30_000, 'Three.js module'),
@@ -76,7 +74,7 @@ async function loadUniverse() {
     await import('./ultra-quality.js');
 
     universeReady = true;
-    if (buildStatus) buildStatus.textContent = 'Three.js r184 · REBOUND 5.1.1 local WASM';
+    if (buildStatus) buildStatus.textContent = 'Three.js r184 · Pixel default · REBOUND 5.1.1 local WASM';
     return globalThis.realityV67;
   })().catch((error) => {
     universePromise = undefined;
@@ -92,12 +90,10 @@ function installLazyUniverseButton() {
   enterButton.addEventListener('click', async (event) => {
     if (universeReady) return;
 
-    // This capture listener blocks V6.4's legacy iframe action until V6.7's
-    // Three.js runtime has registered its own system-view handler.
     event.preventDefault();
     event.stopImmediatePropagation();
     enterButton.disabled = true;
-    enterButton.textContent = 'Loading 3D universe…';
+    enterButton.textContent = 'Loading pixel universe…';
 
     try {
       await loadUniverse();
@@ -118,8 +114,9 @@ addEventListener('unhandledrejection', (event) => {
 });
 
 waitForSurface()
-  .then(() => {
-    if (buildStatus) buildStatus.textContent = 'Living planet ready · Three.js loads on demand';
+  .then(async () => {
+    await import('./lofi-surface.js');
+    if (buildStatus) buildStatus.textContent = 'Living planet ready · pixel universe loads on demand';
     installLazyUniverseButton();
   })
   .catch((error) => {
