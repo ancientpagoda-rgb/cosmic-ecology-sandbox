@@ -41,6 +41,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(initial.modules.includes('runtime.unified-v69-phase11'), 'Unified runtime module was not registered.');
     assert(initial.panel && initial.compatibilityLink, 'Unified controls or V6.9 compatibility link are missing.');
     assert(initial.unified.clock.source === 'root-module-host-fixed-step', 'Unified runtime does not use the root master clock.');
+    assert(initial.unified.audio.volume > 0, 'Fresh unified settings produced inaudible zero volume.');
 
     await page.evaluate(() => window.realitySandboxDebug.pause());
     const clock = await page.evaluate(() => {
@@ -102,6 +103,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     const audio = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().audio);
     writeJson('audio.json', audio);
     assert(audio.started && audio.prepared, 'Howler.js root soundscape did not start from a user gesture.');
+    assert(audio.volume > 0, 'Howler.js root soundscape started at inaudible zero volume.');
     assert(Object.values(audio.mix).every(Number.isFinite), 'Audio mix contains non-finite values.');
 
     const entry = new URL(baseUrl);
