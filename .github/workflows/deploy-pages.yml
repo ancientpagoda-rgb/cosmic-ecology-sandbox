@@ -22,6 +22,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Mark V6.9 verification pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          jq -n \
+            --arg state "pending" \
+            --arg target_url "https://ancientpagoda-rgb.github.io/reality-sandbox/reality-engine-v6-9.html?verify=${GITHUB_SHA}" \
+            --arg description "Building and deploying V6.9" \
+            --arg context "pages/v6.9-live" \
+            '{state:$state,target_url:$target_url,description:$description,context:$context}' \
+            > /tmp/status.json
+          curl --fail --silent --show-error --location \
+            --request POST \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            --data-binary @/tmp/status.json
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
