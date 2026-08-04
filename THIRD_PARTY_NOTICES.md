@@ -11,7 +11,7 @@ Reality Sandbox includes a rewritten, mobile-oriented tectonic plate adapter bas
 
 ## Three.js
 
-Reality Sandbox uses Three.js for WebGL rendering and its maintained AnimationMixer/AnimationClip system for procedural breathing and body motion in Phase 6 creatures.
+Reality Sandbox uses Three.js for WebGL rendering and its maintained AnimationMixer/AnimationClip system for procedural breathing and body motion in Phase 6 creatures and spatial civilization rendering in Phase 7.
 
 - Project: https://github.com/mrdoob/three.js
 - Version: 0.184.0
@@ -36,3 +36,12 @@ Reality Sandbox uses Rapier's JavaScript/WebAssembly bindings for local creature
 - Package: @dimforge/rapier3d-compat
 - Version: 0.19.3
 - License: Apache-2.0
+
+## Graphology 0.26.0
+
+Reality Sandbox uses Graphology to represent and update settlement contacts, trade routes, alliances, conflicts, migration links, knowledge exchange, and federations in Phase 7.
+
+- Project: https://github.com/graphology/graphology
+- Version: 0.26.0
+- License: MIT
+- Runtime modules are loaded from version-pinned jsDelivr and esm.sh URLs, with a deterministic internal graph fallback when neither source is available.
