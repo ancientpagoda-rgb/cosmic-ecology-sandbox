@@ -27,10 +27,10 @@
 <div id="orbitStatus" class="orbit glass surface-ui">Synchronizing orbital climate…</div>
 <div id="stats" class="stats glass surface-ui">Starting simulation…</div>
 <section class="hud glass surface-ui">
-  <div class="top"><span id="age">0 yr</span><button id="hudToggle" class="hud-toggle" type="button" aria-expanded="true" aria-controls="worldControls" title="Toggle controls (H)">Hide controls</button><span id="coords">0.0°, 0.0°</span></div>
+  <div class="top"><span id="age">0 yr</span><button id="hudToggle" class="hud-toggle" type="button" aria-expanded="true" aria-controls="controlDeck" title="Toggle controls (H)">Hide controls</button><span id="coords">0.0°, 0.0°</span></div>
   <div id="inspect" class="inspect">Explore the living planet, then enter the GPU-accelerated REBOUND universe.</div>
   <div class="speed"><label>WORLD</label><input id="speed" type="range" min="0" max="5" step="1" value="0"><output id="speedOut">paused</output></div>
-  <div class="actions">
+  <div id="controlDeck" class="actions">
     <button id="enterSystem" class="system-button" type="button">Enter 3D universe</button>
     <button id="clockSpeed" class="orbit-button" type="button">1 hour/s</button>
     <button id="couplingToggle" class="orbit-button" type="button">Orbit coupling on</button>
