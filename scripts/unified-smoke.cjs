@@ -104,9 +104,13 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(audio.started && audio.prepared, 'Howler.js root soundscape did not start from a user gesture.');
     assert(Object.values(audio.mix).every(Number.isFinite), 'Audio mix contains non-finite values.');
 
-    const v69Response = await page.request.get(new URL('reality-engine-v6-9.html', baseUrl).toString());
+    const entry = new URL(baseUrl);
+    const v69Url = entry.pathname.includes('/reality-sandbox/')
+      ? new URL('reality-engine-v6-9.html', entry)
+      : new URL('/reality-sandbox/reality-engine-v6-9.html', entry.origin);
+    const v69Response = await page.request.get(v69Url.toString());
     const v69Html = await v69Response.text();
-    assert(v69Response.ok(), 'Standalone V6.9 compatibility page is unavailable.');
+    assert(v69Response.ok(), `Standalone V6.9 compatibility page is unavailable at ${v69Url}.`);
     assert(v69Html.includes('ENGINE V6.9 · HOWLER.JS SOUNDSCAPE'), 'Standalone V6.9 page lost its Howler/Pixi marker.');
 
     const finalDiagnostics = await page.evaluate(() => window.realitySandboxDebug.diagnostics());
