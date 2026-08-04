@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#02060b">
+<title>Reality Engine V6.9 · Howler.js Generative Soundscape</title>
+<script>window.CESIUM_BASE_URL='https://cdn.jsdelivr.net/npm/cesium@1.143.0/Build/Cesium/';window.REALITY_LOCAL_REBOUND=true;</script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.143.0/Build/Cesium/Widgets/widgets.css">
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.143.0/Build/Cesium/Cesium.js"></script>
+<style>
+:root{--pixi-accent:#d8ffe2;--audio-accent:#ffd98c}*{box-sizing:border-box}html,body,#cesium{margin:0;width:100%;height:100%;overflow:hidden;background:#02060b;color:#def3ff;font-family:system-ui,-apple-system,sans-serif}.glass{background:#07131df2;border:1px solid #91bdd03d}.badge{position:fixed;z-index:5;top:max(12px,env(safe-area-inset-top));left:12px;padding:8px 11px;border-radius:3px;font-size:11px;color:var(--audio-accent)}.weather,.civilization,.biome,.orbit,.stats{position:fixed;z-index:5;padding:9px 11px;border-radius:3px;font:10px/1.48 ui-monospace,SFMono-Regular,monospace}.weather{top:58px;left:12px;color:#c2e5f7;max-width:220px}.civilization{top:140px;left:12px;color:#efd9ff;max-width:225px}.stats{top:max(12px,env(safe-area-inset-top));right:12px;color:#bad9eb;text-align:right}.biome{top:115px;right:12px;color:#c8f0d2;text-align:right;max-width:235px}.orbit{top:58px;left:50%;transform:translateX(-50%);color:#ffe7b0;text-align:center;max-width:310px;min-width:250px}.hud{position:fixed;z-index:5;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));padding:9px 11px;border-radius:3px}.top{display:flex;justify-content:space-between;gap:10px;font-size:11px;align-items:center}.audio-readout{color:var(--audio-accent);font:9px/1.25 ui-monospace,SFMono-Regular,monospace;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.inspect{margin-top:5px;font:10px/1.35 ui-monospace,SFMono-Regular,monospace;color:#9fc5da;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.speed{display:grid;grid-template-columns:46px 1fr 88px;gap:8px;align-items:center;margin-top:7px}.speed label,.speed output{font-size:10px;color:#abc8d9}.speed input{width:100%;accent-color:#8fd0ff}.actions{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:7px}.actions button,.actions a,.actions .audio-volume{padding:7px 3px;border-radius:2px;border:1px solid #91bdd03d;background:#0b1c28;color:#dff4ff;text-align:center;text-decoration:none;font:9px system-ui;min-width:0}.actions button:disabled{opacity:.67}.actions .system-button{background:#17264b;border-color:#8ba6ff70;color:#eef1ff}.actions .orbit-button{background:#2a2111;border-color:#ffd48366;color:#fff1c9}.actions .pixi-button{background:#102b20;border-color:#8affb466;color:var(--pixi-accent)}.actions .audio-button{background:#302511;border-color:#ffd98c77;color:var(--audio-accent)}.audio-volume{display:grid;grid-template-columns:auto 1fr;gap:4px;align-items:center;color:var(--audio-accent)!important}.audio-volume input{width:100%;min-width:30px;accent-color:var(--audio-accent)}.loading{position:fixed;z-index:20;left:50%;top:50%;transform:translate(-50%,-50%);padding:12px 16px;border-radius:3px;font-size:13px}.cesium-viewer-bottom,.cesium-viewer-toolbar{display:none!important}.pixi-overlay{position:fixed;z-index:2;inset:0;width:100vw;height:100vh;display:block;pointer-events:none;image-rendering:pixelated;image-rendering:crisp-edges}.system-panel>.pixi-overlay{position:absolute;z-index:2}.system-panel{display:none;position:fixed;z-index:40;inset:0;background:#01040a;color:#e7f3ff}.system-active .system-panel{display:block}.system-active .surface-ui{display:none!important}.universe-canvas{position:absolute;z-index:0;inset:0;width:100%;height:100%;display:block;touch-action:none;background:#01040a;image-rendering:pixelated}.system-top{position:absolute;z-index:4;top:max(10px,env(safe-area-inset-top));left:10px;right:10px;display:flex;gap:8px;align-items:flex-start;justify-content:space-between;pointer-events:none}.system-card{pointer-events:auto;padding:9px 11px;border-radius:3px;font:10px/1.5 ui-monospace,SFMono-Regular,monospace;max-width:360px}.system-card strong{font-size:11px;color:#fff}.system-actions{display:flex;gap:7px;pointer-events:auto;flex-wrap:wrap;justify-content:flex-end;max-width:1050px}.system-actions button,.system-actions a,.system-actions select,.system-actions input,.system-actions .audio-volume{border:1px solid #9db7ff55;border-radius:2px;background:#0a1424f0;color:#e9f1ff;padding:8px 9px;text-decoration:none;font:10px system-ui}.system-actions .pixi-button{border-color:#8affb466;color:var(--pixi-accent);background:#102b20f0}.system-actions .audio-button,.system-actions .audio-volume{border-color:#ffd98c66;color:var(--audio-accent);background:#302511f0}.system-actions input:not([type="range"]){width:112px}.system-actions select{max-width:140px}.system-actions .audio-volume{display:grid;grid-template-columns:auto 78px;gap:5px;align-items:center}.system-actions .audio-volume input{width:78px;accent-color:var(--audio-accent)}.rebound-loading{position:absolute;z-index:5;left:50%;top:50%;transform:translate(-50%,-50%);padding:13px 17px;border-radius:3px;text-align:center;font:12px/1.5 system-ui}.system-footer{position:absolute;z-index:4;left:10px;right:10px;bottom:max(10px,env(safe-area-inset-bottom));display:flex;justify-content:space-between;gap:10px;align-items:flex-end;pointer-events:none}.system-status,.system-metrics{pointer-events:auto;padding:8px 10px;border-radius:3px;font:10px/1.45 ui-monospace,SFMono-Regular,monospace;color:#cbd9f3}.system-metrics{text-align:right}.system-build{color:#9fd9b8}.system-audio{color:var(--audio-accent)}.system-hint{position:absolute;z-index:3;left:50%;bottom:88px;transform:translateX(-50%);padding:6px 9px;border-radius:3px;color:#8193ad;font-size:9px;pointer-events:none}.hidden-frame{display:none!important}@media(max-width:1100px){.actions{grid-template-columns:repeat(7,1fr)}.orbit{top:205px;left:12px;transform:none;text-align:left;min-width:0;max-width:235px}.system-top{display:grid;grid-template-columns:1fr}.system-actions{justify-content:flex-start;max-width:none}.system-footer{display:grid;grid-template-columns:1fr}.system-metrics{text-align:left}.system-hint{bottom:145px}}@media(max-width:720px){.top{display:grid;grid-template-columns:auto 1fr auto}.audio-readout{font-size:8px}.biome{top:205px;right:12px;max-width:205px}.orbit{top:290px;max-width:225px}.actions{grid-template-columns:repeat(4,1fr)}.system-actions button,.system-actions a,.system-actions select,.system-actions input,.system-actions .audio-volume{padding:7px 8px}.system-card{max-width:300px}.system-hint{display:none}}@media(max-height:800px){.weather{top:50px}.civilization{top:124px}.biome{top:105px}.orbit{top:185px}.actions button,.actions a,.actions .audio-volume{padding:5px 2px}.hud{padding:7px 9px}}@media(max-height:700px){.weather,.civilization,.biome,.orbit{display:none}.system-card{display:none}}
+</style>
+</head>
+<body>
+<div id="cesium"></div>
+<canvas id="pixiPresentationCanvas" class="pixi-overlay" aria-hidden="true"></canvas>
+<div id="loading" class="loading glass surface-ui">Loading the living planet, PixiJS, and optional Howler soundscape…</div>
+<div class="badge glass surface-ui">ENGINE V6.9 · HOWLER.JS SOUNDSCAPE</div>
+<div id="weatherStatus" class="weather glass surface-ui">Building planetary weather…</div>
+<div id="civilizationStatus" class="civilization glass surface-ui">Mapping civilizations…</div>
+<div id="biomeStatus" class="biome glass surface-ui">Tracing natural regions…</div>
+<div id="orbitStatus" class="orbit glass surface-ui">Synchronizing orbital climate…</div>
+<div id="stats" class="stats glass surface-ui">Starting simulation…</div>
+<section class="hud glass surface-ui">
+  <div class="top"><span id="age">0 yr</span><span id="audioStatus" class="audio-readout">HOWLER 2.2.4 · click Sound start</span><span id="coords">0.0°, 0.0°</span></div>
+  <div id="inspect" class="inspect">The deterministic soundscape unlocks only after a click, as required by browsers.</div>
+  <div class="speed"><label>WORLD</label><input id="speed" type="range" min="0" max="5" step="1" value="0"><output id="speedOut">paused</output></div>
+  <div class="actions">
+    <button id="enterSystem" class="system-button" type="button">Enter 3D universe</button>
+    <button id="pixiPalette" class="pixi-button" type="button">Palette Phosphor</button>
+    <button id="pixiFx" class="pixi-button" type="button">Pixel FX on</button>
+    <button id="audioToggle" class="audio-button" type="button">Sound start</button>
+    <label class="audio-volume">VOL<input id="audioVolume" type="range" min="0" max="100" step="1" value="58" aria-label="Soundscape volume"></label>
+    <button id="clockSpeed" class="orbit-button" type="button">1 hour/s</button>
+    <button id="couplingToggle" class="orbit-button" type="button">Orbit coupling on</button>
+    <button id="advanceOrbitDay" type="button">+1 day</button>
+    <button id="advanceOrbitMonth" type="button">+1 month</button>
+    <button id="advanceOrbitYear" type="button">+1 year</button>
+    <button id="orbitNow" type="button">Present date</button>
+    <button id="weatherSpeed" type="button">Weather ×1</button>
+    <button id="weatherToggle" type="button">Clouds on</button>
+    <button id="daySpeed" type="button">Sun linked</button>
+    <button id="politicsSpeed" type="button">Politics ×1</button>
+    <button id="seasonSpeed" type="button">Seasons linked</button>
+    <button id="step100" type="button">+100 years</button>
+    <button id="step1000" type="button">+1,000 years</button>
+    <button id="advancePolitics" type="button">+250 politics</button>
+    <button id="advanceSeason" type="button">+1 season</button>
+    <button id="overlayToggle" type="button">Borders on</button>
+    <button id="biomeToggle" type="button">Biomes on</button>
+    <button id="save" type="button">Save world</button>
+    <button id="resetCamera" type="button">Reset camera</button>
+    <button id="resetWorld" type="button">Reset world</button>
+    <a href="./reality-engine-v6-8.html">Open V6.8</a>
+  </div>
+</section>
+<section id="systemPanel" class="system-panel" aria-label="Howler.js, PixiJS, and Three.js REBOUND universe view">
+  <canvas id="threeUniverseCanvas" class="universe-canvas"></canvas>
+  <iframe id="reboundFrame" class="hidden-frame" title="Unused legacy REBOUND frame"></iframe>
+  <div id="reboundLoading" class="rebound-loading glass">Preparing Three.js, PixiJS, Howler.js, and local REBOUND WebAssembly…</div>
+  <header class="system-top">
+    <div class="system-card glass"><strong>HOWLER + PIXI + REBOUND MULTI-SYSTEM UNIVERSE</strong><br><span id="systemBuildStatus" class="system-build">Living planet starts first; renderers and physics load on demand.</span><br><span id="audioStatusSystem" class="system-audio">HOWLER 2.2.4 · click Sound start</span><br><span id="surfaceSummary">Living surface remains synchronized.</span></div>
+    <nav class="system-actions">
+      <button id="returnSurface" type="button">Return to planet</button>
+      <button id="pixiPaletteSystem" class="pixi-button" type="button">Palette Phosphor</button>
+      <button id="pixiFxSystem" class="pixi-button" type="button">Pixel FX on</button>
+      <button id="audioToggleSystem" class="audio-button" type="button">Sound start</button>
+      <label class="audio-volume">VOL<input id="audioVolumeSystem" type="range" min="0" max="100" step="1" value="58" aria-label="Universe soundscape volume"></label>
+      <button id="systemClock" type="button">1 hour/s</button>
+      <button id="spawnImpactor" type="button">Launch impactor</button>
+      <button id="focusLiving" type="button">Focus living world</button>
+      <button id="autoScale" type="button">Auto-scale on</button>
+      <button id="nextSystem" type="button">Next system</button>
+      <select id="systemSelect" aria-label="Star system"></select>
+      <select id="integratorSelect" aria-label="REBOUND integrator"><option value="0">MERCURIUS</option><option value="1">IAS15</option><option value="2">WHFast</option></select>
+      <input id="systemSeed" inputmode="numeric" aria-label="Generated system seed" placeholder="System seed">
+      <button id="generateSystem" type="button">Generate selected</button>
+      <button id="reloadRebound" type="button">Restart selected</button>
+      <a id="openReboundStandalone" target="_blank" rel="noopener">REBOUND build</a>
+    </nav>
+  </header>
+  <div class="system-hint glass">M toggles audio · Howler spatial mix follows impacts and travel · Pixi fixed 20 Hz · Three.js modes Pixel through Cinematic · auto-scaling keeps bodies visible</div>
+  <footer class="system-footer"><div id="systemStatus" class="system-status glass">Generative orbital soundscape waiting</div><div id="systemMetrics" class="system-metrics glass">REBOUND state drives every body.</div></footer>
+</section>
+<script type="module" src="./core/reality-v6-9/bootstrap.js"></script>
+</body>
+</html>
