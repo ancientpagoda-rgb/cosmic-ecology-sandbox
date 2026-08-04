@@ -9,6 +9,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  statuses: write
 
 concurrency:
   group: pages
@@ -92,6 +93,7 @@ jobs:
     needs: deploy
     steps:
       - name: Check deployed V6.9 and REBOUND assets
+        id: livecheck
         env:
           PAGE_URL: ${{ needs.deploy.outputs.page_url }}
         run: |
@@ -118,3 +120,34 @@ jobs:
           test -s /tmp/rebound.js
           test -s /tmp/rebound.wasm
           echo "Verified live V6.9 Howler.js soundscape: ${V69_URL}"
+
+      - name: Publish live verification status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+          VERIFY_OUTCOME: ${{ steps.livecheck.outcome }}
+        run: |
+          BASE_URL="${PAGE_URL%/}/"
+          TARGET_URL="${BASE_URL}reality-engine-v6-9.html?verify=${GITHUB_SHA}"
+          if [ "$VERIFY_OUTCOME" = "success" ]; then
+            STATE=success
+            DESCRIPTION="V6.9 HTML and REBOUND assets verified live"
+          else
+            STATE=failure
+            DESCRIPTION="V6.9 live verification failed"
+          fi
+          jq -n \
+            --arg state "$STATE" \
+            --arg target_url "$TARGET_URL" \
+            --arg description "$DESCRIPTION" \
+            --arg context "pages/v6.9-live" \
+            '{state:$state,target_url:$target_url,description:$description,context:$context}' \
+            > /tmp/status.json
+          curl --fail --silent --show-error --location \
+            --request POST \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            --data-binary @/tmp/status.json
