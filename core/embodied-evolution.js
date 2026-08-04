@@ -1,143 +1,255 @@
+import * as THREE from 'three';
+import { samplePlanet } from './planet.js';
+import { sampleHydrology } from './hydrology.js';
+import { createGeologicalTime } from './geological-time.js';
+import { createCreatureBody3D } from './creature-body-3d.js';
+import { createLocalCreaturePhysics } from './local-creature-physics.js';
+import { createEvolutionLedger } from './evolution-lineages.js';
+
 const YUKA_SOURCES = [
   'https://cdn.jsdelivr.net/npm/yuka@0.7.8/build/yuka.module.js',
   'https://unpkg.com/yuka@0.7.8/build/yuka.module.js',
 ];
-const SCALE = 0.04;
-const GEO_SCALE = 0.0065;
+const PATCH_SIZE = 0.9;
+const GLOBAL_SCALE = 0.04;
+const SAMPLE_WIDTH = 8192;
+const SAMPLE_HEIGHT = 4096;
 const ROLES = ['agent', 'predator', 'apex'];
 const BASE_SPEED = { agent: 34, predator: 48, apex: 31 };
-const LABEL = { agent: 'grazer', predator: 'predator', apex: 'apex' };
 
 export function createEmbodiedEvolution(world, originSystem, groundLevel, options = {}) {
   const mobile = options.mobile ?? matchMedia('(max-width: 720px), (pointer: coarse)').matches;
-  const rng = mulberry32(options.seed ?? 0x51A9E5);
-  const records = new Map();
-  const lineages = new Set();
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d', { alpha: true, desynchronized: true });
+  const container = options.container || document.getElementById('world') || document.body;
+  const rng = mulberry32(options.seed ?? 0x260806);
+  const geology = createGeologicalTime({
+    seed: options.geologySeed || 90210,
+    startAgeMyr: 0,
+    millionYearsPerSecond: 0.18,
+  });
+  const ledger = createEvolutionLedger(world, {
+    seed: (options.seed ?? 0x260806) ^ 0x9E3779B9,
+    mobile,
+  });
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x9fb3b5, mobile ? 0.2 : 0.14);
+  const camera = new THREE.PerspectiveCamera(mobile ? 54 : 48, 1, 0.008, 14);
+  const renderer = new THREE.WebGLRenderer({
+    alpha: true,
+    antialias: !mobile,
+    powerPreference: mobile ? 'low-power' : 'high-performance',
+  });
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, mobile ? 1 : 1.5));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.setClearColor(0x000000, 0);
+  renderer.domElement.className = 'embodied-evolution-3d';
+  renderer.domElement.setAttribute('aria-hidden', 'true');
+  renderer.domElement.style.cssText = 'position:fixed;inset:0;z-index:6;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity .25s ease';
+  document.body.append(renderer.domElement);
+
+  scene.add(new THREE.HemisphereLight(0xb7d3ff, 0x091018, 1.16));
+  const sun = new THREE.DirectionalLight(0xfff0cf, 2.45);
+  sun.position.set(3, 4, 2);
+  scene.add(sun);
+  const sceneRoot = new THREE.Group();
+  scene.add(sceneRoot);
+  const creatureRoot = new THREE.Group();
+  const structureRoot = new THREE.Group();
+  sceneRoot.add(creatureRoot, structureRoot);
+
   const hud = document.createElement('section');
-  let YUKA;
-  let manager;
-  let width = 1;
-  let height = 1;
-  let ratio = 1;
-  let elapsed = 0;
-  let lastDraw = -Infinity;
-  let lastHud = -Infinity;
-  let populationEstablished = false;
-  let births = 0;
-  let deaths = 0;
-  let maxGeneration = 0;
-  let destroyed = false;
-  let savedGenomes = [];
-
-  canvas.className = 'embodied-evolution-canvas';
-  canvas.setAttribute('aria-hidden', 'true');
-  canvas.style.cssText = 'position:fixed;inset:0;z-index:8;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity .3s ease';
-  document.body.append(canvas);
-
   hud.className = 'embodied-evolution-hud';
   hud.hidden = true;
   hud.setAttribute('aria-live', 'polite');
-  hud.style.cssText = 'position:fixed;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));z-index:15;max-width:min(340px,calc(100vw - 24px));padding:10px 12px;border:1px solid rgba(147,217,190,.22);border-radius:12px;background:rgba(2,10,12,.7);backdrop-filter:blur(10px);color:#d8fff2;font:600 11px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em;pointer-events:none';
-  hud.innerHTML = '<strong style="display:block;margin-bottom:4px;color:#8ff0c7">EMBODIED EVOLUTION · YUKA</strong><span data-summary>Waiting for motile life…</span>';
+  hud.style.cssText = 'position:fixed;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));z-index:15;max-width:min(390px,calc(100vw - 24px));padding:10px 12px;border:1px solid rgba(147,217,190,.24);border-radius:12px;background:rgba(2,10,12,.72);backdrop-filter:blur(10px);color:#d8fff2;font:600 11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.035em;pointer-events:none';
+  hud.innerHTML = `
+    <strong style="display:block;margin-bottom:4px;color:#8ff0c7">PHASE 6 · LIVING LINEAGES</strong>
+    <span data-evolution-summary>Waiting for embodied organisms…</span>
+    <small data-evolution-detail style="display:block;margin-top:4px;color:rgba(216,255,242,.7)"></small>
+  `;
   document.body.append(hud);
-  const summary = hud.querySelector('[data-summary]');
+  const summaryElement = hud.querySelector('[data-evolution-summary]');
+  const detailElement = hud.querySelector('[data-evolution-detail]');
+
+  const records = new Map();
+  const structureMeshes = new Map();
+  let YUKA;
+  let manager;
+  let physics;
+  let active = false;
+  let destroyed = false;
+  let lastWidth = 0;
+  let lastHeight = 0;
+  let lastHud = -Infinity;
+  let terrainClock = 0;
+  let structureClock = 0;
+  let fullSimulationCount = 0;
 
   async function initialize({ provideCapability }) {
     YUKA = await loadYuka();
     manager = new YUKA.EntityManager();
-    sync(true);
+    physics = await createLocalCreaturePhysics({ mobile });
     provideCapability('evolution.embodied', api);
+    provideCapability('evolution.lineages', ledger);
+    provideCapability('evolution.societies', api);
     provideCapability('ai.yuka', manager);
+    provideCapability('physics.creatures', physics);
   }
 
   function step(dt) {
-    if (destroyed || !manager) return;
-    elapsed += Math.max(0, dt);
-    sync(false);
+    if (destroyed || !manager || !physics) return;
+    const ground = groundLevel.getState();
+    ledger.step(dt, sampleNiche);
+    active = Boolean(ground.active && originSystem.getState().animalsReady);
+    renderer.domElement.style.opacity = active ? '1' : '0';
+    hud.hidden = !active;
+
+    if (!active) {
+      trimAllLocalRecords();
+      return;
+    }
+
+    geology.load(ground.geology || {});
+    synchronizeLocalLod(ground);
     for (const record of records.values()) {
-      record.clock -= dt;
-      if (record.clock <= 0) {
+      record.decisionClock -= dt;
+      if (record.decisionClock <= 0) {
         decide(record);
-        record.clock = clamp(0.72 - record.genome.sense * 0.18 + rng() * 0.14, 0.2, 0.72);
+        record.decisionClock = clamp(0.62 - record.genome.sense * 0.12 + rng() * 0.12, 0.18, 0.62);
       }
-      const activity = clamp(record.vehicle.getSpeed() / Math.max(0.001, record.vehicle.maxSpeed), 0, 1);
-      record.gait += dt * (3.4 + activity * 8) * record.genome.legs;
     }
+
     manager.update(dt);
-    writeBack();
+    writeBackYuka();
+    terrainClock += dt;
+    if (terrainClock >= (mobile ? 0.42 : 0.3)) {
+      terrainClock = 0;
+      physics.updateTerrain(ground.navigation, ground.terrain, sampleSurface);
+    }
+
+    const targets = new Map();
+    for (const record of records.values()) {
+      const point = world.ecs.components.position.get(record.entityId);
+      if (!point) continue;
+      const local = geoToLocal(point, ground.navigation, ground.terrain.level || 7);
+      const surface = sampleSurface(point.x / world.width, point.y / world.height);
+      const localSpeed = record.vehicle.getSpeed() * worldUnitsPerTurn(ground.terrain.level || 7) /
+        Math.max(1, world.width * GLOBAL_SCALE);
+      targets.set(record.entityId, {
+        x: local.x,
+        z: local.z,
+        floorY: surface.floorY,
+        speed: localSpeed,
+      });
+    }
+    const transforms = physics.step(dt, targets);
+    updateCreatureMeshes(dt, ground, transforms);
+
+    structureClock += dt;
+    if (structureClock >= 0.65) {
+      structureClock = 0;
+      synchronizeStructures(ground);
+    }
   }
 
-  function sync(initial) {
-    const live = new Set();
-    const suppressBirths = initial || !populationEstablished;
+  function synchronizeLocalLod(ground) {
+    const center = {
+      x: wrap(ground.navigation.u, 1) * world.width,
+      y: clamp(ground.navigation.v, 0, 1) * world.height,
+    };
+    const radius = mobile ? 34 : 52;
+    const cap = mobile ? 14 : 38;
+    const candidates = [];
+
     for (const role of ROLES) {
-      for (const [id, component] of world.ecs.components[role].entries()) {
-        const position = world.ecs.components.position.get(id);
-        if (!position) continue;
-        live.add(id);
-        if (!records.has(id)) addCreature(id, role, component, position, suppressBirths);
+      for (const [entityId] of world.ecs.components[role].entries()) {
+        const position = world.ecs.components.position.get(entityId);
+        const genome = ledger.getGenome(entityId);
+        if (!position || !genome) continue;
+        const distance = torusDistance(center, position, world.width, world.height);
+        if (distance <= radius * radius) candidates.push({ entityId, role, position, genome, distance });
       }
     }
-    for (const [id, record] of records.entries()) {
-      if (live.has(id)) continue;
-      manager.remove(record.vehicle);
-      records.delete(id);
-      deaths++;
+    candidates.sort((a, b) => a.distance - b.distance);
+    const selected = new Set(candidates.slice(0, cap).map(item => item.entityId));
+
+    for (const [entityId] of records.entries()) {
+      if (!selected.has(entityId)) removeLocalCreature(entityId);
     }
-    if (live.size) populationEstablished = true;
+    for (const candidate of candidates.slice(0, cap)) {
+      if (!records.has(candidate.entityId)) addLocalCreature(candidate, ground);
+    }
+    fullSimulationCount = records.size;
   }
 
-  function addCreature(id, role, component, position, suppressBirth) {
-    const parent = nearest(role, position, 95);
-    const restored = takeSavedGenome(role, position);
-    const genome = normalizeGenome(restored || component.embodiment || mutate(parent?.genome, component.dna, role, rng), role);
-    if (parent && genome.generation <= parent.genome.generation) genome.generation = parent.genome.generation + 1;
-    if (!genome.lineage) genome.lineage = parent && genomeDistance(parent.genome, genome) < 0.22
-      ? parent.genome.lineage
-      : `${role[0].toUpperCase()}${hashGenome(genome).toString(36).slice(0, 4)}`;
-    component.embodiment = genome;
-    component.generation = Math.max(component.generation || 0, genome.generation);
-
+  function addLocalCreature(candidate, ground) {
+    const { entityId, role, position, genome } = candidate;
     const vehicle = new YUKA.Vehicle();
-    vehicle.position.set(position.x * SCALE, 0, position.y * SCALE);
-    const velocity = world.ecs.components.velocity.get(id);
-    if (velocity) vehicle.velocity.set(velocity.vx * SCALE, 0, velocity.vy * SCALE);
-    vehicle.maxSpeed = BASE_SPEED[role] * genome.speed * SCALE;
-    vehicle.maxForce = 6 * genome.stamina;
+    vehicle.position.set(position.x * GLOBAL_SCALE, 0, position.y * GLOBAL_SCALE);
+    const velocity = world.ecs.components.velocity.get(entityId);
+    if (velocity) vehicle.velocity.set(velocity.vx * GLOBAL_SCALE, 0, velocity.vy * GLOBAL_SCALE);
+    vehicle.maxSpeed = BASE_SPEED[role] * genome.speed * GLOBAL_SCALE;
+    vehicle.maxForce = 5.5 * genome.stamina;
     vehicle.updateNeighborhood = true;
-    vehicle.neighborhoodRadius = 4 + genome.sense * 1.5;
+    vehicle.neighborhoodRadius = 3.8 + genome.sense * 1.7;
 
     const wander = new YUKA.WanderBehavior();
-    wander.weight = role === 'agent' ? 0.42 : 0.25;
+    wander.weight = role === 'agent' ? 0.38 : 0.22;
     const seek = new YUKA.SeekBehavior(new YUKA.Vector3().copy(vehicle.position));
-    seek.weight = role === 'agent' ? 0.85 : 0.35;
+    seek.weight = role === 'agent' ? 0.78 : 0.32;
     const separation = new YUKA.SeparationBehavior();
-    separation.weight = 0.65 + (1 - genome.social) * 0.8;
+    separation.weight = 0.62 + (1 - genome.social) * 0.78;
     const alignment = new YUKA.AlignmentBehavior();
-    alignment.weight = role === 'agent' ? genome.social * 0.48 : 0.05;
+    alignment.weight = role === 'agent' ? genome.social * 0.48 : genome.social * 0.12;
     const cohesion = new YUKA.CohesionBehavior();
-    cohesion.weight = role === 'agent' ? genome.social * 0.36 : 0.04;
+    cohesion.weight = role === 'agent' ? genome.social * 0.39 : genome.social * 0.1;
     const evade = new YUKA.EvadeBehavior();
     evade.active = false;
-    evade.weight = 1.5 + genome.caution;
+    evade.weight = 1.35 + genome.caution;
     const pursuit = new YUKA.PursuitBehavior();
     pursuit.active = false;
-    pursuit.weight = role === 'apex' ? 1.65 : 1.35;
+    pursuit.weight = 1.15 + genome.aggression * 0.8;
     for (const behavior of [wander, seek, separation, alignment, cohesion, evade, pursuit]) vehicle.steering.add(behavior);
     manager.add(vehicle);
 
-    records.set(id, {
-      id, role, component, genome, vehicle,
-      behavior: { seek, evade, pursuit },
-      clock: rng() * 0.4,
-      gait: rng() * Math.PI * 2,
+    const body = createCreatureBody3D(genome, role, { id: entityId, mobile });
+    creatureRoot.add(body.root);
+    const local = geoToLocal(position, ground.navigation, ground.terrain.level || 7);
+    const surface = sampleSurface(position.x / world.width, position.y / world.height);
+    body.root.position.set(local.x, surface.floorY, local.z);
+    physics.addCreature(entityId, body, { x: local.x, y: surface.floorY, z: local.z });
+
+    records.set(entityId, {
+      entityId,
+      role,
+      genome,
+      vehicle,
+      body,
+      behavior: { wander, seek, separation, alignment, cohesion, evade, pursuit },
       mode: 'wander',
+      decisionClock: rng() * 0.4,
     });
-    lineages.add(genome.lineage);
-    maxGeneration = Math.max(maxGeneration, genome.generation);
-    if (!suppressBirth) births++;
+  }
+
+  function removeLocalCreature(entityId) {
+    const record = records.get(entityId);
+    if (!record) return;
+    manager.remove(record.vehicle);
+    physics.removeCreature(entityId);
+    creatureRoot.remove(record.body.root);
+    record.body.dispose();
+    records.delete(entityId);
+  }
+
+  function trimAllLocalRecords() {
+    for (const entityId of [...records.keys()]) removeLocalCreature(entityId);
+    for (const [id, mesh] of structureMeshes.entries()) {
+      structureRoot.remove(mesh);
+      disposeObject(mesh);
+      structureMeshes.delete(id);
+    }
   }
 
   function decide(record) {
@@ -145,9 +257,21 @@ export function createEmbodiedEvolution(world, originSystem, groundLevel, option
     behavior.evade.active = false;
     behavior.pursuit.active = false;
     behavior.seek.active = true;
+    behavior.seek.weight = role === 'agent' ? 0.62 : 0.28;
+    const component = world.ecs.components[role].get(record.entityId);
+    const energy = component?.energy || 0;
+    const structures = ledger.getStructures().filter(item => item.speciesId === genome.speciesId);
+
+    const home = nearestStructure(record, structures, ['nest', 'settlement']);
+    if (home && energy < (role === 'agent' ? 0.7 : 1.15)) {
+      setTarget(behavior.seek.target, vehicle.position, home);
+      behavior.seek.weight = 0.75;
+      record.mode = 'rest';
+      return;
+    }
 
     if (role === 'agent') {
-      const threat = nearestOther(record, ['predator', 'apex'], 135 * genome.sense);
+      const threat = nearestLocalCreature(record, ['predator', 'apex'], 145 * genome.sense);
       if (threat) {
         behavior.evade.pursuer = threat.vehicle;
         behavior.evade.active = true;
@@ -155,156 +279,231 @@ export function createEmbodiedEvolution(world, originSystem, groundLevel, option
         record.mode = 'flee';
         return;
       }
-      const food = nearestResource(record, 180 * genome.sense);
+      const food = nearestResource(record, 185 * genome.sense);
       if (food) {
         setTarget(behavior.seek.target, vehicle.position, food);
-        behavior.seek.weight = 0.8 + genome.metabolism * 0.35;
+        behavior.seek.weight = 0.72 + genome.metabolism * 0.34;
         record.mode = 'forage';
         return;
       }
-      const herd = herdCenter(record, 130 * genome.sense);
-      if (herd) {
-        setTarget(behavior.seek.target, vehicle.position, herd);
-        behavior.seek.weight = 0.2 + genome.social * 0.5;
-        record.mode = 'herd';
+      const group = nearestLocalCreature(record, ['agent'], 120 * genome.sense, true);
+      if (group && group.genome.speciesId === genome.speciesId && genome.social > 0.44) {
+        setTarget(behavior.seek.target, vehicle.position, world.ecs.components.position.get(group.entityId));
+        behavior.seek.weight = 0.18 + genome.social * 0.38;
+        record.mode = 'communicate';
         return;
       }
     } else {
-      const prey = nearestOther(record, role === 'apex' ? ['predator', 'agent'] : ['agent'], 190 * genome.sense);
+      const preyRoles = role === 'apex' ? ['predator', 'agent'] : ['agent'];
+      const prey = nearestLocalCreature(record, preyRoles, 205 * genome.sense);
       if (prey) {
         behavior.pursuit.evader = prey.vehicle;
+        behavior.pursuit.predictionFactor = 0.65 + genome.memory * 0.85;
         behavior.pursuit.active = true;
         behavior.seek.active = false;
         record.mode = 'hunt';
         return;
       }
+      const territory = nearestStructure(record, structures, ['territory']);
+      if (territory && genome.aggression > 0.48) {
+        setTarget(behavior.seek.target, vehicle.position, territory);
+        behavior.seek.weight = 0.32 + genome.aggression * 0.22;
+        record.mode = 'patrol';
+        return;
+      }
     }
 
     const angle = rng() * Math.PI * 2;
-    behavior.seek.target.set(vehicle.position.x + Math.cos(angle) * 3, 0, vehicle.position.z + Math.sin(angle) * 3);
-    behavior.seek.weight = 0.12;
+    behavior.seek.target.set(
+      vehicle.position.x + Math.cos(angle) * (2 + genome.curiosity * 2.8),
+      0,
+      vehicle.position.z + Math.sin(angle) * (2 + genome.curiosity * 2.8),
+    );
+    behavior.seek.weight = 0.1 + genome.curiosity * 0.08;
     record.mode = 'wander';
   }
 
-  function writeBack() {
-    const maxX = world.width * SCALE;
-    const maxZ = world.height * SCALE;
+  function writeBackYuka() {
+    const maxX = world.width * GLOBAL_SCALE;
+    const maxZ = world.height * GLOBAL_SCALE;
     for (const record of records.values()) {
-      const { id, vehicle } = record;
-      vehicle.position.x = wrap(vehicle.position.x, maxX);
-      vehicle.position.z = wrap(vehicle.position.z, maxZ);
-      vehicle.position.y = 0;
-      const position = world.ecs.components.position.get(id);
-      const velocity = world.ecs.components.velocity.get(id);
-      if (position) {
-        position.x = vehicle.position.x / SCALE;
-        position.y = vehicle.position.z / SCALE;
-      }
+      const position = world.ecs.components.position.get(record.entityId);
+      const velocity = world.ecs.components.velocity.get(record.entityId);
+      if (!position) continue;
+      record.vehicle.position.x = wrap(record.vehicle.position.x, maxX);
+      record.vehicle.position.z = clamp(record.vehicle.position.z, 0.01, maxZ - 0.01);
+      record.vehicle.position.y = 0;
+      position.x = record.vehicle.position.x / GLOBAL_SCALE;
+      position.y = record.vehicle.position.z / GLOBAL_SCALE;
       if (velocity) {
-        velocity.vx = vehicle.velocity.x / SCALE;
-        velocity.vy = vehicle.velocity.z / SCALE;
+        velocity.vx = record.vehicle.velocity.x / GLOBAL_SCALE;
+        velocity.vy = record.vehicle.velocity.z / GLOBAL_SCALE;
       }
+    }
+  }
+
+  function updateCreatureMeshes(dt, ground, transforms) {
+    for (const record of records.values()) {
+      const point = world.ecs.components.position.get(record.entityId);
+      if (!point) continue;
+      const local = geoToLocal(point, ground.navigation, ground.terrain.level || 7);
+      const surface = sampleSurface(point.x / world.width, point.y / world.height);
+      const transform = transforms.get(record.entityId) || { x: local.x, y: surface.floorY, z: local.z };
+      record.body.root.position.set(transform.x, transform.y, transform.z);
+
+      const velocity = world.ecs.components.velocity.get(record.entityId) || { vx: 0, vy: 1 };
+      if (Math.hypot(velocity.vx, velocity.vy) > 0.02) {
+        record.body.root.rotation.y = Math.atan2(velocity.vx, velocity.vy);
+      }
+      const speed = clamp(record.vehicle.getSpeed() / Math.max(0.001, record.vehicle.maxSpeed), 0, 1.5);
+      const ageRatio = record.genome.lifeAge / Math.max(1, record.genome.lifespan);
+      record.body.update(dt, {
+        speed,
+        mode: record.mode,
+        communication: record.mode === 'communicate' ? ledger.getCommunication(record.entityId) : 0,
+        ageRatio,
+      });
+      const distance = Math.hypot(local.x, local.z);
+      record.body.setLod(distance > 2.8 ? 2 : distance > 1.45 ? 1 : 0);
+    }
+  }
+
+  function synchronizeStructures(ground) {
+    const structures = ledger.getStructures();
+    const selected = new Set();
+    const max = mobile ? 18 : 48;
+    const nearby = structures
+      .map(structure => ({ structure, local: geoToLocal(structure, ground.navigation, ground.terrain.level || 7) }))
+      .filter(item => Math.hypot(item.local.x, item.local.z) < (mobile ? 3.1 : 4.4))
+      .sort((a, b) => Math.hypot(a.local.x, a.local.z) - Math.hypot(b.local.x, b.local.z))
+      .slice(0, max);
+
+    for (const item of nearby) {
+      const { structure, local } = item;
+      selected.add(structure.id);
+      let mesh = structureMeshes.get(structure.id);
+      if (!mesh) {
+        mesh = createStructureMesh(structure, mobile);
+        structureMeshes.set(structure.id, mesh);
+        structureRoot.add(mesh);
+      }
+      const surface = sampleSurface(structure.x / world.width, structure.y / world.height);
+      mesh.position.set(local.x, surface.floorY + 0.005, local.z);
+      mesh.scale.setScalar(0.62 + structure.progress * 0.48);
+      mesh.userData.structure = structure;
+    }
+
+    for (const [id, mesh] of structureMeshes.entries()) {
+      if (selected.has(id)) continue;
+      structureRoot.remove(mesh);
+      disposeObject(mesh);
+      structureMeshes.delete(id);
     }
   }
 
   function render(frame = {}) {
     if (destroyed) return;
-    const timestamp = frame.timestamp ?? performance.now();
     const ground = groundLevel.getState();
-    const active = Boolean(ground.active && originSystem.getState().animalsReady && records.size);
-    canvas.style.opacity = active ? '1' : '0';
-    hud.hidden = !active;
-    if (!active) {
-      context.clearRect(0, 0, width, height);
-      return;
-    }
-    if (timestamp - lastDraw >= (mobile ? 50 : 30)) {
-      lastDraw = timestamp;
-      resize();
-      draw(ground.navigation);
-    }
-    if (timestamp - lastHud >= 350) {
+    const shouldRender = Boolean(active && ground.active && records.size);
+    renderer.domElement.style.opacity = shouldRender ? '1' : '0';
+    hud.hidden = !shouldRender;
+    if (!shouldRender) return;
+
+    resize();
+    configureCamera(ground);
+    renderer.render(scene, camera);
+
+    const timestamp = frame.timestamp ?? performance.now();
+    if (timestamp - lastHud > 320) {
       lastHud = timestamp;
-      const counts = countRoles();
-      summary.textContent = `${counts.agent} grazers · ${counts.predator} predators · ${counts.apex} apex · ${lineages.size} lineages · gen ${maxGeneration} · ${births} births · ${deaths} deaths`;
+      const state = ledger.getState();
+      const physicsLabel = physics.ready ? 'Rapier contact' : 'terrain lock';
+      summaryElement.textContent = `${state.counts.agent} grazers · ${state.counts.predator} predators · ${state.counts.apex} apex · ${state.species} living species`;
+      detailElement.textContent = `${fullSimulationCount} full 3D · ${state.creatures - fullSimulationCount} distant statistical · gen ${state.maxGeneration} · ${state.speciations} branches · ${state.structures} structures · ${state.settlements} settlements · ${physicsLabel}`;
+    }
+  }
+
+  function configureCamera(ground) {
+    const navigation = ground.navigation;
+    const surface = ground.terrain.surface || sampleSurface(navigation.u, navigation.v);
+    const pitch = clamp(navigation.pitch ?? -0.08, -0.55, 0.34);
+    const cameraDistance = clamp(navigation.cameraDistance ?? 0.46, 0, 0.74);
+    const firstPerson = cameraDistance < 0.08;
+    const floorY = surface.floorY || 0;
+    sceneRoot.rotation.y = navigation.heading ?? 0;
+
+    if (firstPerson) {
+      const eyeY = floorY + 0.17;
+      camera.position.set(0, eyeY, 0.018);
+      camera.lookAt(0, eyeY + Math.sin(pitch) * 0.8, -Math.max(0.35, Math.cos(pitch)));
+    } else {
+      const follow = 0.18 + cameraDistance;
+      const eyeY = floorY + 0.24 + cameraDistance * 0.18;
+      camera.position.set(0, eyeY, follow);
+      camera.lookAt(0, floorY + 0.11 + pitch * 0.32, -0.2);
     }
   }
 
   function resize() {
-    const nextWidth = Math.max(1, innerWidth);
-    const nextHeight = Math.max(1, innerHeight);
-    const nextRatio = Math.min(devicePixelRatio || 1, mobile ? 1 : 1.35);
-    if (nextWidth === width && nextHeight === height && nextRatio === ratio) return;
-    width = nextWidth;
-    height = nextHeight;
-    ratio = nextRatio;
-    canvas.width = Math.floor(width * ratio);
-    canvas.height = Math.floor(height * ratio);
-    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    const rect = container.getBoundingClientRect();
+    const width = Math.max(1, Math.floor(rect.width || innerWidth));
+    const height = Math.max(1, Math.floor(rect.height || innerHeight));
+    if (width === lastWidth && height === lastHeight) return;
+    lastWidth = width;
+    lastHeight = height;
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
   }
 
-  function draw(navigation) {
-    context.clearRect(0, 0, width, height);
-    const visible = [];
-    for (const record of records.values()) {
-      const projected = project(record, navigation, width, height);
-      if (projected) visible.push(projected);
-    }
-    visible.sort((a, b) => b.depth - a.depth);
-    const cap = mobile ? 28 : 72;
-    for (const item of visible.slice(-cap)) drawCreature(item, context);
-  }
-
-  function project(record, navigation, screenWidth, screenHeight) {
-    const position = world.ecs.components.position.get(record.id);
-    if (!position) return null;
-    const u = wrap(position.x / world.width, 1);
-    const v = clamp(position.y / world.height, 0.01, 0.99);
-    const latitude = (0.5 - navigation.v) * Math.PI;
-    const longitudeScale = Math.max(0.22, Math.cos(latitude));
-    const du = turnDelta(u, navigation.u) * longitudeScale / GEO_SCALE;
-    const dv = (v - navigation.v) / GEO_SCALE;
-    const heading = navigation.heading || 0;
-    const forward = du * Math.sin(heading) + dv * -Math.cos(heading);
-    const lateral = du * Math.cos(heading) + dv * Math.sin(heading);
-    if (forward < 0.16 || forward > 3.6 || Math.abs(lateral) > 0.72 + forward * 0.55) return null;
-    const inverse = 1 / forward;
-    const horizon = screenHeight * (0.43 + (navigation.pitch || 0) * 0.2);
-    const vertical = (inverse - 1 / 3.6) / (1 / 0.16 - 1 / 3.6);
-    const base = record.role === 'apex' ? 38 : record.role === 'predator' ? 28 : 22;
+  function sampleSurface(u, v) {
+    u = wrap(u, 1);
+    v = clamp(v, 0, 1);
+    const base = samplePlanet(u * SAMPLE_WIDTH, v * SAMPLE_HEIGHT, SAMPLE_WIDTH, SAMPLE_HEIGHT);
+    const hydro = sampleHydrology(u * SAMPLE_WIDTH, v * SAMPLE_HEIGHT, SAMPLE_WIDTH, SAMPLE_HEIGHT);
+    const geological = geology.sample(u, v);
+    const height = base.elevation + geological.uplift - geological.rifting - geological.erosion;
+    const seaLevel = geological.seaLevel;
+    const water = height < 0.53 + seaLevel;
+    const waterStrength = water ? 1 : clamp(Math.max(hydro.lake, hydro.delta * 0.9, hydro.river * 0.78), 0, 1);
+    const terrainY = (height - seaLevel - 0.53) * 3.8;
+    const waterY = water ? 0.006 : terrainY + 0.007;
     return {
-      record,
-      depth: forward,
-      x: screenWidth * 0.5 + lateral * inverse * screenWidth * 0.25,
-      y: horizon + vertical * (screenHeight - horizon) * 0.94,
-      size: clamp(base * record.genome.size * inverse, 5, mobile ? 90 : 135),
+      ...base,
+      ...hydro,
+      ...geological,
+      height,
+      seaLevel,
+      water,
+      waterStrength,
+      terrainY,
+      waterY,
+      floorY: waterStrength > 0.25 ? Math.max(terrainY, waterY) : terrainY,
     };
   }
 
-  function nearest(role, position, radius) {
-    let best = null;
-    let distance = radius * radius;
-    for (const candidate of records.values()) {
-      if (candidate.role !== role) continue;
-      const point = world.ecs.components.position.get(candidate.id);
-      const next = torusDistance(position, point, world.width, world.height);
-      if (next < distance) {
-        distance = next;
-        best = candidate;
-      }
-    }
-    return best;
+  function sampleNiche(x, y) {
+    const surface = sampleSurface(x / world.width, y / world.height);
+    return {
+      temperature: surface.temperature,
+      moisture: clamp(surface.rainfall * 0.7 + surface.river * 0.18 + surface.lake * 0.12, 0, 1),
+      elevation: clamp(surface.height, 0, 1),
+      water: surface.waterStrength,
+      land: !surface.water && surface.waterStrength < 0.72,
+    };
   }
 
-  function nearestOther(record, roles, radius) {
-    const origin = world.ecs.components.position.get(record.id);
+  function nearestLocalCreature(record, roles, radius, excludeSelf = false) {
+    const origin = world.ecs.components.position.get(record.entityId);
     let best = null;
-    let distance = radius * radius;
+    let bestDistance = radius * radius;
     for (const candidate of records.values()) {
-      if (candidate.id === record.id || !roles.includes(candidate.role)) continue;
-      const next = torusDistance(origin, world.ecs.components.position.get(candidate.id), world.width, world.height);
-      if (next < distance) {
-        distance = next;
+      if ((excludeSelf || candidate.entityId !== record.entityId) && candidate.entityId === record.entityId) continue;
+      if (candidate.entityId === record.entityId || !roles.includes(candidate.role)) continue;
+      const point = world.ecs.components.position.get(candidate.entityId);
+      const distance = torusDistance(origin, point, world.width, world.height);
+      if (distance < bestDistance) {
+        bestDistance = distance;
         best = candidate;
       }
     }
@@ -312,169 +511,188 @@ export function createEmbodiedEvolution(world, originSystem, groundLevel, option
   }
 
   function nearestResource(record, radius) {
-    const origin = world.ecs.components.position.get(record.id);
+    const origin = world.ecs.components.position.get(record.entityId);
     let best = null;
-    let distance = radius * radius;
-    for (const [id, resource] of world.ecs.components.resource.entries()) {
-      if ((resource.amount ?? 0) <= 0) continue;
-      const point = world.ecs.components.position.get(id);
-      const next = torusDistance(origin, point, world.width, world.height);
-      if (next < distance) {
-        distance = next;
+    let bestDistance = radius * radius;
+    for (const [entityId, resource] of world.ecs.components.resource.entries()) {
+      if ((resource.amount || 0) <= 0) continue;
+      const point = world.ecs.components.position.get(entityId);
+      if (!point) continue;
+      const distance = torusDistance(origin, point, world.width, world.height);
+      if (distance < bestDistance) {
+        bestDistance = distance;
         best = point;
       }
     }
     return best;
   }
 
-  function herdCenter(record, radius) {
-    const origin = world.ecs.components.position.get(record.id);
-    let x = 0;
-    let y = 0;
-    let count = 0;
-    for (const candidate of records.values()) {
-      if (candidate.id === record.id || candidate.role !== record.role) continue;
-      const point = world.ecs.components.position.get(candidate.id);
-      if (torusDistance(origin, point, world.width, world.height) > radius * radius) continue;
-      x += nearestCoordinate(point.x, origin.x, world.width);
-      y += nearestCoordinate(point.y, origin.y, world.height);
-      count++;
+  function nearestStructure(record, structures, types) {
+    const origin = world.ecs.components.position.get(record.entityId);
+    let best = null;
+    let bestDistance = Infinity;
+    for (const structure of structures) {
+      if (!types.includes(structure.type)) continue;
+      const distance = torusDistance(origin, structure, world.width, world.height);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = structure;
+      }
     }
-    return count ? { x: wrap(x / count, world.width), y: wrap(y / count, world.height) } : null;
+    return best;
   }
 
-  function setTarget(target, vehicle, point) {
-    const maxX = world.width * SCALE;
-    const maxZ = world.height * SCALE;
+  function setTarget(target, vehiclePosition, point) {
+    const maxX = world.width * GLOBAL_SCALE;
+    const maxZ = world.height * GLOBAL_SCALE;
     target.set(
-      nearestCoordinate(point.x * SCALE, vehicle.x, maxX),
+      vehiclePosition.x + shortest(point.x * GLOBAL_SCALE - vehiclePosition.x, maxX),
       0,
-      nearestCoordinate(point.y * SCALE, vehicle.z, maxZ),
+      clamp(vehiclePosition.z + shortest(point.y * GLOBAL_SCALE - vehiclePosition.z, maxZ), 0, maxZ),
     );
   }
 
-  function takeSavedGenome(role, position) {
-    let bestIndex = -1;
-    let bestDistance = Infinity;
-    for (let index = 0; index < savedGenomes.length; index++) {
-      const item = savedGenomes[index];
-      if (item.role !== role) continue;
-      const next = torusDistance(position, item, world.width, world.height);
-      if (next < bestDistance) {
-        bestDistance = next;
-        bestIndex = index;
-      }
-    }
-    if (bestIndex < 0) return null;
-    return savedGenomes.splice(bestIndex, 1)[0].genome;
+  function geoToLocal(point, navigation, level) {
+    const u = wrap(point.x / world.width, 1);
+    const v = clamp(point.y / world.height, 0, 1);
+    const units = worldUnitsPerTurn(level);
+    return {
+      x: turnDelta(u, navigation.u) * units,
+      z: (v - navigation.v) * units,
+    };
   }
 
   function save() {
     return {
-      elapsed, births, deaths, maxGeneration,
-      creatures: [...records.values()].map(record => {
-        const point = world.ecs.components.position.get(record.id);
-        return { role: record.role, x: point?.x || 0, y: point?.y || 0, genome: record.genome };
-      }),
+      version: 3,
+      ledger: ledger.save(),
     };
   }
 
   function load(state) {
-    if (!state) return;
-    elapsed = Math.max(0, state.elapsed || 0);
-    births = Math.max(0, state.births || 0);
-    deaths = Math.max(0, state.deaths || 0);
-    maxGeneration = Math.max(0, state.maxGeneration || 0);
-    savedGenomes = Array.isArray(state.creatures) ? state.creatures.slice(0, 90) : [];
+    ledger.load(state?.ledger || state);
   }
 
   function getState() {
-    return { counts: countRoles(), lineages: lineages.size, births, deaths, maxGeneration, creatures: records.size };
-  }
-
-  function countRoles() {
-    const counts = { agent: 0, predator: 0, apex: 0 };
-    for (const record of records.values()) counts[record.role]++;
-    return counts;
+    return {
+      ...ledger.getState(),
+      fullSimulationCount,
+      physicsReady: Boolean(physics?.ready),
+      renderedStructures: structureMeshes.size,
+    };
   }
 
   function destroy() {
     destroyed = true;
-    if (manager) for (const record of records.values()) manager.remove(record.vehicle);
-    records.clear();
-    canvas.remove();
+    trimAllLocalRecords();
+    physics?.clear?.();
+    renderer.dispose();
+    renderer.domElement.remove();
     hud.remove();
   }
 
   const api = {
     id: 'evolution.embodied-yuka',
-    name: 'Embodied Evolution and Creature AI',
-    version: '1.0.0',
-    execution: 'browser-yuka-canvas',
-    source: 'Yuka 0.7.8 steering plus Reality Sandbox heritable morphology',
-    license: 'MIT (Yuka) and project license',
-    provides: ['evolution.embodied', 'ai.yuka'],
+    name: 'True 3D Embodied Evolution and Emergent Societies',
+    version: '2.0.0',
+    execution: 'browser-three-rapier-yuka',
+    source: 'Yuka 0.7.8, Rapier 0.19.3, Three.js AnimationMixer, and Reality Sandbox lineage simulation',
+    license: 'MIT / Apache-2.0 / project license',
+    provides: ['evolution.embodied', 'evolution.lineages', 'evolution.societies', 'ai.yuka', 'physics.creatures'],
     requires: ['origin.abiogenesis', 'exploration.ground-level'],
     after: ['terrain.ground-level', 'origin.surface-visuals'],
-    initialize, step, render, save, load, getState, destroy,
+    initialize,
+    step,
+    render,
+    save,
+    load,
+    getState,
+    getSpecies: ledger.getSpecies,
+    getStructures: ledger.getStructures,
+    destroy,
   };
+
   return api;
 }
 
-function drawCreature({ record, x, y, size }, context) {
-  const g = record.genome;
-  const speed = clamp(record.vehicle.getSpeed() / Math.max(0.001, record.vehicle.maxSpeed), 0, 1);
-  const gait = Math.sin(record.gait) * speed;
-  const length = size * (0.95 + g.length * 0.5);
-  const bodyHeight = size * (0.38 + g.depth * 0.2);
-  const leg = size * (0.42 + g.legs * 0.38);
-  const hue = wrap(g.hue + (record.role === 'predator' ? -20 : record.role === 'apex' ? 35 : 0), 360);
-  context.save();
-  context.translate(x, y);
-  context.fillStyle = 'rgba(0,0,0,.24)';
-  context.beginPath();
-  context.ellipse(0, size * 0.08, length * 0.62, size * 0.13, 0, 0, Math.PI * 2);
-  context.fill();
-  context.strokeStyle = `hsla(${hue},55%,62%,.95)`;
-  context.lineWidth = Math.max(1.2, size * 0.075);
-  context.lineCap = 'round';
-  for (const side of [-1, 1]) {
-    context.beginPath();
-    context.moveTo(side * length * 0.28, -bodyHeight * 0.05);
-    context.lineTo(side * length * 0.28 + gait * leg * 0.25, leg * 0.58);
-    context.lineTo(side * length * 0.28 - gait * leg * 0.34, leg);
-    context.stroke();
+function createStructureMesh(structure, mobile) {
+  const group = new THREE.Group();
+  group.userData.type = structure.type;
+  const speciesHue = hashString(structure.speciesId) % 360;
+  const primary = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(`hsl(${speciesHue} 42% 48%)`),
+    roughness: 0.92,
+    metalness: 0,
+  });
+  const accent = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(`hsl(${wrap(speciesHue + 55, 360)} 58% 62%)`),
+    roughness: 0.76,
+    metalness: 0.02,
+  });
+
+  if (structure.type === 'nest') {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.014, 5, mobile ? 12 : 22), primary);
+    ring.rotation.x = Math.PI * 0.5;
+    group.add(ring);
+    for (let index = 0; index < (mobile ? 4 : 7); index++) {
+      const twig = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.006, 0.13, 4), accent);
+      twig.rotation.z = Math.PI * 0.5;
+      twig.rotation.y = index / (mobile ? 4 : 7) * Math.PI;
+      twig.position.y = 0.014;
+      group.add(twig);
+    }
+  } else if (structure.type === 'tool-cache') {
+    for (let index = 0; index < (mobile ? 3 : 6); index++) {
+      const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(0.018 + index * 0.0015, 0), index % 2 ? accent : primary);
+      stone.position.set((index % 3 - 1) * 0.026, 0.018, (Math.floor(index / 3) - 0.5) * 0.03);
+      group.add(stone);
+    }
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.12, 5), accent);
+    handle.rotation.z = Math.PI * 0.42;
+    handle.position.y = 0.035;
+    group.add(handle);
+  } else if (structure.type === 'territory') {
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(`hsl(${speciesHue} 70% 62%)`),
+      transparent: true,
+      opacity: 0.24,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.235, mobile ? 24 : 48), ringMaterial);
+    ring.rotation.x = -Math.PI * 0.5;
+    group.add(ring);
+  } else if (structure.type === 'settlement') {
+    const huts = mobile ? 2 : 3 + Math.floor(structure.progress * 3);
+    for (let index = 0; index < huts; index++) {
+      const angle = index / huts * Math.PI * 2;
+      const radius = 0.04 + (index % 2) * 0.035;
+      const hut = new THREE.Group();
+      hut.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+      const wall = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.034, 0.055, mobile ? 6 : 9), primary);
+      wall.position.y = 0.028;
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.045, mobile ? 6 : 9), accent);
+      roof.position.y = 0.072;
+      hut.add(wall, roof);
+      group.add(hut);
+    }
+    const hearth = new THREE.Mesh(new THREE.SphereGeometry(0.012, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffa64a }));
+    hearth.position.y = 0.012;
+    group.add(hearth);
   }
-  context.fillStyle = `hsl(${hue} 55% ${record.role === 'apex' ? 43 : 53}%)`;
-  context.beginPath();
-  context.ellipse(0, -bodyHeight * 0.42, length * 0.5, bodyHeight * 0.62, g.tilt * 0.18, 0, Math.PI * 2);
-  context.fill();
-  const headX = length * 0.46;
-  const headY = -bodyHeight * (0.55 + g.neck * 0.3);
-  context.beginPath();
-  context.ellipse(headX, headY, size * (0.18 + g.head * 0.12), size * (0.15 + g.head * 0.1), -0.1, 0, Math.PI * 2);
-  context.fill();
-  context.strokeStyle = `hsla(${hue},65%,72%,.85)`;
-  context.lineWidth = Math.max(0.8, size * 0.035);
-  context.beginPath();
-  context.moveTo(-length * 0.48, -bodyHeight * 0.42);
-  context.quadraticCurveTo(-length * 0.7, -bodyHeight * 1.1, -length * (0.72 + g.tail * 0.28), -bodyHeight * 0.3);
-  context.stroke();
-  if (record.role !== 'agent' || g.display > 0.56) {
-    context.beginPath();
-    context.moveTo(headX - size * 0.06, headY - size * 0.12);
-    context.lineTo(headX - size * (0.04 + g.display * 0.16), headY - size * (0.28 + g.display * 0.16));
-    context.moveTo(headX + size * 0.07, headY - size * 0.12);
-    context.lineTo(headX + size * (0.12 + g.display * 0.14), headY - size * (0.27 + g.display * 0.15));
-    context.stroke();
-  }
-  if (size > 25) {
-    context.fillStyle = 'rgba(225,255,245,.78)';
-    context.font = `${Math.max(9, size * 0.105)}px ui-monospace,monospace`;
-    context.textAlign = 'center';
-    context.fillText(`${LABEL[record.role]} · ${g.lineage}`, 0, -bodyHeight * 1.55);
-  }
-  context.restore();
+
+  group.traverse(object => {
+    if (object.isMesh) object.castShadow = true;
+  });
+  return group;
+}
+
+function disposeObject(root) {
+  root.traverse(object => {
+    object.geometry?.dispose?.();
+    if (Array.isArray(object.material)) object.material.forEach(material => material.dispose?.());
+    else object.material?.dispose?.();
+  });
 }
 
 async function loadYuka() {
@@ -489,55 +707,8 @@ async function loadYuka() {
   throw new Error(`Unable to load Yuka 0.7.8: ${error?.message || 'network unavailable'}`);
 }
 
-function mutate(parent, dna = {}, role, rng) {
-  const base = parent || {
-    speed: dna.speed ?? 1, sense: dna.sense ?? 1, metabolism: dna.metabolism ?? 1,
-    stamina: 0.8 + rng() * 0.4, social: role === 'agent' ? 0.58 + rng() * 0.32 : 0.12 + rng() * 0.35,
-    caution: role === 'agent' ? 0.55 + rng() * 0.35 : 0.18 + rng() * 0.3,
-    size: role === 'apex' ? 1.35 : role === 'predator' ? 1.08 : 0.85 + rng() * 0.28,
-    length: 0.55 + rng() * 0.45, depth: 0.4 + rng() * 0.5, legs: 0.55 + rng() * 0.48,
-    neck: 0.35 + rng() * 0.55, head: 0.4 + rng() * 0.55, tail: 0.35 + rng() * 0.65,
-    tilt: (rng() - 0.5) * 0.8, display: rng(),
-    hue: role === 'agent' ? 150 + rng() * 90 : role === 'predator' ? 5 + rng() * 55 : 205 + rng() * 75,
-    generation: 0, lineage: '',
-  };
-  const generation = (parent?.generation || 0) + (parent ? 1 : 0);
-  const amount = parent ? 0.055 + Math.min(0.045, generation * 0.002) : 0;
-  const next = { ...base, generation };
-  for (const key of ['speed', 'sense', 'metabolism', 'stamina', 'social', 'caution', 'size', 'length', 'depth', 'legs', 'neck', 'head', 'tail', 'tilt', 'display']) {
-    next[key] = (base[key] ?? 0.5) + (rng() - 0.5) * amount * 2;
-  }
-  next.hue = (base.hue ?? 180) + (rng() - 0.5) * amount * 120;
-  return next;
-}
-
-function normalizeGenome(g = {}, role) {
-  return {
-    speed: clamp(g.speed ?? 1, 0.45, 1.8), sense: clamp(g.sense ?? 1, 0.4, 2),
-    metabolism: clamp(g.metabolism ?? 1, 0.45, 1.8), stamina: clamp(g.stamina ?? 1, 0.45, 1.7),
-    social: clamp(g.social ?? (role === 'agent' ? 0.7 : 0.25), 0, 1), caution: clamp(g.caution ?? 0.5, 0, 1),
-    size: clamp(g.size ?? 1, 0.55, 1.75), length: clamp(g.length ?? 0.7, 0.2, 1.3),
-    depth: clamp(g.depth ?? 0.65, 0.2, 1.3), legs: clamp(g.legs ?? 0.75, 0.25, 1.5),
-    neck: clamp(g.neck ?? 0.55, 0.1, 1.4), head: clamp(g.head ?? 0.6, 0.2, 1.35),
-    tail: clamp(g.tail ?? 0.6, 0.05, 1.5), tilt: clamp(g.tilt ?? 0, -1, 1),
-    display: clamp(g.display ?? 0.5, 0, 1), hue: wrap(g.hue ?? 180, 360),
-    generation: Math.max(0, Math.floor(g.generation || 0)), lineage: String(g.lineage || ''),
-  };
-}
-
-function genomeDistance(a, b) {
-  const keys = ['speed', 'sense', 'metabolism', 'stamina', 'social', 'caution', 'size', 'length', 'depth', 'legs', 'neck', 'head', 'tail', 'display'];
-  return keys.reduce((sum, key) => sum + Math.abs((a[key] || 0) - (b[key] || 0)), 0) / keys.length;
-}
-
-function hashGenome(g) {
-  const text = [g.hue, g.size, g.legs, g.sense, g.social, g.generation].map(value => Math.round((value || 0) * 100)).join(':');
-  let hash = 2166136261;
-  for (let index = 0; index < text.length; index++) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
+function worldUnitsPerTurn(level) {
+  return PATCH_SIZE * (2 ** level);
 }
 
 function torusDistance(a, b, width, height) {
@@ -546,27 +717,39 @@ function torusDistance(a, b, width, height) {
   const dy = shortest((b.y || 0) - (a.y || 0), height);
   return dx * dx + dy * dy;
 }
-function nearestCoordinate(value, reference, period) { return reference + shortest(value - reference, period); }
+
 function shortest(delta, period) {
   if (delta > period * 0.5) return delta - period;
   if (delta < -period * 0.5) return delta + period;
   return delta;
 }
+
 function turnDelta(value, reference) {
   let delta = value - reference;
   if (delta > 0.5) delta -= 1;
   if (delta < -0.5) delta += 1;
   return delta;
 }
+
+function hashString(text) {
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index++) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 function mulberry32(seed) {
   let value = seed >>> 0;
   return () => {
     value += 0x6D2B79F5;
-    let t = value;
-    t = Math.imul(t ^ t >>> 15, t | 1);
-    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    let result = value;
+    result = Math.imul(result ^ result >>> 15, result | 1);
+    result ^= result + Math.imul(result ^ result >>> 7, result | 61);
+    return ((result ^ result >>> 14) >>> 0) / 4294967296;
   };
 }
+
 const wrap = (value, max) => ((value % max) + max) % max;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
