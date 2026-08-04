@@ -8,6 +8,7 @@ import { createGalaxySystem } from './core/galaxy-system.js';
 import { createOrbitalSystem } from './core/orbital-system.js';
 import { createSurfaceCharacter } from './core/surface-character.js';
 import { createCloseupPolish } from './core/closeup-polish.js';
+import { createGroundLevelPhase } from './core/ground-level-phase.js';
 import { placeExistingEntitiesOnBiomes } from './core/planet.js';
 import { createLivingSystems } from './core/living-systems.js';
 import { createPlanetDynamics } from './core/planet-dynamics.js';
@@ -24,6 +25,7 @@ let globe;
 let galaxyLayer;
 let surfaceCharacter;
 let closeupPolish;
+let groundLevelPhase;
 let stepSphere;
 let moduleHost;
 let accumulator = 0;
@@ -81,7 +83,15 @@ function loop(timestamp) {
   const cameraState = globe.getCameraState();
   globe.render(world);
   galaxyLayer.render(cameraState, timestamp);
-  moduleHost.render({ world, globe, galaxyLayer, surfaceCharacter, closeupPolish, timestamp });
+  moduleHost.render({
+    world,
+    globe,
+    galaxyLayer,
+    surfaceCharacter,
+    closeupPolish,
+    groundLevelPhase,
+    timestamp,
+  });
 
   if (timestamp - lastSave > 5000) {
     lastSave = timestamp;
@@ -129,6 +139,9 @@ async function init() {
     );
 
     galaxyLayer = createGalaxyRenderLayer(worldElement, galaxySystem);
+    groundLevelPhase = createGroundLevelPhase(worldElement, globe, {
+      mobile: matchMedia('(max-width: 720px), (pointer: coarse)').matches,
+    });
     closeupPolish = createCloseupPolish(globe);
     surfaceCharacter = createSurfaceCharacter(globe);
 
@@ -144,6 +157,7 @@ async function init() {
       dynamics,
       reboundEndpoint: null,
     });
+    moduleHost.register(groundLevelPhase);
     await moduleHost.initialize();
     await moduleHost.load(saved.modules || {});
 
@@ -152,6 +166,7 @@ async function init() {
     window.realitySandboxGalaxy = galaxySystem;
     window.realitySandboxCharacter = surfaceCharacter;
     window.realitySandboxCloseup = closeupPolish;
+    window.realitySandboxGround = groundLevelPhase;
     globe.render(world);
     galaxyLayer.render(globe.getCameraState());
     requestAnimationFrame(loop);
