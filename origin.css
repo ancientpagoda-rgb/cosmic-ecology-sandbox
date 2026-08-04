@@ -1,0 +1,132 @@
+.origin-hud {
+  position: fixed;
+  z-index: 26;
+  left: max(18px, env(safe-area-inset-left));
+  top: max(18px, env(safe-area-inset-top));
+  width: min(440px, calc(100vw - 36px));
+  padding: 11px 13px;
+  border: 1px solid rgba(193, 214, 238, 0.25);
+  border-radius: 11px;
+  background: linear-gradient(145deg, rgba(6, 10, 20, 0.86), rgba(13, 18, 29, 0.76));
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(11px);
+  color: #dcecff;
+  font: 10px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+  pointer-events: none;
+}
+
+.origin-hud__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 3px;
+  color: #f6fbff;
+  letter-spacing: 0.09em;
+}
+
+.origin-hud__title span {
+  color: #9bb6d7;
+  font-size: 8px;
+}
+
+.origin-hud__phase {
+  color: #b9dcff;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.origin-hud__detail {
+  margin-top: 2px;
+  color: #a8b7ca;
+}
+
+.origin-hud__bar {
+  height: 3px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.origin-hud__bar i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, #668cff, #82d8c6, #d6e97d);
+  transition: transform 0.25s linear;
+}
+
+.origin-hud__meta {
+  margin-top: 5px;
+  color: #73879e;
+  font-size: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 14;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.7s ease, background 0.7s ease;
+}
+
+body[data-origin-stage='galactic-enrichment']::after,
+body[data-origin-stage='stellar-disk']::after {
+  opacity: 0.22;
+  background: radial-gradient(circle at 52% 48%, rgba(255, 173, 93, 0.2), rgba(8, 14, 31, 0.45) 58%, rgba(0, 0, 0, 0.62));
+}
+
+body[data-origin-stage='planetary-accretion']::after,
+body[data-origin-stage='molten-world']::after {
+  opacity: 0.28;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 107, 46, 0.32), rgba(90, 25, 12, 0.18) 38%, rgba(1, 2, 8, 0.34) 72%);
+}
+
+body[data-origin-stage='ocean-atmosphere']::after,
+body[data-origin-stage='prebiotic-chemistry']::after,
+body[data-origin-stage='protocells']::after {
+  opacity: 0.12;
+  background: linear-gradient(rgba(47, 121, 161, 0.12), rgba(4, 22, 34, 0.18));
+}
+
+body.origin-surface-locked .ground-level-hud,
+body.origin-surface-locked .surface-character-ui,
+body.origin-surface-locked .ground-level-reticle {
+  display: none !important;
+}
+
+@media (max-width: 720px) {
+  .origin-hud {
+    top: max(12px, env(safe-area-inset-top));
+    left: max(12px, env(safe-area-inset-left));
+    width: min(390px, calc(100vw - 24px));
+    padding: 9px 10px;
+    font-size: 9px;
+  }
+
+  .origin-hud__detail {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .origin-hud__meta {
+    font-size: 7px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .origin-hud__bar i,
+  body::after {
+    transition: none;
+  }
+}
