@@ -207,6 +207,7 @@ async function init() {
       phase10: phase10Engine,
       phase11: phase11Engine,
     }, { mobile, seed: 20260811 });
+    unifiedRuntime.requires = ['orbits.system', 'cosmology.flrw'];
     closeupPolish = createCloseupPolish(globe);
     surfaceCharacter = createSurfaceCharacter(globe, { groundLevel: groundLevelPhase });
 
