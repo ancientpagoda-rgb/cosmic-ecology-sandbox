@@ -186,6 +186,7 @@ async function init() {
       },
     };
     phase11Engine = createPhase11Engine(world, phase10Engine, galaxySystem, { mobile, seed: 20260810 });
+    phase11Engine.step(0);
     phase11Module = {
       ...phase11Engine,
       step(dt) {
