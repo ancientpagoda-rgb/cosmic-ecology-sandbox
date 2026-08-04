@@ -1,7 +1,7 @@
 {
   "name": "reality-sandbox",
   "private": true,
-  "version": "2.3.1",
+  "version": "2.3.0",
   "type": "module",
   "description": "A modular living planetary and universe simulation sandbox.",
   "scripts": {
