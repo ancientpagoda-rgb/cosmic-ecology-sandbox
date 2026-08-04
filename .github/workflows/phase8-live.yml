@@ -45,7 +45,7 @@ jobs:
           }
 
           fetch_live "${BASE_URL}?verify=${HEAD_SHA}" /tmp/phase8-index.html
-          grep -q "Interactive galaxy" /tmp/phase8-index.html
+          grep -q "Interactive observable universe" /tmp/phase8-index.html
           ASSET_PATH=$(grep -oE 'src="[^"]+\.js[^"]*"' /tmp/phase8-index.html | head -n 1 | cut -d'"' -f2)
           test -n "${ASSET_PATH}"
           if [[ "${ASSET_PATH}" == http* ]]; then
