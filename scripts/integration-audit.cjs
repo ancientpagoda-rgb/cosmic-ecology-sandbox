@@ -106,6 +106,18 @@ requireText('scripts/unified-smoke.cjs', "initial.controls === 0", 'zero visible
 requireText('scripts/unified-smoke.cjs', 'initial.unified.audio.enabled === false', 'audio absence assertion');
 requireText('.github/workflows/unified-live.yml', 'REALITY_REQUIRE_REBOUND: "1"', 'live REBOUND requirement');
 
+for (const [phase, moduleId, obsoleteRootMarker] of [
+  [8, 'civilization.phase8-institutions-industry-spaceflight', 'Unified interactive observable universe'],
+  [9, 'civilization.phase9-multiworld-ai-contact', 'Unified interactive observable universe'],
+  [10, 'civilization.phase10-relativistic-deep-time', 'relativistic missions'],
+  [11, 'civilization.phase11-cosmological-evolution', 'cosmological expansion'],
+]) {
+  const workflow = `.github/workflows/phase${phase}-live.yml`;
+  requireText(workflow, 'single deterministic lo-fi pixel living world', `Phase ${phase} lo-fi root marker`);
+  requireText(workflow, moduleId, `Phase ${phase} deployed module signature`);
+  forbidText(workflow, obsoleteRootMarker, `obsolete Phase ${phase} root copy marker`);
+}
+
 requireText('core/debug-bridge.js', 'window.realitySandboxDebug = api', 'debug API exposure');
 requireText('core/debug-bridge.js', 'seedPhase11Scenario', 'Phase 11 scenario injection');
 requireText('core/debug-bridge.js', 'captureWebGL', 'Spector WebGL capture hook');

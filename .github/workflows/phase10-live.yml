@@ -44,7 +44,7 @@ jobs:
           }
 
           fetch_live "${BASE_URL}?verify=${HEAD_SHA}" /tmp/phase10-index.html
-          grep -q "relativistic missions" /tmp/phase10-index.html
+          grep -q "single deterministic lo-fi pixel living world" /tmp/phase10-index.html
           ASSET_PATH=$(grep -oE 'src="[^"]+\.js[^"]*"' /tmp/phase10-index.html | head -n 1 | cut -d'"' -f2)
           test -n "${ASSET_PATH}"
           if [[ "${ASSET_PATH}" == http* ]]; then
