@@ -14,7 +14,7 @@ import { createPhase8Engine } from './core/phase8-engine.js';
 import { createPhase9Engine } from './core/phase9-engine.js';
 import { createPhase10Engine } from './core/phase10-engine.js';
 import { createPhase11Engine } from './core/phase11-engine.js';
-import { createUnifiedRuntime } from './core/unified-runtime.js';
+import { createLofiLivingRuntime } from './core/lofi-living-runtime.js';
 import { installUnifiedDebugExtension } from './core/unified-debug-extension.js';
 import { createDebugBridge } from './core/debug-bridge.js';
 import { createSurfaceCharacter } from './core/surface-character.js';
@@ -138,7 +138,7 @@ function showError(error) {
   document.getElementById('loadingState')?.remove();
   const panel = document.getElementById('errorState');
   if (panel) {
-    panel.textContent = error?.message || 'Unable to start the globe.';
+    panel.textContent = error?.message || 'Unable to start the living world.';
     panel.hidden = false;
   }
 }
@@ -199,7 +199,7 @@ async function init() {
         if ((phase10State.simulatedYears || 0) > 0 || explicitlySeeded) phase11Engine.step(dt);
       },
     };
-    unifiedRuntime = createUnifiedRuntime(world, {
+    unifiedRuntime = createLofiLivingRuntime(world, {
       orbitalSystem,
       dynamics,
       phase8: phase8Engine,
@@ -250,7 +250,14 @@ async function init() {
     window.realitySandboxPhase10 = phase10Engine;
     window.realitySandboxPhase11 = phase11Engine;
     window.realitySandboxUnified = unifiedRuntime;
-    window.realitySandboxFactories = { createPhase8Engine, createPhase9Engine, createPhase10Engine, createPhase11Engine, createUnifiedRuntime };
+    window.realitySandboxFactories = {
+      createPhase8Engine,
+      createPhase9Engine,
+      createPhase10Engine,
+      createPhase11Engine,
+      createLofiLivingRuntime,
+      createUnifiedRuntime: createLofiLivingRuntime,
+    };
     window.realitySandboxCharacter = surfaceCharacter;
     window.realitySandboxCloseup = closeupPolish;
     window.realitySandboxGround = groundLevelPhase;

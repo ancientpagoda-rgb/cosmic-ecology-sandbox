@@ -3,34 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#01030a" />
+  <meta name="theme-color" content="#101820" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <title>Reality Sandbox</title>
+  <title>Reality Sandbox · Living World</title>
   <link rel="stylesheet" href="globe-only.css?v=20260804-ground-phase2" />
   <link rel="stylesheet" href="origin.css?v=20260804-emergent-origin2" />
-  <link rel="stylesheet" href="unified-runtime.css?v=20260804-unified-runtime" />
+  <link rel="stylesheet" href="unified-runtime.css?v=20260804-lofi-living-root" />
 </head>
 <body data-unified-view="living">
-  <main id="world" aria-label="Unified interactive observable universe with planetary formation, abiogenesis, evolving life, civilizations, colonies, autonomous machines, relativistic missions, stellar and galaxy evolution, cosmological expansion, Howler.js sound, PixiJS presentation, Astronomy Engine validation, REBOUND orbital physics, gravitational waves, causal horizons, large-scale structure, and continuous ground exploration">
-    <div id="errorState" role="alert" hidden>Unable to start the universe.</div>
+  <main id="world" aria-label="A single deterministic lo-fi pixel living world backed by the Reality Sandbox simulation">
+    <div id="errorState" role="alert" hidden>Unable to start the living world.</div>
   </main>
-  <script>
-    try {
-      const compatibilityDefaults = {
-        'reality-v6-9-audio-volume': '0.58',
-        'reality-v6-9-audio-muted': 'false',
-        'reality-v6-8-pixi-palette': 'phosphor',
-        'reality-v6-8-pixi-enabled': 'on',
-      };
-      for (const [key, value] of Object.entries(compatibilityDefaults)) {
-        if (localStorage.getItem(key) === null) localStorage.setItem(key, value);
-      }
-    } catch {
-      // Storage can be unavailable in private browsing.
-    }
-  </script>
-  <script type="module" src="/app.js?v=20260804-unified-v69-phase11"></script>
+  <script type="module" src="/app.js?v=20260804-lofi-living-root"></script>
 </body>
 </html>
