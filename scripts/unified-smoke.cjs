@@ -29,17 +29,30 @@ fs.mkdirSync(artifactDir, { recursive: true });
     await page.waitForFunction(() => Boolean(window.realitySandboxDebug?.ready && window.realitySandboxUnified), null, { timeout: 120000 });
     await page.waitForTimeout(1200);
 
-    const initial = await page.evaluate(() => ({
-      diagnostics: window.realitySandboxDebug.diagnostics(),
-      unified: window.realitySandboxUnified.getSnapshot(),
-      modules: window.realitySandboxModules.list().map(module => module.id),
-      panel: Boolean(document.getElementById('unifiedRuntimePanel')),
-      controls: document.querySelectorAll('button, select, input, output, [data-unified-view], [data-unified-sound]').length,
-      canvas: document.getElementById('lofiLivingCanvas') ? {
-        connected: document.getElementById('lofiLivingCanvas').isConnected,
-        imageRendering: getComputedStyle(document.getElementById('lofiLivingCanvas')).imageRendering,
-      } : null,
-    }));
+    const initial = await page.evaluate(() => {
+      const controls = [...document.querySelectorAll('button, select, input, output, [data-unified-view], [data-unified-sound]')]
+        .filter(element => {
+          const style = getComputedStyle(element);
+          const rect = element.getBoundingClientRect();
+          return style.display !== 'none'
+            && style.visibility !== 'hidden'
+            && Number(style.opacity) > 0
+            && rect.width > 0
+            && rect.height > 0;
+        }).length;
+      const canvas = document.getElementById('lofiLivingCanvas');
+      return {
+        diagnostics: window.realitySandboxDebug.diagnostics(),
+        unified: window.realitySandboxUnified.getSnapshot(),
+        modules: window.realitySandboxModules.list().map(module => module.id),
+        panel: Boolean(document.getElementById('unifiedRuntimePanel')),
+        controls,
+        canvas: canvas ? {
+          connected: canvas.isConnected,
+          imageRendering: getComputedStyle(canvas).imageRendering,
+        } : null,
+      };
+    });
     writeJson('initial.json', initial);
     assert(initial.diagnostics.ok, `Initial diagnostics failed: ${initial.diagnostics.failures.join(', ')}`);
     assert(initial.modules.includes('runtime.lofi-living-world'), 'The lo-fi living-world runtime was not registered.');
