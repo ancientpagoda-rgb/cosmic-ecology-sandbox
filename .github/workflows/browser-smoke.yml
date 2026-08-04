@@ -49,12 +49,20 @@ jobs:
           cat /tmp/reality-preview.log
           exit 1
 
-      - name: Run browser simulation diagnostics
+      - name: Run Phase 11 browser diagnostics
         id: browser_test
         env:
           REALITY_BASE_URL: http://127.0.0.1:4173/
           REALITY_ARTIFACT_DIR: artifacts/browser-smoke
         run: node scripts/browser-smoke.cjs
+
+      - name: Run unified runtime diagnostics
+        id: unified_test
+        env:
+          REALITY_BASE_URL: http://127.0.0.1:4173/
+          REALITY_UNIFIED_ARTIFACT_DIR: artifacts/unified-smoke
+          REALITY_REQUIRE_REBOUND: "0"
+        run: node scripts/unified-smoke.cjs
 
       - name: Upload browser diagnostics
         if: always()
@@ -63,6 +71,7 @@ jobs:
           name: reality-browser-diagnostics-${{ github.sha }}
           path: |
             artifacts/browser-smoke
+            artifacts/unified-smoke
             /tmp/reality-preview.log
           if-no-files-found: warn
           retention-days: 30
@@ -72,13 +81,15 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const ok = '${{ steps.browser_test.outcome }}' === 'success';
+            const phase11Ok = '${{ steps.browser_test.outcome }}' === 'success';
+            const unifiedOk = '${{ steps.unified_test.outcome }}' === 'success';
+            const ok = phase11Ok && unifiedOk;
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
               state: ok ? 'success' : 'failure',
-              context: 'browser/phase11-smoke',
-              description: ok ? 'Integration audit and Phase 11 browser diagnostics passed' : 'Integration audit or Phase 11 browser diagnostics failed',
+              context: 'browser/unified-runtime',
+              description: ok ? 'Phase 11 and unified V6.9 runtime diagnostics passed' : 'Phase 11 or unified runtime diagnostics failed',
               target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions`,
             });
