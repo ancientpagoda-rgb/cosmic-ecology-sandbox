@@ -6,6 +6,7 @@ import { createGlobeRenderer } from './core/globe-render-v4.js';
 import { createGalaxyRenderLayer } from './core/galaxy-render-layer.js';
 import { createGalaxySystem } from './core/galaxy-system.js';
 import { createOrbitalSystem } from './core/orbital-system.js';
+import { createCosmicOrigin } from './core/cosmic-origin.js';
 import { createSurfaceCharacter } from './core/surface-character.js';
 import { createCloseupPolish } from './core/closeup-polish.js';
 import { createGroundLevelPhase } from './core/ground-level-phase.js';
@@ -26,6 +27,7 @@ let galaxyLayer;
 let surfaceCharacter;
 let closeupPolish;
 let groundLevelPhase;
+let originSystem;
 let stepSphere;
 let moduleHost;
 let accumulator = 0;
@@ -90,6 +92,7 @@ function loop(timestamp) {
     surfaceCharacter,
     closeupPolish,
     groundLevelPhase,
+    originSystem,
     timestamp,
   });
 
@@ -113,12 +116,20 @@ async function init() {
   try {
     const rng = createRng('stable-world');
     world = createWorld(rng);
-    placeExistingEntitiesOnBiomes(world, Math.random);
     restoreWorldState();
 
-    stepSphere = createSphericalStepper(world);
-    const orbitalSystem = createOrbitalSystem(world);
     const galaxySystem = createGalaxySystem({ seed: 20260802 });
+    const orbitalSystem = createOrbitalSystem(world, {
+      star: galaxySystem.getLocalStar(),
+      seed: 20260804,
+    });
+    originSystem = createCosmicOrigin(world, galaxySystem, orbitalSystem, {
+      seed: 20260804,
+    });
+    originSystem.prepare();
+
+    placeExistingEntitiesOnBiomes(world, Math.random);
+    stepSphere = createSphericalStepper(world);
     const living = createLivingSystems(world);
     const biosphere = createBiosphere(world);
     const waterCycle = createWaterCycle(world, orbitalSystem);
@@ -137,6 +148,7 @@ async function init() {
         onError: showError,
       },
     );
+    originSystem.attachGlobe(globe);
 
     galaxyLayer = createGalaxyRenderLayer(worldElement, galaxySystem);
     groundLevelPhase = createGroundLevelPhase(worldElement, globe, {
@@ -148,6 +160,7 @@ async function init() {
     });
 
     moduleHost = createModuleHost({ world });
+    moduleHost.register(originSystem);
     registerCurrentModules(moduleHost, {
       globe,
       galaxyLayer,
@@ -166,6 +179,7 @@ async function init() {
     window.realitySandboxModules = moduleHost;
     window.realitySandboxOrbits = orbitalSystem;
     window.realitySandboxGalaxy = galaxySystem;
+    window.realitySandboxOrigin = originSystem;
     window.realitySandboxCharacter = surfaceCharacter;
     window.realitySandboxCloseup = closeupPolish;
     window.realitySandboxGround = groundLevelPhase;
