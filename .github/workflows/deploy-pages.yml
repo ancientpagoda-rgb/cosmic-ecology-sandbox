@@ -38,11 +38,10 @@ jobs:
         run: npm install
 
       - name: Report dependencies ready
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          jq -n --arg state success --arg target_url "https://github.com/${GITHUB_REPOSITORY}/actions" --arg description "npm dependencies installed" --arg context "pages/v6.9-dependencies" '{state:$state,target_url:$target_url,description:$description,context:$context}' > /tmp/status.json
-          curl --fail --silent --show-error --location --request POST --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" --data-binary @/tmp/status.json
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-dependencies', description: 'npm dependencies installed', target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions`});
 
       - name: Cache Emscripten SDK
         uses: actions/cache@v4
@@ -50,35 +49,72 @@ jobs:
           path: .cache/emsdk
           key: emsdk-${{ runner.os }}-latest-v1
 
-      - name: Build same-origin REBOUND WebAssembly
+      - name: Report Emscripten cache ready
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-emsdk-cache', description: 'Emscripten cache step completed'});
+
+      - name: Prepare Emscripten SDK repository
         run: |
           if [ ! -f .cache/emsdk/emsdk ]; then
+            rm -rf .cache/emsdk
             git clone --depth 1 https://github.com/emscripten-core/emsdk.git .cache/emsdk
           else
             git -C .cache/emsdk fetch --depth 1 origin main
             git -C .cache/emsdk reset --hard origin/main
           fi
+
+      - name: Report Emscripten repository ready
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-emsdk-repo', description: 'Emscripten SDK repository prepared'});
+
+      - name: Install Emscripten SDK
+        run: |
           .cache/emsdk/emsdk install latest
           .cache/emsdk/emsdk activate latest
+          test -f .cache/emsdk/emsdk_env.sh
+
+      - name: Report Emscripten ready
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-emsdk', description: 'Emscripten SDK installed'});
+
+      - name: Prepare REBOUND 5.0.0 source
+        run: |
+          if [ ! -d .cache/rebound-5.0.0/.git ]; then
+            rm -rf .cache/rebound-5.0.0
+            git clone --depth 1 --branch 5.0.0 https://github.com/hannorein/rebound.git .cache/rebound-5.0.0
+          fi
+
+      - name: Report REBOUND source ready
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-rebound-source', description: 'REBOUND 5.0.0 source prepared'});
+
+      - name: Build same-origin REBOUND WebAssembly
+        run: |
           source .cache/emsdk/emsdk_env.sh
           bash scripts/build-rebound-wasm.sh
 
       - name: Report REBOUND ready
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          jq -n --arg state success --arg target_url "https://github.com/${GITHUB_REPOSITORY}/actions" --arg description "REBOUND WebAssembly compiled" --arg context "pages/v6.9-rebound" '{state:$state,target_url:$target_url,description:$description,context:$context}' > /tmp/status.json
-          curl --fail --silent --show-error --location --request POST --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" --data-binary @/tmp/status.json
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-rebound', description: 'REBOUND WebAssembly compiled'});
 
       - name: Build
         run: npm run build
 
       - name: Report Vite build ready
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          jq -n --arg state success --arg target_url "https://github.com/${GITHUB_REPOSITORY}/actions" --arg description "Vite production build completed" --arg context "pages/v6.9-build" '{state:$state,target_url:$target_url,description:$description,context:$context}' > /tmp/status.json
-          curl --fail --silent --show-error --location --request POST --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" --data-binary @/tmp/status.json
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-build', description: 'Vite production build completed'});
 
       - name: Smoke test V6.9 artifact
         run: |
@@ -95,11 +131,10 @@ jobs:
           test -s dist/rebound-v6-6/rebound.wasm
 
       - name: Report artifact ready
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          jq -n --arg state success --arg target_url "https://github.com/${GITHUB_REPOSITORY}/actions" --arg description "V6.9 artifact smoke tests passed" --arg context "pages/v6.9-artifact" '{state:$state,target_url:$target_url,description:$description,context:$context}' > /tmp/status.json
-          curl --fail --silent --show-error --location --request POST --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" --data-binary @/tmp/status.json
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-artifact', description: 'V6.9 artifact smoke tests passed'});
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -143,20 +178,15 @@ jobs:
           curl --fail --silent --show-error --location --max-time 30 "${BASE_URL}rebound-v6-6/rebound.wasm?verify=${GITHUB_SHA}" --output /tmp/rebound.wasm
           test -s /tmp/rebound.js
           test -s /tmp/rebound.wasm
-          echo "Verified live V6.9 Howler.js soundscape: ${V69_URL}"
 
       - name: Publish live verification status
         if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PAGE_URL: ${{ needs.deploy.outputs.page_url }}
-          VERIFY_OUTCOME: ${{ steps.livecheck.outcome }}
-        run: |
-          BASE_URL="${PAGE_URL%/}/"
-          TARGET_URL="${BASE_URL}reality-engine-v6-9.html?verify=${GITHUB_SHA}"
-          if [ "$VERIFY_OUTCOME" = success ]; then STATE=success; DESCRIPTION="V6.9 HTML and REBOUND assets verified live"; else STATE=failure; DESCRIPTION="V6.9 live verification failed"; fi
-          jq -n --arg state "$STATE" --arg target_url "$TARGET_URL" --arg description "$DESCRIPTION" --arg context "pages/v6.9-live" '{state:$state,target_url:$target_url,description:$description,context:$context}' > /tmp/status.json
-          curl --fail --silent --show-error --location --request POST --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" --data-binary @/tmp/status.json
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ok = '${{ steps.livecheck.outcome }}' === 'success';
+            const base = '${{ needs.deploy.outputs.page_url }}'.replace(/\/$/, '');
+            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: ok ? 'success' : 'failure', context: 'pages/v6.9-live', description: ok ? 'V6.9 HTML and REBOUND assets verified live' : 'V6.9 live verification failed', target_url: `${base}/reality-engine-v6-9.html?verify=${context.sha}`});
 
   report-failure:
     name: Report V6.9 deployment failure
@@ -165,12 +195,8 @@ jobs:
     if: always() && needs.verify-live.result != 'success'
     steps:
       - name: Publish failure status
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BUILD_RESULT: ${{ needs.build.result }}
-          DEPLOY_RESULT: ${{ needs.deploy.result }}
-          VERIFY_RESULT: ${{ needs.verify-live.result }}
-        run: |
-          DESCRIPTION="V6.9 failed: build ${BUILD_RESULT}, deploy ${DEPLOY_RESULT}, verify ${VERIFY_RESULT}"
-          jq -n --arg state failure --arg target_url "https://github.com/${GITHUB_REPOSITORY}/actions" --arg description "$DESCRIPTION" --arg context "pages/v6.9-live" '{state:$state,target_url:$target_url,description:$description,context:$context}' > /tmp/status.json
-          curl --fail --silent --show-error --location --request POST --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" --data-binary @/tmp/status.json
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const description = `V6.9 failed: build ${{ needs.build.result }}, deploy ${{ needs.deploy.result }}, verify ${{ needs.verify-live.result }}`;
+            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'failure', context: 'pages/v6.9-live', description, target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions`});
