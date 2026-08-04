@@ -8,6 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "audit:integration": "node scripts/integration-audit.cjs",
+    "check": "npm run audit:integration && npm run build",
     "lint": "eslint \"core/reality-v6*/**/*.js\"",
     "lint:all": "eslint ."
   },

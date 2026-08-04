@@ -25,6 +25,9 @@ jobs:
       - name: Install project dependencies
         run: npm ci
 
+      - name: Run integration audit
+        run: npm run audit:integration
+
       - name: Install Playwright Chromium
         run: |
           npm install --no-save --package-lock=false playwright@1.62.0
@@ -76,6 +79,6 @@ jobs:
               sha: context.sha,
               state: ok ? 'success' : 'failure',
               context: 'browser/phase11-smoke',
-              description: ok ? 'Phase 11 FLRW, galaxy, GW, horizon, frame, trace, and WebGL checks passed' : 'Phase 11 browser diagnostics failed',
+              description: ok ? 'Integration audit and Phase 11 browser diagnostics passed' : 'Integration audit or Phase 11 browser diagnostics failed',
               target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions`,
             });
