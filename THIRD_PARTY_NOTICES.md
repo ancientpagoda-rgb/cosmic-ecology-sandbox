@@ -1,5 +1,10 @@
 # Third-Party Notices
 
+Reality Sandbox has two actively maintained browser surfaces:
+
+- the root Phase 11 observable-universe simulation; and
+- the preserved Reality Engine V6.9 experience, which contains the PixiJS presentation layer, Howler.js soundscape, Astronomy Engine orbital climate, CesiumJS globe, and the locally built REBOUND WebAssembly system.
+
 ## Tectonics.js
 
 Reality Sandbox includes a rewritten, mobile-oriented tectonic plate adapter based on the plate segmentation and boundary concepts demonstrated by **Tectonics.js**.
@@ -11,11 +16,48 @@ Reality Sandbox includes a rewritten, mobile-oriented tectonic plate adapter bas
 
 ## Three.js
 
-Reality Sandbox uses Three.js for WebGL rendering and its maintained AnimationMixer/AnimationClip system for procedural breathing and body motion in Phase 6 creatures and spatial civilization rendering in Phase 7.
+Reality Sandbox uses Three.js for WebGL rendering, procedural bodies, civilization rendering, planetary scenes, and the V6.9 multi-system universe.
 
 - Project: https://github.com/mrdoob/three.js
 - Version: 0.184.0
 - License: MIT
+
+## PixiJS
+
+Reality Engine V6.9 uses PixiJS for its fixed-timestep pixel presentation, overlays, palettes, and presentation effects.
+
+- Project: https://github.com/pixijs/pixijs
+- Package: pixi.js
+- Version: 8.19.0
+- License: MIT
+
+## Howler.js
+
+Reality Engine V6.9 uses Howler.js for its deterministic generative soundscape, spatial audio, environmental layers, mute controls, and volume controls.
+
+- Project: https://github.com/goldfire/howler.js
+- Package: howler
+- Version: 2.2.4
+- License: MIT
+
+## Astronomy Engine
+
+Reality Engine V6.9 uses Astronomy Engine for solar and lunar ephemerides, seasons, lunar phase and distance, eclipse searches, tides, and orbital-climate coupling.
+
+- Project: https://github.com/cosinekitty/astronomy
+- Package: astronomy-engine
+- Version: 2.1.19
+- License: MIT
+- Runtime delivery: version-pinned ES module from jsDelivr in the V6.9 orbital-climate module.
+
+## CesiumJS
+
+Reality Engine V6.9 uses CesiumJS for its globe and planetary surface presentation.
+
+- Project: https://github.com/CesiumGS/cesium
+- Version: 1.143.0
+- License: Apache-2.0
+- Runtime delivery: version-pinned CesiumJS assets from jsDelivr.
 
 ## Yuka 0.7.8
 
@@ -36,6 +78,28 @@ Reality Sandbox uses Rapier's JavaScript/WebAssembly bindings for local creature
 - Package: @dimforge/rapier3d-compat
 - Version: 0.19.3
 - License: Apache-2.0
+
+Rapier 0.19.x currently emits an upstream wasm-bindgen initialization deprecation warning in some browsers. The simulation remains functional; the warning is tracked upstream and is not treated as a physics failure.
+
+## REBOUND 5.0.0
+
+Reality Sandbox builds REBOUND from source with Emscripten for same-origin N-body orbital physics in Reality Engine V6.9. The root universe also exposes a REBOUND adapter and uses REBOUND-compatible validation paths for later orbital and interstellar systems.
+
+- Project: https://github.com/hannorein/rebound
+- Version/tag: 5.0.0
+- License: GNU GPL v3 or later
+- Build script: `scripts/build-rebound-wasm.sh`
+- Bundled license: `public/rebound-v6-6/LICENSE.txt`
+
+## GDAL3.js and GDAL
+
+Reality Sandbox includes a lazy, worker-based GDAL adapter for raster, vector, projection, translation, warping, rasterization, and coordinate transformation tasks.
+
+- Project: https://github.com/bugra9/gdal3.js
+- Package: gdal3.js
+- Version: 2.8.1
+- Wrapper license: MIT
+- GDAL license: MIT/X-style, with bundled upstream third-party notices applying
 
 ## Graphology 0.26.0
 
