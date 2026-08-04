@@ -226,6 +226,7 @@ async function init() {
     window.realitySandboxEvolution = embodiedEvolution;
     window.realitySandboxCivilization = civilizationEngine;
     window.realitySandboxPhase8 = phase8Engine;
+    window.realitySandboxFactories = { createPhase8Engine };
     window.realitySandboxCharacter = surfaceCharacter;
     window.realitySandboxCloseup = closeupPolish;
     window.realitySandboxGround = groundLevelPhase;
