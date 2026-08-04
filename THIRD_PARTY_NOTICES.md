@@ -15,3 +15,14 @@ Reality Sandbox uses Three.js for WebGL rendering.
 
 - Project: https://github.com/mrdoob/three.js
 - License: MIT
+
+## Yuka 0.7.8
+
+Reality Sandbox uses Yuka, an open-source JavaScript game-AI library by Mugen87, for creature steering and entity management in the embodied-evolution phase.
+
+- Project: https://github.com/Mugen87/yuka
+- Version: 0.7.8
+- License: MIT
+- Runtime modules are loaded from version-pinned jsDelivr and unpkg URLs, with the second source used as a fallback.
+
+Yuka remains subject to its MIT license. Reality Sandbox-specific morphology, inheritance, ecology integration, rendering, and simulation code remain subject to this project's license.
