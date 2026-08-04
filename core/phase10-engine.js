@@ -834,11 +834,11 @@ export function createPhase10Engine(world, phase9, galaxySystem, orbitalSystem, 
     if (kind === 'stellar-migration') {
       const track = ensureDebugStar('debug-aging-star', { x: 0.002, y: 0, z: 0.004 }, 1, 9.95);
       track.lifetimeGyr = 10;
-      track.ageGyr = 10.75;
+      track.ageGyr = 10.1;
       track.stage = 'subgiant';
       const id = 'debug-stellar-branch';
       branches.set(id, makeBranch({ id, name: 'Helios Migrants', starId: track.id, position: track.position, population: 22000, technology: 1.1, economy: 0.9, expansionDrive: 0.7, state: 'settled' }));
-      updateStellarTrack(track, 0.08);
+      updateStellarTrack(track, 0.02);
       return { ok: true, kind, starId: track.id, branchId: id, stage: track.stage };
     }
     if (kind === 'dyson-waste-heat') {
