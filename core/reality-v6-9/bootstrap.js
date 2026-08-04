@@ -5,6 +5,15 @@ const badge = document.querySelector('.badge');
 const loading = document.getElementById('loading');
 const buildStatus = document.getElementById('systemBuildStatus');
 
+try {
+  if (localStorage.getItem('reality-v6-9-audio-volume') === null) {
+    localStorage.setItem('reality-v6-9-audio-volume', '0.58');
+  }
+  if (localStorage.getItem('reality-v6-9-audio-muted') === null) {
+    localStorage.setItem('reality-v6-9-audio-muted', 'false');
+  }
+} catch (_) {}
+
 async function waitForPresentation() {
   for (let attempt = 0; attempt < 500; attempt += 1) {
     if (
