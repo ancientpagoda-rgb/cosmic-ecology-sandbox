@@ -56,8 +56,10 @@ jobs:
           test -f dist/reality-engine-v6-7.html
           test -f dist/rebound-v6-6/rebound.js
           test -f dist/rebound-v6-6/rebound.wasm
-          grep -q "THREE.JS UNIVERSE" dist/reality-engine-v6-7.html
+          grep -q "THREE.JS UNIVERSE · DESKTOP ULTRA" dist/reality-engine-v6-7.html
           grep -R -q "automatic astronomical scaling" dist/assets
+          grep -R -q "reality-v6-7-gpu-quality" dist/assets
+          grep -R -q "Cinematic" dist/assets
           test -s dist/rebound-v6-6/rebound.wasm
 
       - name: Configure Pages
@@ -101,7 +103,7 @@ jobs:
             fi
             sleep 10
           done
-          grep -q "THREE.JS UNIVERSE" /tmp/reality-engine-v6-7.html
+          grep -q "THREE.JS UNIVERSE · DESKTOP ULTRA" /tmp/reality-engine-v6-7.html
           curl --fail --silent --show-error --location \
             --max-time 30 \
             "${BASE_URL}rebound-v6-6/rebound.js?verify=${GITHUB_SHA}" \
@@ -112,4 +114,4 @@ jobs:
             --output /tmp/rebound.wasm
           test -s /tmp/rebound.js
           test -s /tmp/rebound.wasm
-          echo "Verified live V6.7: ${V67_URL}"
+          echo "Verified live V6.7 Desktop Ultra: ${V67_URL}"
