@@ -45,3 +45,30 @@ Reality Sandbox uses Graphology to represent and update settlement contacts, tra
 - Version: 0.26.0
 - License: MIT
 - Runtime modules are loaded from version-pinned jsDelivr and esm.sh URLs, with a deterministic internal graph fallback when neither source is available.
+
+## XState 5.32.5
+
+Reality Sandbox uses XState state machines and actors to represent institutional organization, reform, crisis, revolution, collapse, and recovery in Phase 8.
+
+- Project: https://github.com/statelyai/xstate
+- Version: 5.32.5
+- License: MIT
+- Runtime modules are loaded from version-pinned jsDelivr and esm.sh URLs, with deterministic internal transitions as a fallback.
+
+## Playwright 1.62.0
+
+Reality Sandbox uses Playwright in GitHub Actions to open the built simulation in Chromium, control deterministic time stepping, record screenshots and video, create replayable traces, capture browser errors, and archive diagnostics.
+
+- Project: https://github.com/microsoft/playwright
+- Version: 1.62.0
+- License: Apache-2.0
+- Playwright is installed only in the browser-diagnostics workflow and is not shipped in the production bundle.
+
+## Spector.js 0.9.30
+
+Reality Sandbox can load Spector.js through the debug bridge to capture WebGL frames, command streams, shaders, textures, buffers, and render state from the Three.js and PixiJS canvases.
+
+- Project: https://github.com/BabylonJS/Spector.js
+- Version: 0.9.30
+- License: MIT
+- Spector.js loads only when explicitly requested through the debug interface.
