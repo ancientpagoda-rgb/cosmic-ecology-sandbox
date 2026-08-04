@@ -257,7 +257,11 @@ export function createRenderer(canvas) {
       const energy = pred.energy ?? 1.5;
       const age = pred.age ?? 0;
       const radiusBase = 6 + energy * 2.5;
-      const radius = age > 12 ? radiusBase * 1.15 : radiusBase;
+      // 7-stage growth based on age
+      const ageNorm = Math.max(0, Math.min(1, age / 30));
+      const stage = Math.floor(ageNorm * 7); // 0–6
+      const growth = 0.7 + stage * (0.5 / 6); // ~0.7 → 1.2
+      const radius = radiusBase * growth;
       const dna = pred.dna || { speed: 1, sense: 1, metabolism: 1, hueShift: 0 };
 
       // Map DNA traits into visual & behavioral differences
@@ -339,7 +343,11 @@ export function createRenderer(canvas) {
       const energy = ap.energy ?? 3;
       const age = ap.age ?? 0;
       const radiusBase = 9 + energy * 2;
-      const radius = age > 20 ? radiusBase * 1.2 : radiusBase;
+      // 7-stage growth based on age
+      const ageNorm = Math.max(0, Math.min(1, age / 40));
+      const stage = Math.floor(ageNorm * 7); // 0–6
+      const growth = 0.75 + stage * (0.6 / 6); // ~0.75 → 1.35
+      const radius = radiusBase * growth;
       const hue = ap.colorHue;
 
       ctx.fillStyle = `hsla(${hue + wobbleHue + stormHueShift}, 70%, ${60 + wobbleLight + stormLightShift}%, 0.85)`;
@@ -395,13 +403,12 @@ export function createRenderer(canvas) {
       const energy = ag.energy ?? 1;
       const age = ag.age ?? 0;
 
-      const young = age < 6;           // newly spawned
-      const mature = age >= 6 && age < 20;
-      const elder = age >= 20;
+      // 7-stage growth based on age
+      const ageNorm = Math.max(0, Math.min(1, age / 24));
+      const stage = Math.floor(ageNorm * 7); // 0–6
+      const growth = 0.7 + stage * (0.5 / 6); // ~0.7 → 1.2
 
-      let radius = 4 + energy * 2;
-      if (young) radius *= 0.75;
-      else if (elder) radius *= 1.15;
+      let radius = (4 + energy * 2) * growth;
 
       const evolved = ag.evolved;
       const caste = ag.caste || 'balanced';

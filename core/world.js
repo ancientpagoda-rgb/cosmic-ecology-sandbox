@@ -33,6 +33,10 @@ export function createWorld(rng) {
   const APEX_COUNT = 2;
   const RESOURCE_COUNT = 70;
 
+  function jitterParam(base, amt) {
+    return base * (1 + (rng.float() - 0.5) * amt);
+  }
+
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
   }
@@ -204,22 +208,26 @@ export function createWorld(rng) {
     }
   }
 
-  for (let i = 0; i < AGENT_COUNT; i++) {
-    makeAgent(rng.float() * width, rng.float() * height);
+  function seedCreaturesAndResources() {
+    for (let i = 0; i < AGENT_COUNT; i++) {
+      makeAgent(rng.float() * width, rng.float() * height);
+    }
+
+    for (let i = 0; i < PREDATOR_COUNT; i++) {
+      makePredator(rng.float() * width, rng.float() * height);
+    }
+
+    for (let i = 0; i < APEX_COUNT; i++) {
+      makeApex(rng.float() * width, rng.float() * height);
+    }
+
+    for (let i = 0; i < RESOURCE_COUNT; i++) {
+      const kind = rng.float() < 0.2 ? 'pod' : 'plant';
+      makeResource(rng.float() * width, rng.float() * height, kind);
+    }
   }
 
-  for (let i = 0; i < PREDATOR_COUNT; i++) {
-    makePredator(rng.float() * width, rng.float() * height);
-  }
-
-  for (let i = 0; i < APEX_COUNT; i++) {
-    makeApex(rng.float() * width, rng.float() * height);
-  }
-
-  for (let i = 0; i < RESOURCE_COUNT; i++) {
-    const kind = rng.float() < 0.2 ? 'pod' : 'plant';
-    makeResource(rng.float() * width, rng.float() * height, kind);
-  }
+  seedCreaturesAndResources();
 
   function physicsSystem(dt) {
     const { position, velocity, burst } = ecs.components;
@@ -471,6 +479,7 @@ export function createWorld(rng) {
     const eatRadius = 10;
     const baseDrain = 0.03 * world.globals.metabolism; // per second, modulated by regime
 
+    // Herbivores
     for (const [id, ag] of agent.entries()) {
       const dna = ag.dna || { speed: 1, sense: 1, metabolism: 1, hueShift: 0 };
       ag.energy -= baseDrain * dna.metabolism * dt;
@@ -637,9 +646,10 @@ export function createWorld(rng) {
     const MAX_POD_CYCLES = 3;     // per-pod explosion limit
 
     for (const [id, res] of resource.entries()) {
-      // Age tracks time since last regrowth
+      // Age tracks time since last regrowth or spread attempt
       res.age = (res.age || 0) + dt;
 
+      // --- Seed pod behavior ---
       // Seed pod explosion: when mature and still fairly full, within limits
       if (
         res.kind === 'pod' &&
@@ -679,6 +689,7 @@ export function createWorld(rng) {
         podCount++; // track new pod
       }
 
+      // --- Default plant-style regeneration ---
       if (res.amount > 0.99) continue;
       res.regenTimer -= dt * (0.8 + fertility * 1.2);
       if (res.regenTimer <= 0) {
@@ -839,6 +850,35 @@ export function createWorld(rng) {
 
   function step(dt) {
     world.tick++;
+
+    const { agent, predator, apex } = ecs.components;
+    const livingCount = agent.size + predator.size + apex.size;
+
+    // If all three creature types are gone, restart the ecosystem with slightly
+    // mutated global parameters and a fresh seed of entities/resources.
+    if (livingCount === 0) {
+      // Nudge globals a bit to explore nearby regimes
+      world.globals.fertility = Math.max(0.2, Math.min(1.2, jitterParam(world.globals.fertility, 0.35)));
+      world.globals.metabolism = Math.max(0.4, Math.min(2.5, jitterParam(world.globals.metabolism, 0.4)));
+      world.globals.reproductionThreshold = Math.max(1.1, Math.min(2.2, jitterParam(world.globals.reproductionThreshold, 0.25)));
+
+      // Clear ECS state
+      for (const id of Array.from(ecs.entities)) {
+        ecs.destroyEntity(id);
+      }
+
+      // Reset tick and regime
+      world.tick = 0;
+      world.regime = 'calm';
+      world.globals.storminess = 0;
+
+      // Reseed
+      seedCreaturesAndResources();
+
+      // Early return so the new world doesn't also advance this frame
+      return;
+    }
+
     steeringSystem(dt);
     forceFieldSystem(dt);
     collisionSystem(dt);
