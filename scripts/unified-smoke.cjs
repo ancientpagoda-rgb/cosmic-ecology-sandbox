@@ -41,6 +41,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
             && rect.height > 0;
         }).length;
       const canvas = document.getElementById('lofiLivingCanvas');
+      const canvasStyle = canvas ? getComputedStyle(canvas) : null;
       return {
         diagnostics: window.realitySandboxDebug.diagnostics(),
         unified: window.realitySandboxUnified.getSnapshot(),
@@ -49,7 +50,9 @@ fs.mkdirSync(artifactDir, { recursive: true });
         controls,
         canvas: canvas ? {
           connected: canvas.isConnected,
-          imageRendering: getComputedStyle(canvas).imageRendering,
+          imageRendering: canvasStyle.imageRendering,
+          pointerEvents: canvasStyle.pointerEvents,
+          touchAction: canvasStyle.touchAction,
         } : null,
       };
     });
@@ -62,8 +65,41 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(initial.unified.interface.controls === 0 && !initial.panel && initial.controls === 0, 'Runtime controls or informational panels remained visible.');
     assert(initial.canvas?.connected, 'The lo-fi living-world canvas is missing.');
     assert(initial.canvas.imageRendering === 'pixelated' || initial.canvas.imageRendering === 'crisp-edges', 'The root canvas is not pixelated.');
+    assert(initial.canvas.pointerEvents !== 'none', 'The lo-fi canvas cannot receive zoom gestures.');
+    assert(initial.canvas.touchAction === 'none', 'The lo-fi canvas cannot own pinch gestures.');
     assert(initial.unified.presentation.logicalWidth <= 256 && initial.unified.presentation.logicalHeight <= 144, 'The presentation is not low resolution.');
     assert(initial.unified.presentation.tickerStarted === false, 'PixiJS started an independent ticker.');
+    assert(initial.unified.presentation.camera.zoom === 1, 'The lo-fi camera did not start at world scale.');
+    assert(initial.unified.presentation.interactions.wheelZoom && initial.unified.presentation.interactions.pinchZoom, 'Zoom interaction support was not exposed.');
+
+    const canvasBox = await page.locator('#lofiLivingCanvas').boundingBox();
+    assert(canvasBox && canvasBox.width > 0 && canvasBox.height > 0, 'The lo-fi canvas has no interactive bounds.');
+    const centerX = canvasBox.x + canvasBox.width * 0.5;
+    const centerY = canvasBox.y + canvasBox.height * 0.5;
+    const cameraBefore = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().presentation.camera);
+    await page.mouse.move(centerX, centerY);
+    await page.mouse.wheel(0, -520);
+    await page.waitForTimeout(180);
+    const cameraZoomed = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().presentation.camera);
+    assert(cameraZoomed.zoom > cameraBefore.zoom, 'Mouse-wheel zoom did not change the lo-fi camera.');
+
+    await page.mouse.move(centerX, centerY);
+    await page.mouse.down();
+    await page.mouse.move(centerX + 120, centerY + 55, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(120);
+    const cameraPanned = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().presentation.camera);
+    assert(
+      Math.abs(cameraPanned.centerX - cameraZoomed.centerX) > 0.0001
+        || Math.abs(cameraPanned.centerY - cameraZoomed.centerY) > 0.0001,
+      'Drag-to-pan did not move the lo-fi camera.',
+    );
+
+    await page.keyboard.press('0');
+    await page.waitForTimeout(120);
+    const cameraReset = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().presentation.camera);
+    writeJson('camera-interaction.json', { before: cameraBefore, zoomed: cameraZoomed, panned: cameraPanned, reset: cameraReset });
+    assert(cameraReset.zoom === 1 && cameraReset.centerX === 0.5 && cameraReset.centerY === 0.5, 'Keyboard camera reset failed.');
 
     await page.evaluate(() => window.realitySandboxDebug.pause());
     const clock = await page.evaluate(() => {
@@ -81,13 +117,15 @@ fs.mkdirSync(artifactDir, { recursive: true });
       sharedClock: await window.realitySandboxDebug.seedUnifiedScenario('shared-clock'),
       viewSwitch: await window.realitySandboxDebug.seedUnifiedScenario('view-switch'),
       scene: await window.realitySandboxDebug.seedUnifiedScenario('scene'),
+      camera: await window.realitySandboxDebug.seedUnifiedScenario('camera'),
       rebound: await window.realitySandboxDebug.seedUnifiedScenario('rebound'),
       mobileLod: await window.realitySandboxDebug.seedUnifiedScenario('mobile-lod'),
     }));
     writeJson('scenarios.json', scenarios);
     assert(scenarios.sharedClock.ok && scenarios.sharedClock.privateRafLoops === 0, 'The presentation started a private simulation loop.');
     assert(scenarios.viewSwitch.ok && scenarios.viewSwitch.selected === 'living', 'A second visible view remained selectable.');
-    assert(scenarios.scene.ok && scenarios.scene.controls === 0 && scenarios.scene.audio === false, 'The simplified scene contract failed.');
+    assert(scenarios.scene.ok && scenarios.scene.controls === 0 && scenarios.scene.audio === false && scenarios.scene.interactiveCamera, 'The simplified interactive scene contract failed.');
+    assert(scenarios.camera.ok && scenarios.camera.after.zoom > scenarios.camera.before.zoom, 'The deterministic camera scenario failed.');
     assert(scenarios.mobileLod.ok, 'The low-resolution presentation limit failed.');
     if (requireRebound) {
       const status = scenarios.rebound.status;
@@ -99,6 +137,22 @@ fs.mkdirSync(artifactDir, { recursive: true });
         `Live REBOUND WASM was required but unavailable: ${JSON.stringify(status)}`,
       );
     }
+
+    const cameraRoundTrip = await page.evaluate(() => {
+      window.realitySandboxUnified.setCamera({ zoom: 3.2, centerX: 0.31, centerY: 0.62 });
+      const saved = window.realitySandboxUnified.save();
+      window.realitySandboxUnified.resetCamera();
+      window.realitySandboxUnified.load(saved);
+      return {
+        saved,
+        restored: window.realitySandboxUnified.getSnapshot().presentation.camera,
+      };
+    });
+    writeJson('camera-round-trip.json', cameraRoundTrip);
+    assert(Math.abs(cameraRoundTrip.restored.zoom - 3.2) < 0.001, 'Saved camera zoom did not round trip.');
+    assert(Math.abs(cameraRoundTrip.restored.centerX - 0.31) < 0.001, 'Saved camera longitude did not round trip.');
+    assert(Math.abs(cameraRoundTrip.restored.centerY - 0.62) < 0.001, 'Saved camera latitude did not round trip.');
+    await page.evaluate(() => window.realitySandboxUnified.resetCamera());
 
     const lockedView = await page.evaluate(() => {
       const before = {
