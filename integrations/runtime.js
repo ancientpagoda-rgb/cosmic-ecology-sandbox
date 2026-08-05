@@ -4,14 +4,16 @@ import { createReboundAdapter } from './rebound-adapter.js';
 export function registerCurrentModules(host, systems) {
   const catalog = new Map(integrationCatalog.map(item => [item.id, item]));
 
-  host.register(moduleFromCatalog(catalog.get('render.three'), {
-    provides: ['rendering.globe', 'rendering.webgl', 'rendering.galaxy'],
-    initialize({ provideCapability }) {
-      provideCapability('rendering.globe', systems.globe);
-      provideCapability('rendering.webgl', systems.globe);
-      if (systems.galaxyLayer) provideCapability('rendering.galaxy', systems.galaxyLayer);
-    },
-  }));
+  if (systems.globe) {
+    host.register(moduleFromCatalog(catalog.get('render.three'), {
+      provides: ['rendering.globe', 'rendering.webgl', 'rendering.galaxy'],
+      initialize({ provideCapability }) {
+        provideCapability('rendering.globe', systems.globe);
+        provideCapability('rendering.webgl', systems.globe);
+        if (systems.galaxyLayer) provideCapability('rendering.galaxy', systems.galaxyLayer);
+      },
+    }));
+  }
 
   host.register(createLazyRapierModule());
   host.register(createReboundAdapter({ endpoint: systems.reboundEndpoint || null }));
@@ -115,9 +117,7 @@ function createLazyRapierModule() {
     source: '@dimforge/rapier3d-compat',
     license: 'Apache-2.0',
     provides: ['physics.loader'],
-    initialize({ provideCapability }) {
-      provideCapability('physics.loader', { load });
-    },
+    initialize({ provideCapability }) { provideCapability('physics.loader', { load }); },
     step(dt) { adapter?.step(dt); },
     loadEngine: load,
     isLoaded: () => Boolean(adapter),
@@ -126,15 +126,10 @@ function createLazyRapierModule() {
 
 function createLazyGdalModule() {
   let adapterPromise = null;
-
   async function load() {
-    if (!adapterPromise) {
-      adapterPromise = import('./gdal-adapter.js')
-        .then(({ createGdalAdapter }) => createGdalAdapter());
-    }
+    if (!adapterPromise) adapterPromise = import('./gdal-adapter.js').then(({ createGdalAdapter }) => createGdalAdapter());
     return adapterPromise;
   }
-
   return {
     id: 'gis.gdal',
     name: 'GDAL GIS (on demand)',
@@ -143,9 +138,7 @@ function createLazyGdalModule() {
     source: 'gdal3.js / GDAL',
     license: 'MIT and GDAL MIT/X-style',
     provides: ['gis.loader'],
-    initialize({ provideCapability }) {
-      provideCapability('gis.loader', { load });
-    },
+    initialize({ provideCapability }) { provideCapability('gis.loader', { load }); },
     loadEngine: load,
   };
 }
