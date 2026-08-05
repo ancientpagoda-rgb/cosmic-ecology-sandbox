@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "audit:integration": "node scripts/integration-audit.cjs && node scripts/root-renderer-audit.cjs",
+    "audit:integration": "node scripts/integration-audit.cjs && node scripts/root-renderer-audit.cjs && node scripts/headless-route-contract.cjs",
     "check": "npm run audit:integration && npm run build",
     "lint": "eslint \"core/reality-v6*/**/*.js\"",
     "lint:all": "eslint ."
