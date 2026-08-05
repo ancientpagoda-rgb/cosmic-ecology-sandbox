@@ -51,6 +51,8 @@ fs.mkdirSync(artifactDir, { recursive: true });
         top: rect.top,
         transform: style.transform,
         imageRendering: style.imageRendering,
+        visibleCanvasCount: document.querySelectorAll('#lofiLivingCanvas').length,
+        hiddenLowResolutionCanvas: Boolean(document.getElementById('lofiLivingCanvasLowRes')),
         hifi: window.realitySandboxHifi?.getState?.(),
         centerPixel: center ? [...center] : null,
       };
@@ -66,8 +68,10 @@ fs.mkdirSync(artifactDir, { recursive: true });
 
     assert(Math.abs(cssAspect - bitmapAspect) < 0.01,
       `Canvas aspect mismatch: bitmap ${bitmapAspect}, CSS ${cssAspect}.`);
-    assert(metrics.bitmapWidth >= 640 && metrics.bitmapHeight >= 360,
-      `The iPhone renderer is not high resolution: ${metrics.bitmapWidth}x${metrics.bitmapHeight}.`);
+    assert(metrics.bitmapWidth >= 384 && metrics.bitmapHeight >= 216,
+      `The iPhone renderer is below the mobile performance floor: ${metrics.bitmapWidth}x${metrics.bitmapHeight}.`);
+    assert(metrics.visibleCanvasCount === 1 && !metrics.hiddenLowResolutionCanvas,
+      'The iPhone renderer must use one visible canvas without a hidden canvas handoff.');
     assert(metrics.hifi?.ready && metrics.hifi.width === metrics.bitmapWidth,
       `The high-fidelity presentation did not initialize: ${JSON.stringify(metrics.hifi)}.`);
     assert(metrics.cssWidth >= viewport.width * 1.8,
@@ -77,7 +81,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(metrics.left < 0 && metrics.left + metrics.cssWidth > viewport.width,
       'The portrait canvas is not centered across the viewport.');
     assert(centerLuminance > 45,
-      `The high-fidelity sphere did not render at the canvas center: ${metrics.centerPixel}.`);
+      `The scientific Earth did not render at the canvas center: ${metrics.centerPixel}.`);
     assert(pageErrors.length === 0, `Browser page errors: ${pageErrors.join(' | ')}`);
 
     const report = {

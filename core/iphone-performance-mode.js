@@ -6,16 +6,15 @@ let attempts = 0;
 function bootIPhonePerformanceMode() {
   if (window.realitySandboxIPhonePerformance?.ready) return;
 
-  const mobile = matchMedia(MOBILE_QUERY).matches;
   const unified = window.realitySandboxUnified;
   const hifi = window.realitySandboxHifi;
-  const upscaleReady = !mobile || window.realitySandboxMobileUpscale?.ready;
   const canvas = document.getElementById('lofiLivingCanvas');
-  if (!unified || !hifi?.ready || !upscaleReady || !canvas) {
+  if (!unified || !hifi?.ready || !canvas) {
     if (attempts++ < 240) setTimeout(bootIPhonePerformanceMode, 50);
     return;
   }
 
+  const mobile = matchMedia(MOBILE_QUERY).matches;
   if (!mobile) {
     window.realitySandboxIPhonePerformance = { ready: true, active: false };
     return;
@@ -91,8 +90,7 @@ function bootIPhonePerformanceMode() {
   }
 
   function onPointerMove(event) {
-    const previous = pointers.get(event.pointerId);
-    if (!previous) return;
+    if (!pointers.has(event.pointerId)) return;
     consume(event);
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
@@ -130,7 +128,7 @@ function bootIPhonePerformanceMode() {
     consume(event);
     pointers.delete(event.pointerId);
     try { canvas.releasePointerCapture?.(event.pointerId); } catch {}
-    flushCamera(false);
+    flushCamera();
     drag = null;
     pinch = null;
 
@@ -184,23 +182,22 @@ function bootIPhonePerformanceMode() {
       cameraTimer = 0;
       cameraFrame = requestAnimationFrame(() => {
         cameraFrame = 0;
-        flushCamera(false);
+        flushCamera();
       });
     }, delay);
   }
 
-  function flushCamera(forceFull) {
+  function flushCamera() {
     clearScheduledCallbacks();
-    if (!scheduledCamera && !forceFull) return;
+    if (!scheduledCamera) return;
     const camera = scheduledCamera;
     scheduledCamera = null;
-    if (camera) unified.setCamera(camera);
+    unified.setCamera(camera);
     lastCameraAt = performance.now();
     lastVisualAt = lastCameraAt;
 
     const interactionRender = window.realitySandboxLilacClouds?.render || fullRender;
     interactionRender();
-    if (forceFull) fullRender();
   }
 
   function clearScheduledCamera() {
