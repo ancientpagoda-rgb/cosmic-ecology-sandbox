@@ -2,14 +2,12 @@ import { createRng } from './core/rng.js';
 import { createWorld } from './core/world.js';
 import { createSphericalStepper } from './core/sphere.js';
 import { createModuleHost } from './core/module-host.js';
-import { createGlobeRenderer } from './core/globe-render-v4.js';
-import { createGalaxyRenderLayer } from './core/galaxy-render-layer.js';
 import { createGalaxySystem } from './core/galaxy-system.js';
 import { createOrbitalSystem } from './core/orbital-system.js';
 import { createCosmicOrigin } from './core/cosmic-origin.js';
-import { createOriginSurfaceVisuals } from './core/origin-surface-visuals.js';
-import { createEmbodiedEvolution } from './core/embodied-evolution.js';
-import { createCivilizationEngine } from './core/civilization-engine.js';
+import { createHeadlessGroundLevel } from './core/headless-ground-level.js';
+import { createHeadlessEvolution } from './core/headless-evolution.js';
+import { createHeadlessCivilizationEngine } from './core/headless-societies.js';
 import { createPhase8Engine } from './core/phase8-engine.js';
 import { createPhase9Engine } from './core/phase9-engine.js';
 import { createPhase10Engine } from './core/phase10-engine.js';
@@ -17,9 +15,6 @@ import { createPhase11Engine } from './core/phase11-engine.js';
 import { createLofiLivingRuntime } from './core/lofi-living-runtime.js';
 import { installUnifiedDebugExtension } from './core/unified-debug-extension.js';
 import { createDebugBridge } from './core/debug-bridge.js';
-import { createSurfaceCharacter } from './core/surface-character.js';
-import { createCloseupPolish } from './core/closeup-polish.js';
-import { createGroundLevelPhase } from './core/ground-level-phase.js';
 import { placeExistingEntitiesOnBiomes } from './core/planet.js';
 import { createLivingSystems } from './core/living-systems.js';
 import { createPlanetDynamics } from './core/planet-dynamics.js';
@@ -30,15 +25,15 @@ import { registerCurrentModules } from './integrations/runtime.js';
 const FIXED_DT = 0.06;
 const STORAGE_KEY = 'reality-sandbox-globe-v1';
 const saved = readSavedState();
+const rootView = {
+  getCameraState: () => ({ mode: 'lofi-living-world', rotationX: 0, rotationY: 0, distance: 1, targetDistance: 1 }),
+  render() {},
+  zoomOut() {},
+};
 
 let world;
-let globe;
-let galaxyLayer;
-let surfaceCharacter;
-let closeupPolish;
 let groundLevelPhase;
 let originSystem;
-let originSurfaceVisuals;
 let embodiedEvolution;
 let civilizationEngine;
 let phase8Engine;
@@ -64,13 +59,9 @@ function readSavedState() {
 }
 
 function saveState() {
-  if (!world || !globe) return;
+  if (!world) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      tick: world.tick,
-      camera: globe.getCameraState(),
-      modules: moduleHost?.save?.(),
-    }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ tick: world.tick, modules: moduleHost?.save?.() }));
   } catch {
     // Storage can be unavailable in private browsing.
   }
@@ -86,18 +77,10 @@ function stepSimulation(dt = FIXED_DT) {
 }
 
 function renderFrame(timestamp) {
-  const cameraState = globe.getCameraState();
-  globe.render(world);
-  galaxyLayer.render(cameraState, timestamp);
   moduleHost.render({
     world,
-    globe,
-    galaxyLayer,
-    surfaceCharacter,
-    closeupPolish,
     groundLevelPhase,
     originSystem,
-    originSurfaceVisuals,
     embodiedEvolution,
     civilizationEngine,
     phase8Engine,
@@ -155,31 +138,19 @@ async function init() {
     originSystem = createCosmicOrigin(world, galaxySystem, orbitalSystem, { seed: 20260804 });
     originSystem.prepare();
 
-    placeExistingEntitiesOnBiomes(world, Math.random);
+    placeExistingEntitiesOnBiomes(world, rng);
     stepSphere = createSphericalStepper(world);
     const living = createLivingSystems(world);
     const biosphere = createBiosphere(world);
     const waterCycle = createWaterCycle(world, orbitalSystem);
     const dynamics = createPlanetDynamics(world, living, waterCycle, orbitalSystem);
-    const worldElement = document.getElementById('world');
 
-    globe = createGlobeRenderer(worldElement, dynamics, null, {
-      quality: 'auto',
-      cameraState: saved.camera,
-      orbitalSystem,
-      onCameraChange: saveState,
-      onError: showError,
-    });
-    originSystem.attachGlobe(globe);
-
-    galaxyLayer = createGalaxyRenderLayer(worldElement, galaxySystem);
-    groundLevelPhase = createGroundLevelPhase(worldElement, globe, { mobile });
-    originSurfaceVisuals = createOriginSurfaceVisuals(originSystem, groundLevelPhase, { mobile });
-    embodiedEvolution = createEmbodiedEvolution(world, originSystem, groundLevelPhase, { mobile, seed: 20260805, container: worldElement });
-    civilizationEngine = createCivilizationEngine(world, embodiedEvolution, groundLevelPhase, { mobile, seed: 20260806, container: worldElement });
-    phase8Engine = createPhase8Engine(world, civilizationEngine, orbitalSystem, groundLevelPhase, { mobile, seed: 20260807, container: worldElement });
-    phase9Engine = createPhase9Engine(world, phase8Engine, orbitalSystem, galaxySystem, { mobile, seed: 20260808, container: worldElement });
-    phase10Engine = createPhase10Engine(world, phase9Engine, galaxySystem, orbitalSystem, { mobile, seed: 20260809, container: worldElement });
+    groundLevelPhase = createHeadlessGroundLevel({ mobile, seed: 20260805 });
+    embodiedEvolution = createHeadlessEvolution(world, originSystem, { mobile, seed: 20260806 });
+    civilizationEngine = createHeadlessCivilizationEngine(world, embodiedEvolution, { mobile, seed: 20260807 });
+    phase8Engine = createPhase8Engine(world, civilizationEngine, orbitalSystem, groundLevelPhase, { mobile, seed: 20260808, headless: true });
+    phase9Engine = createPhase9Engine(world, phase8Engine, orbitalSystem, galaxySystem, { mobile, seed: 20260809, headless: true });
+    phase10Engine = createPhase10Engine(world, phase9Engine, galaxySystem, orbitalSystem, { mobile, seed: 20260810, headless: true });
     phase10Module = {
       ...phase10Engine,
       step(dt) {
@@ -189,7 +160,7 @@ async function init() {
         if ((phase9State.population || 0) > 0 || explicitlySeeded) phase10Engine.step(dt);
       },
     };
-    phase11Engine = createPhase11Engine(world, phase10Engine, galaxySystem, { mobile, seed: 20260810 });
+    phase11Engine = createPhase11Engine(world, phase10Engine, galaxySystem, { mobile, seed: 20260811 });
     phase11Module = {
       ...phase11Engine,
       step(dt) {
@@ -199,33 +170,13 @@ async function init() {
         if ((phase10State.simulatedYears || 0) > 0 || explicitlySeeded) phase11Engine.step(dt);
       },
     };
-    unifiedRuntime = createLofiLivingRuntime(world, {
-      orbitalSystem,
-      dynamics,
-      phase8: phase8Engine,
-      phase9: phase9Engine,
-      phase10: phase10Engine,
-      phase11: phase11Engine,
-    }, { mobile, seed: 20260811 });
+    unifiedRuntime = createLofiLivingRuntime(world, { orbitalSystem, dynamics, phase8: phase8Engine, phase9: phase9Engine, phase10: phase10Engine, phase11: phase11Engine }, { mobile, seed: 20260812 });
     unifiedRuntime.requires = ['orbits.system', 'cosmology.flrw'];
-    closeupPolish = createCloseupPolish(globe);
-    surfaceCharacter = createSurfaceCharacter(globe, { groundLevel: groundLevelPhase });
 
     moduleHost = createModuleHost({ world });
     moduleHost.register(originSystem);
-    registerCurrentModules(moduleHost, {
-      globe,
-      galaxyLayer,
-      galaxySystem,
-      orbitalSystem,
-      living,
-      biosphere,
-      waterCycle,
-      dynamics,
-      reboundEndpoint: null,
-    });
+    registerCurrentModules(moduleHost, { galaxySystem, orbitalSystem, living, biosphere, waterCycle, dynamics, reboundEndpoint: null });
     moduleHost.register(groundLevelPhase);
-    moduleHost.register(originSurfaceVisuals);
     moduleHost.register(embodiedEvolution);
     moduleHost.register(civilizationEngine);
     moduleHost.register(phase8Engine);
@@ -242,7 +193,7 @@ async function init() {
     window.realitySandboxOrbits = orbitalSystem;
     window.realitySandboxGalaxy = galaxySystem;
     window.realitySandboxOrigin = originSystem;
-    window.realitySandboxOriginSurface = originSurfaceVisuals;
+    window.realitySandboxOriginSurface = null;
     window.realitySandboxEvolution = embodiedEvolution;
     window.realitySandboxCivilization = civilizationEngine;
     window.realitySandboxPhase8 = phase8Engine;
@@ -255,17 +206,20 @@ async function init() {
       createPhase9Engine,
       createPhase10Engine,
       createPhase11Engine,
+      createHeadlessGroundLevel,
+      createHeadlessEvolution,
+      createHeadlessCivilizationEngine,
       createLofiLivingRuntime,
       createUnifiedRuntime: createLofiLivingRuntime,
     };
-    window.realitySandboxCharacter = surfaceCharacter;
-    window.realitySandboxCloseup = closeupPolish;
+    window.realitySandboxCharacter = null;
+    window.realitySandboxCloseup = null;
     window.realitySandboxGround = groundLevelPhase;
 
     debugBridge = createDebugBridge({
       world,
       moduleHost,
-      globe,
+      globe: rootView,
       groundLevel: groundLevelPhase,
       origin: originSystem,
       evolution: embodiedEvolution,
@@ -284,8 +238,7 @@ async function init() {
     });
     installUnifiedDebugExtension(debugBridge, unifiedRuntime);
 
-    globe.render(world);
-    galaxyLayer.render(globe.getCameraState());
+    renderFrame(performance.now());
     requestAnimationFrame(loop);
   } catch (error) {
     showError(error);
