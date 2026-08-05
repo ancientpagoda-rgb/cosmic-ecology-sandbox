@@ -21,8 +21,7 @@ function bootLilacClouds() {
   const originalUnifiedRender = unified.render.bind(unified);
   unified.render = frame => {
     originalUnifiedRender(frame);
-    const timestamp = frame?.timestamp ?? performance.now();
-    drawWhenFresh(timestamp);
+    drawWhenFresh(frame?.timestamp ?? performance.now());
   };
 
   const originalHifiRender = hifi.render.bind(hifi);
@@ -36,14 +35,16 @@ function bootLilacClouds() {
     const snapshot = originalSnapshot();
     snapshot.presentation = {
       ...snapshot.presentation,
-      cloudPalette: 'lilac-purple-with-pink-edges',
-      cloudStyle: 'decorative-swirls',
+      cloudPalette: 'pale-lilac-clouds-purple-rain-radar',
+      cloudStyle: 'swirls-with-rain-intensity',
+      rainRadar: true,
     };
     return snapshot;
   };
 
   window.realitySandboxLilacClouds = {
     ready: true,
+    rainRadar: true,
     render: () => {
       originalHifiRender();
       drawClouds(performance.now());
@@ -56,13 +57,7 @@ function bootLilacClouds() {
   function drawWhenFresh(timestamp) {
     const camera = unified.getCamera();
     const phase = Math.floor(timestamp / CLOUD_STEP_MS);
-    const signature = [
-      phase,
-      camera.zoom.toFixed(4),
-      camera.centerX.toFixed(5),
-      camera.centerY.toFixed(5),
-    ].join(':');
-
+    const signature = [phase, camera.zoom.toFixed(4), camera.centerX.toFixed(5), camera.centerY.toFixed(5)].join(':');
     if (signature === lastSignature) return;
     lastSignature = signature;
     drawClouds(timestamp);
@@ -85,9 +80,7 @@ function bootLilacClouds() {
     context.globalCompositeOperation = 'screen';
 
     const swirls = mobile ? 5 : 7;
-    for (let index = 0; index < swirls; index++) {
-      drawSwirl(index, phase, camera, cx, cy, radius);
-    }
+    for (let index = 0; index < swirls; index++) drawSwirl(index, phase, camera, cx, cy, radius);
 
     context.restore();
   }
@@ -104,6 +97,7 @@ function bootLilacClouds() {
     const turns = 1.18 + hash(seed, 37) * 0.92;
     const clockwise = index % 2 === 0 ? 1 : -1;
     const points = [];
+    const intensities = [];
     const samples = 48;
 
     for (let sample = 0; sample <= samples; sample++) {
@@ -115,35 +109,64 @@ function bootLilacClouds() {
         x: centerX + Math.cos(angle) * (spiralRadius * expansion + wobble),
         y: centerY + Math.sin(angle) * (spiralRadius * expansion * 0.58 + wobble * 0.35),
       });
+
+      const broadCell = 0.5 + 0.5 * Math.sin(t * TAU * (1.6 + hash(seed, 73)) + phase * 1.8 + seed * 0.004);
+      const embeddedCell = 0.5 + 0.5 * Math.sin(t * TAU * (4.4 + hash(seed, 89) * 2.2) - phase * 2.4 + seed * 0.009);
+      const noise = hash(seed + Math.floor(t * 13), 101 + index);
+      intensities.push(clamp(broadCell * 0.52 + embeddedCell * 0.3 + noise * 0.18, 0, 1));
     }
 
     const outerWidth = Math.max(8, radius * (0.035 + hash(seed, 43) * 0.02));
-    strokeRibbon(points, outerWidth, 'rgba(255, 117, 220, 0.34)', radius * 0.026, 'rgba(255, 114, 224, 0.9)');
-    strokeRibbon(points, outerWidth * 0.68, 'rgba(181, 116, 255, 0.58)', radius * 0.012, 'rgba(211, 148, 255, 0.72)');
-    strokeRibbon(points, outerWidth * 0.24, 'rgba(238, 209, 255, 0.52)', 0, 'transparent');
+
+    // Dry cloud: pale, pretty lilac instead of solid purple.
+    strokeRibbon(points, outerWidth, 'rgba(235, 216, 255, 0.18)', radius * 0.012, 'rgba(220, 190, 255, 0.42)');
+    strokeRibbon(points, outerWidth * 0.58, 'rgba(213, 185, 245, 0.26)', radius * 0.006, 'rgba(214, 183, 255, 0.3)');
+
+    // Rain radar: purple appears only in active rain cells.
+    strokeRainSegments(points, intensities, outerWidth, 0.48, 'rgba(163, 104, 232, 0.5)', 'rgba(181, 118, 244, 0.74)');
+    strokeRainSegments(points, intensities, outerWidth * 0.7, 0.67, 'rgba(103, 49, 190, 0.72)', 'rgba(146, 75, 230, 0.9)');
+    strokeRainSegments(points, intensities, outerWidth * 0.34, 0.82, 'rgba(255, 112, 213, 0.92)', 'rgba(255, 105, 221, 1)');
 
     const puffEvery = mobile ? 5 : 4;
     for (let pointIndex = 3; pointIndex < points.length - 2; pointIndex += puffEvery) {
       const point = points[pointIndex];
+      const intensity = intensities[pointIndex];
       const puff = outerWidth * (0.42 + hash(seed, pointIndex + 67) * 0.34);
       context.save();
-      context.shadowColor = 'rgba(255, 118, 223, 0.72)';
-      context.shadowBlur = puff * 0.9;
-      context.fillStyle = 'rgba(255, 143, 226, 0.28)';
+
+      if (intensity < 0.48) {
+        context.shadowColor = 'rgba(221, 194, 255, 0.3)';
+        context.shadowBlur = puff * 0.35;
+        context.fillStyle = 'rgba(234, 218, 255, 0.18)';
+      } else if (intensity < 0.78) {
+        context.shadowColor = 'rgba(155, 82, 229, 0.75)';
+        context.shadowBlur = puff * 0.75;
+        context.fillStyle = 'rgba(138, 73, 214, 0.48)';
+      } else {
+        context.shadowColor = 'rgba(255, 103, 216, 0.95)';
+        context.shadowBlur = puff;
+        context.fillStyle = 'rgba(255, 116, 218, 0.5)';
+      }
+
       context.beginPath();
       context.arc(point.x, point.y, puff, 0, TAU);
       context.fill();
-      context.shadowBlur = puff * 0.35;
-      context.fillStyle = 'rgba(177, 112, 244, 0.48)';
-      context.beginPath();
-      context.arc(point.x, point.y, puff * 0.72, 0, TAU);
-      context.fill();
-      context.fillStyle = 'rgba(229, 198, 255, 0.32)';
-      context.beginPath();
-      context.arc(point.x - puff * 0.16, point.y - puff * 0.14, puff * 0.34, 0, TAU);
-      context.fill();
       context.restore();
     }
+  }
+
+  function strokeRainSegments(points, intensities, width, threshold, color, glow) {
+    let segment = [];
+    const flush = () => {
+      if (segment.length > 1) strokeRibbon(segment, width, color, width * 0.45, glow);
+      segment = [];
+    };
+
+    for (let index = 0; index < points.length; index++) {
+      if (intensities[index] >= threshold) segment.push(points[index]);
+      else flush();
+    }
+    flush();
   }
 
   function strokeRibbon(points, width, color, blur, shadowColor) {
@@ -159,12 +182,7 @@ function bootLilacClouds() {
     for (let index = 1; index < points.length - 1; index++) {
       const point = points[index];
       const next = points[index + 1];
-      context.quadraticCurveTo(
-        point.x,
-        point.y,
-        (point.x + next.x) * 0.5,
-        (point.y + next.y) * 0.5,
-      );
+      context.quadraticCurveTo(point.x, point.y, (point.x + next.x) * 0.5, (point.y + next.y) * 0.5);
     }
     const last = points[points.length - 1];
     context.lineTo(last.x, last.y);
@@ -179,8 +197,9 @@ function hash(a, b) {
   return ((value ^ (value >>> 16)) >>> 0) / 4294967295;
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', bootLilacClouds, { once: true });
-} else {
-  bootLilacClouds();
+function clamp(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, value));
 }
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootLilacClouds, { once: true });
+else bootLilacClouds();
