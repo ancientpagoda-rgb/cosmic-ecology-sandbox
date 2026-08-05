@@ -2,8 +2,8 @@ const MOBILE_BUFFER = { width: 768, height: 432 };
 const DESKTOP_BUFFER = { width: 1280, height: 720 };
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 8;
-const SEED = 20260812;
-
+const DEG = Math.PI / 180;
+const RAD = 180 / Math.PI;
 let bootAttempts = 0;
 
 function boot() {
@@ -25,7 +25,7 @@ function boot() {
   canvas.height = buffer.height;
   canvas.tabIndex = 0;
   canvas.setAttribute('role', 'application');
-  canvas.setAttribute('aria-label', 'High-fidelity spherical living world. Scroll or pinch to zoom and drag to rotate.');
+  canvas.setAttribute('aria-label', 'Scientific Earth model with simulated precipitation radar. Pinch or scroll to zoom and drag to rotate.');
 
   backing.id = 'lofiLivingCanvasBacking';
   backing.tabIndex = -1;
@@ -37,17 +37,18 @@ function boot() {
   surfaceCanvas.width = buffer.width;
   surfaceCanvas.height = buffer.height;
   const surfaceContext = surfaceCanvas.getContext('2d', { alpha: true });
-
   context.imageSmoothingEnabled = true;
   surfaceContext.imageSmoothingEnabled = true;
-  document.body.dataset.presentationFidelity = 'high';
 
-  const stars = createStars(buffer.width, buffer.height, mobile ? 160 : 300);
+  document.body.dataset.presentationFidelity = 'high';
+  document.body.dataset.scientificPlanet = 'earth';
+
+  const stars = createStars(buffer.width, buffer.height, mobile ? 170 : 320);
   const pointers = new Map();
   let drag = null;
   let pinch = null;
   let lastSignature = '';
-  let lastCloudPhase = -1;
+  let lastLightMinute = -1;
   let lastRenderMs = 0;
   let rendering = false;
   let queued = false;
@@ -57,8 +58,7 @@ function boot() {
   const originalRender = unified.render.bind(unified);
   unified.render = frame => {
     originalRender(frame);
-    const timestamp = frame?.timestamp ?? performance.now();
-    renderIfNeeded(timestamp);
+    renderIfNeeded(frame?.timestamp ?? performance.now());
   };
 
   const originalSnapshot = unified.getSnapshot.bind(unified);
@@ -71,7 +71,11 @@ function boot() {
       outputWidth: buffer.width,
       outputHeight: buffer.height,
       backingRenderer: 'pixi-webgl',
-      visibleRenderer: 'canvas2d-hifi',
+      visibleRenderer: 'canvas2d-scientific-earth',
+      scientificPlanet: 'earth',
+      coordinateSystem: 'WGS84-style latitude-longitude',
+      solarLighting: 'UTC-derived approximate subsolar point',
+      earthReferenceModel: 'recognizable geospatial approximation',
     };
     return snapshot;
   };
@@ -81,28 +85,69 @@ function boot() {
     canvas,
     buffer: { ...buffer },
     render: () => renderIfNeeded(performance.now(), true),
+    projectGeo,
+    getViewGeometry,
+    surfaceSample: (latitudeDegrees, longitudeDegrees) => earthSurface(latitudeDegrees * DEG, longitudeDegrees * DEG),
     getState: () => ({
       ready: true,
       mobile,
       width: buffer.width,
       height: buffer.height,
       lastRenderMs,
+      scientificPlanet: 'earth',
       camera: unified.getCamera(),
+      solarSubpoint: solarSubpoint(new Date()),
     }),
   };
 
   renderIfNeeded(performance.now(), true);
 
+  function getViewGeometry() {
+    const camera = unified.getCamera();
+    const width = buffer.width;
+    const height = buffer.height;
+    const baseRadius = Math.min(width, height) * (mobile ? 0.43 : 0.44);
+    return {
+      width,
+      height,
+      cx: width * 0.5,
+      cy: height * 0.5,
+      baseRadius,
+      radius: baseRadius * camera.zoom,
+      lon0: (camera.centerX - 0.5) * Math.PI * 2,
+      lat0: (0.5 - camera.centerY) * Math.PI,
+      camera,
+    };
+  }
+
+  function projectGeo(latitudeDegrees, longitudeDegrees) {
+    const geometry = getViewGeometry();
+    const latitude = latitudeDegrees * DEG;
+    const longitude = longitudeDegrees * DEG;
+    const deltaLongitude = wrapLongitude(longitude - geometry.lon0);
+    const sinLat = Math.sin(latitude);
+    const cosLat = Math.cos(latitude);
+    const sinLat0 = Math.sin(geometry.lat0);
+    const cosLat0 = Math.cos(geometry.lat0);
+    const sx = cosLat * Math.sin(deltaLongitude);
+    const sy = sinLat * cosLat0 - cosLat * Math.cos(deltaLongitude) * sinLat0;
+    const depth = sinLat * sinLat0 + cosLat * Math.cos(deltaLongitude) * cosLat0;
+    return {
+      x: geometry.cx + sx * geometry.radius,
+      y: geometry.cy - sy * geometry.radius,
+      visible: depth > 0,
+      depth,
+      radius: geometry.radius,
+      cx: geometry.cx,
+      cy: geometry.cy,
+    };
+  }
+
   function renderIfNeeded(timestamp, force = false) {
     const camera = unified.getCamera();
-    const cloudPhase = Math.floor(timestamp / 2400);
-    const signature = [
-      camera.zoom.toFixed(4),
-      camera.centerX.toFixed(5),
-      camera.centerY.toFixed(5),
-    ].join(':');
-
-    if (!force && signature === lastSignature && cloudPhase === lastCloudPhase) return;
+    const lightMinute = Math.floor(Date.now() / 60000);
+    const signature = [camera.zoom.toFixed(4), camera.centerX.toFixed(5), camera.centerY.toFixed(5)].join(':');
+    if (!force && signature === lastSignature && lightMinute === lastLightMinute) return;
     if (rendering) {
       queued = true;
       return;
@@ -110,10 +155,10 @@ function boot() {
 
     rendering = true;
     const started = performance.now();
-    drawPlanet(camera, cloudPhase);
+    drawEarth(new Date());
     lastRenderMs = performance.now() - started;
     lastSignature = signature;
-    lastCloudPhase = cloudPhase;
+    lastLightMinute = lightMinute;
     rendering = false;
 
     if (queued) {
@@ -122,25 +167,15 @@ function boot() {
     }
   }
 
-  function drawPlanet(camera, cloudPhase) {
-    const width = buffer.width;
-    const height = buffer.height;
-    const cx = width * 0.5;
-    const cy = height * 0.5;
-    const baseRadius = Math.min(width, height) * (mobile ? 0.43 : 0.44);
-    const radius = baseRadius * camera.zoom;
+  function drawEarth(now) {
+    const geometry = getViewGeometry();
+    const { width, height, cx, cy, baseRadius, radius, lon0, lat0 } = geometry;
+    const sinLat0 = Math.sin(lat0);
+    const cosLat0 = Math.cos(lat0);
+    const sun = solarSubpoint(now);
 
     drawSpace(context, width, height, stars);
-
-    context.save();
-    context.shadowColor = 'rgba(46, 127, 174, 0.52)';
-    context.shadowBlur = Math.max(18, baseRadius * 0.13);
-    context.beginPath();
-    context.arc(cx, cy, Math.min(radius, baseRadius * 1.04), 0, Math.PI * 2);
-    context.strokeStyle = 'rgba(94, 180, 221, 0.38)';
-    context.lineWidth = Math.max(3, baseRadius * 0.018);
-    context.stroke();
-    context.restore();
+    drawAtmosphericGlow(context, cx, cy, radius, baseRadius);
 
     const image = surfaceContext.createImageData(width, height);
     const data = image.data;
@@ -148,12 +183,6 @@ function boot() {
     const right = Math.min(width - 1, Math.ceil(cx + radius + 2));
     const top = Math.max(0, Math.floor(cy - radius - 2));
     const bottom = Math.min(height - 1, Math.ceil(cy + radius + 2));
-    const lon0 = (camera.centerX - 0.5) * Math.PI * 2;
-    const lat0 = (0.5 - camera.centerY) * Math.PI;
-    const sinLat0 = Math.sin(lat0);
-    const cosLat0 = Math.cos(lat0);
-    const light = normalize3(-0.42, 0.46, 0.78);
-    const cloudShift = cloudPhase * 0.018;
 
     for (let py = top; py <= bottom; py++) {
       const sy = -(py + 0.5 - cy) / radius;
@@ -164,87 +193,45 @@ function boot() {
 
         const viewZ = Math.sqrt(Math.max(0, 1 - rho2));
         const latitude = Math.asin(clamp(sy * cosLat0 + viewZ * sinLat0, -1, 1));
-        const longitude = lon0 + Math.atan2(sx, viewZ * cosLat0 - sy * sinLat0);
-        const cosLat = Math.cos(latitude);
-        const gx = cosLat * Math.cos(longitude);
-        const gy = Math.sin(latitude);
-        const gz = cosLat * Math.sin(longitude);
+        const longitude = wrapLongitude(lon0 + Math.atan2(sx, viewZ * cosLat0 - sy * sinLat0));
+        const surface = earthSurface(latitude, longitude);
+        const lightAmount = solarIllumination(latitude, longitude, sun.latitude, sun.longitude);
 
-        const macro = layeredWave(gx, gy, gz, 1.8);
-        const regional = layeredWave(gx + 0.17, gy - 0.09, gz + 0.13, 4.7);
-        const fine = layeredWave(gx - 0.21, gy + 0.11, gz - 0.07, 13.4);
-        const grain = hash3(
-          Math.floor((gx + 1) * 640),
-          Math.floor((gy + 1) * 640),
-          Math.floor((gz + 1) * 640),
-          SEED,
-        ) * 2 - 1;
-        const ridge = 1 - Math.abs(Math.sin((gx * 7.8 + gy * 5.4 - gz * 6.2) * Math.PI));
-        const elevation = macro * 0.58 + regional * 0.28 + fine * 0.1 + grain * 0.04 + ridge * 0.08 - 0.08;
-        const land = elevation > 0.03;
-        const latitudeCold = Math.pow(Math.abs(gy), 1.28);
-        const temperature = clamp(1 - latitudeCold * 0.96 - Math.max(0, elevation) * 0.42, 0, 1);
-        const moisture = clamp(0.52 + layeredWave(gx - 0.31, gy + 0.22, gz + 0.19, 7.3) * 0.42 - ridge * 0.08, 0, 1);
+        let color = surface.land
+          ? landColor(surface)
+          : oceanColor(surface, latitude);
 
-        let color = land
-          ? landColor(elevation, temperature, moisture, ridge)
-          : oceanColor(elevation);
+        const daylight = 0.1 + smoothstep(-0.15, 0.32, lightAmount) * 0.9;
+        const twilightWarmth = smoothstep(-0.18, 0.03, lightAmount) * (1 - smoothstep(0.03, 0.22, lightAmount));
+        color = multiplyColor(color, daylight);
+        color = addColor(color, 32 * twilightWarmth, 10 * twilightWarmth, 4 * twilightWarmth);
 
-        const lightAmount = clamp(sx * light.x + sy * light.y + viewZ * light.z, -1, 1);
-        const daylight = 0.2 + Math.max(0, lightAmount) * 0.86;
-        const twilight = smoothstep(-0.18, 0.08, lightAmount);
-        color = multiplyColor(color, daylight * (0.64 + twilight * 0.36));
-
-        if (!land) {
-          const glint = Math.pow(Math.max(0, lightAmount), 30) * Math.pow(viewZ, 5);
-          color = addColor(color, 105 * glint, 132 * glint, 150 * glint);
-        } else if (lightAmount < -0.08) {
-          const settlement = hash3(
-            Math.floor((longitude + Math.PI) * 170),
-            Math.floor((latitude + Math.PI * 0.5) * 170),
-            7,
-            SEED + 91,
-          );
-          if (settlement > 0.994 && temperature > 0.18 && elevation < 0.55) {
-            const glow = clamp((-lightAmount - 0.08) * 3.5, 0, 1);
-            color = addColor(color, 175 * glow, 112 * glow, 42 * glow);
+        if (!surface.land) {
+          const glint = Math.pow(Math.max(0, lightAmount), 26) * Math.pow(viewZ, 5);
+          color = addColor(color, 112 * glint, 137 * glint, 155 * glint);
+        } else if (lightAmount < -0.08 && surface.populationPotential > 0.52) {
+          const city = cityPattern(latitude, longitude, surface.populationPotential);
+          if (city > 0.89) {
+            const glow = clamp((-lightAmount - 0.08) * 3.8, 0, 1) * (city - 0.88) * 6;
+            color = addColor(color, 190 * glow, 135 * glow, 62 * glow);
           }
         }
 
-        const cloud = cloudField(gx, gy, gz, cloudShift);
-        if (cloud > 0.61) {
-          const density = smoothstep(0.61, 0.91, cloud) * (0.3 + viewZ * 0.7);
-          const cloudLight = 0.46 + Math.max(0, lightAmount) * 0.68;
-          color = mixColor(color, [225 * cloudLight, 235 * cloudLight, 239 * cloudLight], density * 0.72);
-        }
+        const atmosphere = Math.pow(1 - viewZ, 2.35);
+        color = addColor(color, 32 * atmosphere, 88 * atmosphere, 145 * atmosphere);
 
-        const rim = Math.pow(1 - viewZ, 2.35);
-        color = addColor(color, 42 * rim, 104 * rim, 145 * rim);
         const index = (py * width + px) * 4;
         data[index] = clampByte(color[0]);
         data[index + 1] = clampByte(color[1]);
         data[index + 2] = clampByte(color[2]);
-        data[index + 3] = clampByte(230 + viewZ * 25);
+        data[index + 3] = clampByte(228 + viewZ * 27);
       }
     }
 
     surfaceContext.clearRect(0, 0, width, height);
     surfaceContext.putImageData(image, 0, 0);
     context.drawImage(surfaceCanvas, 0, 0);
-
-    context.save();
-    const edgeWidth = Math.max(1.5, baseRadius * 0.012);
-    context.beginPath();
-    context.arc(cx, cy, radius, 0, Math.PI * 2);
-    context.strokeStyle = 'rgba(138, 211, 239, 0.72)';
-    context.lineWidth = edgeWidth;
-    context.stroke();
-    context.beginPath();
-    context.arc(cx - radius * 0.13, cy - radius * 0.18, radius * 0.72, Math.PI * 1.03, Math.PI * 1.62);
-    context.strokeStyle = 'rgba(255,255,255,0.16)';
-    context.lineWidth = Math.max(1, edgeWidth * 0.66);
-    context.stroke();
-    context.restore();
+    drawAtmosphericRim(context, cx, cy, radius, baseRadius);
   }
 
   function installInteractions() {
@@ -263,10 +250,7 @@ function boot() {
       canvas.setPointerCapture?.(event.pointerId);
       pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       if (pointers.size >= 2) beginPinch();
-      else {
-        const camera = unified.getCamera();
-        drag = { id: event.pointerId, x: event.clientX, y: event.clientY, camera };
-      }
+      else drag = { id: event.pointerId, x: event.clientX, y: event.clientY, camera: unified.getCamera() };
       canvas.dataset.dragging = 'true';
     });
 
@@ -343,17 +327,197 @@ function boot() {
   }
 }
 
+function earthSurface(latitude, longitude) {
+  const lat = latitude * RAD;
+  const lon = longitude * RAD;
+  const continent = continentMask(lat, lon);
+  const mountains = mountainMask(lat, lon);
+  const oceanBasin = oceanDepth(lat, lon);
+  const coastlineNoise = 0.08 * climateNoise(lat * 2.4, lon * 2.4);
+  const elevation = continent * 0.9 + mountains * 0.55 + coastlineNoise - oceanBasin * 0.52 - 0.1;
+  const land = elevation > 0.02;
+
+  const latitudeCold = Math.pow(Math.abs(Math.sin(latitude)), 1.18);
+  const temperature = clamp(1 - latitudeCold * 0.98 - Math.max(0, elevation) * 0.34, 0, 1);
+  const desertIndex = desertZones(lat, lon);
+  const moisture = clamp(0.55 + climateNoise(lat, lon) * 0.26 - desertIndex * 0.48 + continent * 0.07, 0, 1);
+  const snow = land && (temperature < 0.18 || lat > 71 || lat < -68);
+  const tundra = land && !snow && temperature < 0.28;
+  const desert = land && !snow && desertIndex > 0.36 && temperature > 0.42;
+  const populationPotential = clamp((1 - Math.abs(lat) / 90) * 0.7 + moisture * 0.38 - mountains * 0.32 - desertIndex * 0.16, 0, 1);
+  return { land, elevation, temperature, moisture, desert, snow, tundra, populationPotential };
+}
+
+function continentMask(lat, lon) {
+  const pieces = [
+    blob(lat, lon, 52, -108, 27, 42, 1.0),
+    blob(lat, lon, 40, -78, 18, 24, 0.82),
+    blob(lat, lon, 18, -99, 11, 16, 0.58),
+    blob(lat, lon, -14, -60, 25, 20, 1.02),
+    blob(lat, lon, 71, -42, 13, 19, 0.78),
+    blob(lat, lon, 6, 20, 25, 27, 1.02),
+    blob(lat, lon, 51, 14, 17, 22, 0.86),
+    blob(lat, lon, 55, 72, 19, 56, 1.05),
+    blob(lat, lon, 25, 46, 11, 17, 0.48),
+    blob(lat, lon, 22, 79, 13, 12, 0.54),
+    blob(lat, lon, 34, 106, 18, 25, 0.78),
+    blob(lat, lon, 61, 112, 15, 33, 0.68),
+    blob(lat, lon, -25, 134, 18, 24, 0.9),
+    blob(lat, lon, -42, 172, 8, 7, 0.3),
+    blob(lat, lon, -80, 0, 8, 180, 1.15),
+  ];
+
+  const cutouts =
+    blob(lat, lon, 25, -84, 8, 7, 0.5) +
+    blob(lat, lon, 34, 33, 7, 9, 0.35) +
+    blob(lat, lon, 18, 115, 11, 15, 0.32) +
+    blob(lat, lon, -5, 75, 14, 20, 0.18);
+
+  return clamp(pieces.reduce((sum, value) => sum + value, 0) - cutouts, 0, 1.35);
+}
+
+function mountainMask(lat, lon) {
+  return clamp(
+    ridge(lat, lon, -18, -70, 44, 5, 0.9) +
+    ridge(lat, lon, 45, -112, 28, 7, 0.48) +
+    ridge(lat, lon, 45, 10, 12, 4, 0.3) +
+    ridge(lat, lon, 31, 82, 30, 6, 0.96) +
+    ridge(lat, lon, 9, 39, 20, 5, 0.34) +
+    ridge(lat, lon, 37, 138, 10, 3, 0.22) +
+    ridge(lat, lon, -6, 146, 12, 4, 0.25),
+    0,
+    1.2,
+  );
+}
+
+function oceanDepth(lat, lon) {
+  return clamp(
+    0.42 +
+    blob(lat, lon, 0, -145, 38, 72, 0.34) +
+    blob(lat, lon, 0, -25, 31, 45, 0.22) +
+    blob(lat, lon, -20, 80, 27, 34, 0.18),
+    0,
+    1,
+  );
+}
+
+function desertZones(lat, lon) {
+  return clamp(
+    blob(lat, lon, 22, 15, 11, 32, 1.0) +
+    blob(lat, lon, 24, 46, 8, 18, 0.78) +
+    blob(lat, lon, -24, 134, 12, 18, 0.72) +
+    blob(lat, lon, 42, 104, 8, 18, 0.48) +
+    blob(lat, lon, -23, -69, 7, 6, 0.56) +
+    blob(lat, lon, 33, -112, 8, 12, 0.44),
+    0,
+    1,
+  );
+}
+
+function climateNoise(lat, lon) {
+  return (
+    Math.sin((lon + lat * 0.5) * Math.PI / 45) * 0.4 +
+    Math.cos((lon * 0.7 - lat * 1.4) * Math.PI / 33) * 0.35 +
+    Math.sin((lon * 1.8 + lat * 0.3) * Math.PI / 22) * 0.25
+  );
+}
+
+function landColor(surface) {
+  if (surface.snow) return mixColor([214, 225, 232], [247, 251, 252], 0.58 + surface.elevation * 0.18);
+  if (surface.elevation > 0.78) return mixColor([110, 103, 94], [209, 208, 204], smoothstep(0.78, 1.15, surface.elevation));
+  if (surface.tundra) return mixColor([116, 130, 103], [165, 178, 146], 0.5);
+  if (surface.desert) return mixColor([167, 126, 69], [226, 193, 124], clamp(surface.temperature * 0.68 + (1 - surface.moisture) * 0.32, 0, 1));
+  if (surface.moisture > 0.72 && surface.temperature > 0.42) return mixColor([21, 83, 47], [55, 129, 68], 0.58 + surface.moisture * 0.22);
+  if (surface.moisture > 0.46) return mixColor([48, 103, 57], [106, 146, 79], 0.42 + surface.temperature * 0.2);
+  return mixColor([96, 116, 69], [151, 148, 89], 1 - surface.moisture);
+}
+
+function oceanColor(surface, latitude) {
+  const depth = clamp((-surface.elevation + 0.03) / 0.72, 0, 1);
+  const polar = smoothstep(56 * DEG, 82 * DEG, Math.abs(latitude));
+  const base = mixColor([6, 27, 68], [25, 108, 153], 1 - depth * 0.72);
+  return polar > 0.15 ? mixColor(base, [92, 138, 166], polar * 0.22) : base;
+}
+
+function cityPattern(latitude, longitude, suitability) {
+  const a = Math.sin((longitude * 7.2 + latitude * 1.7) * 9.1);
+  const b = Math.cos((longitude * 4.7 - latitude * 5.3) * 7.3);
+  return clamp(((a + b + 2) * 0.25) * suitability, 0, 1);
+}
+
+function solarSubpoint(date) {
+  const start = Date.UTC(date.getUTCFullYear(), 0, 0);
+  const day = (date.getTime() - start) / 86400000;
+  const utcHours = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
+  const latitude = 23.44 * Math.sin((2 * Math.PI * (284 + day)) / 365.2422) * DEG;
+  const longitude = wrapLongitude((180 - utcHours * 15) * DEG);
+  return { latitude, longitude, latitudeDegrees: latitude * RAD, longitudeDegrees: longitude * RAD };
+}
+
+function solarIllumination(latitude, longitude, sunLatitude, sunLongitude) {
+  return Math.sin(latitude) * Math.sin(sunLatitude) +
+    Math.cos(latitude) * Math.cos(sunLatitude) * Math.cos(wrapLongitude(longitude - sunLongitude));
+}
+
+function ridge(lat, lon, centerLat, centerLon, length, width, weight) {
+  const dLon = wrappedDelta(lon, centerLon);
+  const dLat = lat - centerLat;
+  const along = Math.exp(-(dLat * dLat) / (2 * length * length));
+  const across = Math.exp(-(dLon * dLon) / (2 * width * width));
+  return along * across * weight;
+}
+
+function blob(lat, lon, centerLat, centerLon, radiusLat, radiusLon, weight) {
+  const dLat = (lat - centerLat) / radiusLat;
+  const dLon = wrappedDelta(lon, centerLon) / radiusLon;
+  return Math.exp(-(dLat * dLat + dLon * dLon) * 1.45) * weight;
+}
+
+function wrappedDelta(a, b) {
+  let delta = a - b;
+  while (delta > 180) delta -= 360;
+  while (delta < -180) delta += 360;
+  return delta;
+}
+
+function drawAtmosphericGlow(context, cx, cy, radius, baseRadius) {
+  context.save();
+  context.shadowColor = 'rgba(65, 137, 188, 0.52)';
+  context.shadowBlur = Math.max(18, baseRadius * 0.13);
+  context.beginPath();
+  context.arc(cx, cy, Math.min(radius, baseRadius * 1.04), 0, Math.PI * 2);
+  context.strokeStyle = 'rgba(103, 181, 225, 0.38)';
+  context.lineWidth = Math.max(3, baseRadius * 0.018);
+  context.stroke();
+  context.restore();
+}
+
+function drawAtmosphericRim(context, cx, cy, radius, baseRadius) {
+  context.save();
+  const edgeWidth = Math.max(1.5, baseRadius * 0.012);
+  context.beginPath();
+  context.arc(cx, cy, radius, 0, Math.PI * 2);
+  context.strokeStyle = 'rgba(142, 210, 244, 0.74)';
+  context.lineWidth = edgeWidth;
+  context.stroke();
+  context.beginPath();
+  context.arc(cx - radius * 0.13, cy - radius * 0.18, radius * 0.72, Math.PI * 1.03, Math.PI * 1.62);
+  context.strokeStyle = 'rgba(255,255,255,0.14)';
+  context.lineWidth = Math.max(1, edgeWidth * 0.66);
+  context.stroke();
+  context.restore();
+}
+
 function drawSpace(context, width, height, stars) {
-  const gradient = context.createRadialGradient(width * 0.5, height * 0.48, 0, width * 0.5, height * 0.5, Math.max(width, height) * 0.72);
-  gradient.addColorStop(0, '#07131d');
-  gradient.addColorStop(0.58, '#030a11');
-  gradient.addColorStop(1, '#010308');
+  const gradient = context.createRadialGradient(width * 0.52, height * 0.48, 0, width * 0.5, height * 0.5, Math.max(width, height) * 0.75);
+  gradient.addColorStop(0, '#081420');
+  gradient.addColorStop(0.58, '#030913');
+  gradient.addColorStop(1, '#010307');
   context.fillStyle = gradient;
   context.fillRect(0, 0, width, height);
-
   for (const star of stars) {
     context.globalAlpha = star.alpha;
-    context.fillStyle = star.warm ? '#f6dfbd' : '#d8ecff';
+    context.fillStyle = star.warm ? '#f5dfc4' : '#d6ebff';
     context.fillRect(star.x, star.y, star.size, star.size);
   }
   context.globalAlpha = 1;
@@ -362,46 +526,21 @@ function drawSpace(context, width, height, stars) {
 function createStars(width, height, count) {
   const stars = [];
   for (let index = 0; index < count; index++) {
-    const x = hash3(index, 11, 23, SEED + 17) * width;
-    const y = hash3(index, 29, 47, SEED + 31) * height;
     stars.push({
-      x: Math.floor(x),
-      y: Math.floor(y),
-      size: hash3(index, 53, 71, SEED + 43) > 0.94 ? 2 : 1,
-      alpha: 0.25 + hash3(index, 79, 97, SEED + 59) * 0.62,
-      warm: hash3(index, 101, 113, SEED + 73) > 0.78,
+      x: Math.floor(hash(index, 11) * width),
+      y: Math.floor(hash(index, 29) * height),
+      size: hash(index, 53) > 0.94 ? 2 : 1,
+      alpha: 0.22 + hash(index, 71) * 0.62,
+      warm: hash(index, 101) > 0.78,
     });
   }
   return stars;
 }
 
-function layeredWave(x, y, z, frequency) {
-  const a = Math.sin((x * 1.13 + y * 0.77 - z * 0.41) * frequency * Math.PI);
-  const b = Math.cos((x * -0.63 + y * 1.31 + z * 0.92) * frequency * Math.PI * 0.73);
-  const c = Math.sin((x * 0.48 - y * 0.56 + z * 1.42) * frequency * Math.PI * 1.37);
-  const d = Math.cos((x + y + z) * frequency * Math.PI * 0.39);
-  return (a * 0.34 + b * 0.29 + c * 0.23 + d * 0.14);
-}
-
-function cloudField(x, y, z, shift) {
-  const broad = layeredWave(x + shift, y - shift * 0.18, z + shift * 0.46, 6.8);
-  const wisps = layeredWave(x - shift * 0.37, y + shift * 0.11, z + shift, 17.2);
-  return clamp(0.52 + broad * 0.31 + wisps * 0.18, 0, 1);
-}
-
-function oceanColor(elevation) {
-  const shallow = smoothstep(-0.32, 0.04, elevation);
-  return mixColor([5, 24, 54], [21, 102, 130], shallow);
-}
-
-function landColor(elevation, temperature, moisture, ridge) {
-  if (temperature < 0.12) return mixColor([205, 219, 225], [246, 250, 250], 0.62 + ridge * 0.25);
-  if (elevation > 0.72) return mixColor([104, 100, 92], [224, 224, 219], smoothstep(0.72, 1.05, elevation));
-  if (elevation > 0.53) return mixColor([79, 84, 74], [140, 126, 103], ridge * 0.65);
-  if (moisture < 0.22 && temperature > 0.46) return mixColor([154, 112, 59], [213, 174, 100], temperature * 0.7);
-  if (moisture > 0.68 && temperature > 0.38) return mixColor([20, 83, 54], [49, 126, 70], temperature * 0.5);
-  if (moisture > 0.48) return mixColor([39, 91, 57], [84, 134, 72], temperature * 0.42);
-  return mixColor([94, 112, 63], [143, 139, 76], 1 - moisture);
+function hash(a, b) {
+  let value = Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ 0x9e3779b9;
+  value = Math.imul(value ^ (value >>> 13), 1274126177);
+  return ((value ^ (value >>> 16)) >>> 0) / 4294967295;
 }
 
 function mixColor(a, b, t) {
@@ -421,20 +560,15 @@ function addColor(color, red, green, blue) {
   return [color[0] + red, color[1] + green, color[2] + blue];
 }
 
-function hash3(x, y, z, seed) {
-  let value = seed ^ Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(z | 0, 2147483647);
-  value = Math.imul(value ^ (value >>> 13), 1274126177);
-  return ((value ^ (value >>> 16)) >>> 0) / 4294967295;
-}
-
-function normalize3(x, y, z) {
-  const length = Math.hypot(x, y, z) || 1;
-  return { x: x / length, y: y / length, z: z / length };
-}
-
 function smoothstep(edge0, edge1, value) {
   const t = clamp((value - edge0) / Math.max(0.000001, edge1 - edge0), 0, 1);
   return t * t * (3 - 2 * t);
+}
+
+function wrapLongitude(value) {
+  while (value > Math.PI) value -= Math.PI * 2;
+  while (value < -Math.PI) value += Math.PI * 2;
+  return value;
 }
 
 function wrap01(value) {

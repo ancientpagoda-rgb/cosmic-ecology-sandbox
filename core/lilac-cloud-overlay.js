@@ -1,22 +1,31 @@
-const CLOUD_STEP_MS = 2400;
-const MOBILE_QUERY = '(max-width: 720px), (pointer: coarse)';
+const RADAR_STEP_MS = 1200;
+const DEG = Math.PI / 180;
 const TAU = Math.PI * 2;
 let attempts = 0;
 
-function bootLilacClouds() {
+const BASE_SYSTEMS = [
+  { id: 'north-atlantic', latitude: 49, longitude: -42, radius: 14, intensity: 0.88, drift: 4.8, spin: 1 },
+  { id: 'north-pacific', latitude: 43, longitude: 166, radius: 16, intensity: 0.82, drift: 4.1, spin: 1 },
+  { id: 'west-pacific-tropical', latitude: 18, longitude: 132, radius: 10, intensity: 0.94, drift: 2.8, spin: -1 },
+  { id: 'atlantic-tropical', latitude: 15, longitude: -48, radius: 9, intensity: 0.86, drift: 2.5, spin: -1 },
+  { id: 'south-indian', latitude: -38, longitude: 72, radius: 14, intensity: 0.76, drift: 4.6, spin: -1 },
+  { id: 'south-pacific', latitude: -42, longitude: -142, radius: 15, intensity: 0.72, drift: 4.2, spin: -1 },
+];
+
+function bootEarthRadar() {
   if (window.realitySandboxLilacClouds?.ready) return;
 
   const unified = window.realitySandboxUnified;
   const hifi = window.realitySandboxHifi;
   const canvas = document.getElementById('lofiLivingCanvas');
-  if (!unified || !hifi?.ready || !canvas) {
-    if (attempts++ < 240) setTimeout(bootLilacClouds, 50);
+  if (!unified || !hifi?.ready || typeof hifi.projectGeo !== 'function' || !canvas) {
+    if (attempts++ < 240) setTimeout(bootEarthRadar, 50);
     return;
   }
 
   const context = canvas.getContext('2d');
-  const mobile = matchMedia(MOBILE_QUERY).matches;
   let lastSignature = '';
+  let activeSystems = [];
 
   const originalUnifiedRender = unified.render.bind(unified);
   unified.render = frame => {
@@ -27,7 +36,7 @@ function bootLilacClouds() {
   const originalHifiRender = hifi.render.bind(hifi);
   hifi.render = () => {
     originalHifiRender();
-    drawClouds(performance.now());
+    drawRadar(performance.now());
   };
 
   const originalSnapshot = unified.getSnapshot.bind(unified);
@@ -35,20 +44,44 @@ function bootLilacClouds() {
     const snapshot = originalSnapshot();
     snapshot.presentation = {
       ...snapshot.presentation,
-      cloudPalette: 'pale-lilac-clouds-purple-rain-radar',
-      cloudStyle: 'swirls-with-rain-intensity',
       rainRadar: true,
+      radarPalette: 'lavender-violet-pink',
+      radarCoordinateSystem: 'georeferenced latitude-longitude',
+      radarDataMode: 'simulated-not-live',
     };
     return snapshot;
   };
 
+  const earthWeather = {
+    ready: true,
+    mode: 'simulated-georeferenced',
+    isLiveData: false,
+    getSystems,
+    getPrecipitationSamples,
+  };
+  window.realitySandboxEarthWeather = earthWeather;
+
   window.realitySandboxLilacClouds = {
     ready: true,
     rainRadar: true,
+    georeferenced: true,
+    simulated: true,
     render: () => {
       originalHifiRender();
-      drawClouds(performance.now());
+      drawRadar(performance.now());
     },
+    getState: () => ({
+      ready: true,
+      rainRadar: true,
+      georeferenced: true,
+      simulated: true,
+      activeSystems: activeSystems.map(system => ({
+        id: system.id,
+        latitude: system.latitude,
+        longitude: system.longitude,
+        intensity: system.intensity,
+      })),
+    }),
   };
 
   originalHifiRender();
@@ -56,139 +89,207 @@ function bootLilacClouds() {
 
   function drawWhenFresh(timestamp) {
     const camera = unified.getCamera();
-    const phase = Math.floor(timestamp / CLOUD_STEP_MS);
-    const signature = [phase, camera.zoom.toFixed(4), camera.centerX.toFixed(5), camera.centerY.toFixed(5)].join(':');
+    const step = Math.floor(timestamp / RADAR_STEP_MS);
+    const signature = [step, camera.zoom.toFixed(4), camera.centerX.toFixed(5), camera.centerY.toFixed(5)].join(':');
     if (signature === lastSignature) return;
     lastSignature = signature;
-    drawClouds(timestamp);
+    drawRadar(timestamp);
   }
 
-  function drawClouds(timestamp) {
-    const camera = unified.getCamera();
-    const width = canvas.width;
-    const height = canvas.height;
-    const cx = width * 0.5;
-    const cy = height * 0.5;
-    const baseRadius = Math.min(width, height) * (mobile ? 0.43 : 0.44);
-    const radius = baseRadius * camera.zoom;
-    const phase = timestamp / 18000;
+  function drawRadar(timestamp) {
+    const geometry = hifi.getViewGeometry();
+    activeSystems = getSystems(timestamp);
 
     context.save();
     context.beginPath();
-    context.arc(cx, cy, radius, 0, TAU);
+    context.arc(geometry.cx, geometry.cy, geometry.radius, 0, TAU);
     context.clip();
     context.globalCompositeOperation = 'screen';
 
-    const swirls = mobile ? 5 : 7;
-    for (let index = 0; index < swirls; index++) drawSwirl(index, phase, camera, cx, cy, radius);
+    drawItcz(timestamp, geometry.radius);
+    for (const system of activeSystems) drawSystem(system, timestamp, geometry.radius);
 
     context.restore();
   }
 
-  function drawSwirl(index, phase, camera, cx, cy, radius) {
-    const seed = 9137 + index * 173;
-    const longitudeShift = camera.centerX * TAU;
-    const latitudeShift = (camera.centerY - 0.5) * Math.PI;
-    const orbit = hash(seed, 11) * TAU + longitudeShift * 0.7 + phase * (0.34 + index * 0.025);
-    const radial = 0.16 + hash(seed, 19) * 0.58;
-    const centerX = cx + Math.cos(orbit) * radius * radial;
-    const centerY = cy + Math.sin(orbit * 0.84 + latitudeShift) * radius * radial * 0.62;
-    const spiralRadius = radius * (0.12 + hash(seed, 29) * 0.17);
-    const turns = 1.18 + hash(seed, 37) * 0.92;
-    const clockwise = index % 2 === 0 ? 1 : -1;
-    const points = [];
-    const intensities = [];
-    const samples = 48;
+  function drawItcz(timestamp, radius) {
+    const phase = timestamp / 22000;
+    const latitudeBase = 4 + Math.sin(phase * 0.35) * 3;
+    const segments = 18;
 
-    for (let sample = 0; sample <= samples; sample++) {
-      const t = sample / samples;
-      const angle = orbit + clockwise * t * turns * TAU;
-      const expansion = 0.2 + t * 0.9;
-      const wobble = Math.sin(t * TAU * 3 + seed * 0.01) * spiralRadius * 0.08;
-      points.push({
-        x: centerX + Math.cos(angle) * (spiralRadius * expansion + wobble),
-        y: centerY + Math.sin(angle) * (spiralRadius * expansion * 0.58 + wobble * 0.35),
-      });
+    for (let segment = 0; segment < segments; segment++) {
+      const longitude = -175 + segment * (350 / (segments - 1));
+      const intensity = clamp(0.36 + 0.33 * Math.sin(segment * 1.7 + phase * 2.2) + 0.2 * hash(segment, 801), 0, 0.8);
+      if (intensity < 0.48) continue;
+      const latitude = latitudeBase + Math.sin(longitude * DEG * 2.4 + phase) * 4;
+      const projected = hifi.projectGeo(latitude, longitude);
+      if (!projected.visible) continue;
 
-      const broadCell = 0.5 + 0.5 * Math.sin(t * TAU * (1.6 + hash(seed, 73)) + phase * 1.8 + seed * 0.004);
-      const embeddedCell = 0.5 + 0.5 * Math.sin(t * TAU * (4.4 + hash(seed, 89) * 2.2) - phase * 2.4 + seed * 0.009);
-      const noise = hash(seed + Math.floor(t * 13), 101 + index);
-      intensities.push(clamp(broadCell * 0.52 + embeddedCell * 0.3 + noise * 0.18, 0, 1));
-    }
-
-    const outerWidth = Math.max(8, radius * (0.035 + hash(seed, 43) * 0.02));
-
-    // Dry cloud: pale, pretty lilac instead of solid purple.
-    strokeRibbon(points, outerWidth, 'rgba(235, 216, 255, 0.18)', radius * 0.012, 'rgba(220, 190, 255, 0.42)');
-    strokeRibbon(points, outerWidth * 0.58, 'rgba(213, 185, 245, 0.26)', radius * 0.006, 'rgba(214, 183, 255, 0.3)');
-
-    // Rain radar: purple appears only in active rain cells.
-    strokeRainSegments(points, intensities, outerWidth, 0.48, 'rgba(163, 104, 232, 0.5)', 'rgba(181, 118, 244, 0.74)');
-    strokeRainSegments(points, intensities, outerWidth * 0.7, 0.67, 'rgba(103, 49, 190, 0.72)', 'rgba(146, 75, 230, 0.9)');
-    strokeRainSegments(points, intensities, outerWidth * 0.34, 0.82, 'rgba(255, 112, 213, 0.92)', 'rgba(255, 105, 221, 1)');
-
-    const puffEvery = mobile ? 5 : 4;
-    for (let pointIndex = 3; pointIndex < points.length - 2; pointIndex += puffEvery) {
-      const point = points[pointIndex];
-      const intensity = intensities[pointIndex];
-      const puff = outerWidth * (0.42 + hash(seed, pointIndex + 67) * 0.34);
+      const size = radius * (0.012 + intensity * 0.018) * (0.45 + projected.depth * 0.55);
       context.save();
-
-      if (intensity < 0.48) {
-        context.shadowColor = 'rgba(221, 194, 255, 0.3)';
-        context.shadowBlur = puff * 0.35;
-        context.fillStyle = 'rgba(234, 218, 255, 0.18)';
-      } else if (intensity < 0.78) {
-        context.shadowColor = 'rgba(155, 82, 229, 0.75)';
-        context.shadowBlur = puff * 0.75;
-        context.fillStyle = 'rgba(138, 73, 214, 0.48)';
-      } else {
-        context.shadowColor = 'rgba(255, 103, 216, 0.95)';
-        context.shadowBlur = puff;
-        context.fillStyle = 'rgba(255, 116, 218, 0.5)';
-      }
-
+      context.shadowColor = intensity > 0.7 ? 'rgba(255, 112, 218, 0.85)' : 'rgba(154, 93, 232, 0.65)';
+      context.shadowBlur = size * 0.85;
+      context.fillStyle = intensity > 0.7 ? 'rgba(255, 118, 218, 0.44)' : 'rgba(145, 88, 224, 0.36)';
       context.beginPath();
-      context.arc(point.x, point.y, puff, 0, TAU);
+      context.ellipse(projected.x, projected.y, size * 1.8, size * 0.75, 0.15, 0, TAU);
       context.fill();
       context.restore();
     }
   }
 
-  function strokeRainSegments(points, intensities, width, threshold, color, glow) {
+  function drawSystem(system, timestamp, radius) {
+    const depth = hifi.projectGeo(system.latitude, system.longitude).depth;
+    if (depth < -0.18) return;
+
+    const phase = timestamp / 9500 + hashString(system.id) * TAU;
+    const outerWidth = Math.max(4, radius * 0.018 * (0.55 + system.intensity * 0.45));
+
+    drawSpiralBand(system, phase, 0.48, system.radius * 1.18, outerWidth * 1.2, 'rgba(180, 134, 245, 0.28)', 'rgba(189, 143, 250, 0.54)');
+    drawSpiralBand(system, phase + 0.8, 0.64, system.radius * 0.82, outerWidth * 0.82, 'rgba(113, 57, 205, 0.62)', 'rgba(149, 78, 231, 0.9)');
+    drawSpiralBand(system, phase + 1.4, 0.82, system.radius * 0.46, outerWidth * 0.44, 'rgba(255, 112, 211, 0.9)', 'rgba(255, 104, 220, 1)');
+
+    const center = hifi.projectGeo(system.latitude, system.longitude);
+    if (center.visible && system.intensity > 0.78) {
+      const coreSize = radius * (0.012 + system.intensity * 0.012) * (0.5 + center.depth * 0.5);
+      context.save();
+      context.shadowColor = 'rgba(255, 110, 220, 0.95)';
+      context.shadowBlur = coreSize * 1.4;
+      context.strokeStyle = 'rgba(255, 180, 235, 0.88)';
+      context.lineWidth = Math.max(1, coreSize * 0.22);
+      context.beginPath();
+      context.arc(center.x, center.y, coreSize, 0, TAU);
+      context.stroke();
+      context.restore();
+    }
+  }
+
+  function drawSpiralBand(system, phase, threshold, maximumRadius, width, color, glow) {
+    if (system.intensity < threshold) return;
+    const points = [];
+    const samples = 72;
+    const turns = system.radius > 12 ? 1.65 : 2.05;
+
+    for (let sample = 0; sample <= samples; sample++) {
+      const t = sample / samples;
+      const angle = phase + system.spin * t * turns * TAU;
+      const distance = maximumRadius * (0.14 + t * 0.86);
+      const wobble = Math.sin(t * TAU * 4 + phase * 1.7) * maximumRadius * 0.06;
+      const location = destinationPoint(system.latitude, system.longitude, Math.max(0.2, distance + wobble), angle);
+      const projected = hifi.projectGeo(location.latitude, location.longitude);
+      points.push(projected.visible ? projected : null);
+    }
+
+    strokeProjected(points, width, color, glow);
+  }
+
+  function strokeProjected(points, width, color, glow) {
     let segment = [];
     const flush = () => {
-      if (segment.length > 1) strokeRibbon(segment, width, color, width * 0.45, glow);
+      if (segment.length < 2) {
+        segment = [];
+        return;
+      }
+      context.save();
+      context.lineCap = 'round';
+      context.lineJoin = 'round';
+      context.strokeStyle = color;
+      context.lineWidth = width;
+      context.shadowColor = glow;
+      context.shadowBlur = width * 0.7;
+      context.beginPath();
+      context.moveTo(segment[0].x, segment[0].y);
+      for (let index = 1; index < segment.length - 1; index++) {
+        const point = segment[index];
+        const next = segment[index + 1];
+        context.quadraticCurveTo(point.x, point.y, (point.x + next.x) * 0.5, (point.y + next.y) * 0.5);
+      }
+      const last = segment[segment.length - 1];
+      context.lineTo(last.x, last.y);
+      context.stroke();
+      context.restore();
       segment = [];
     };
 
-    for (let index = 0; index < points.length; index++) {
-      if (intensities[index] >= threshold) segment.push(points[index]);
+    for (const point of points) {
+      if (point) segment.push(point);
       else flush();
     }
     flush();
   }
+}
 
-  function strokeRibbon(points, width, color, blur, shadowColor) {
-    context.save();
-    context.lineCap = 'round';
-    context.lineJoin = 'round';
-    context.lineWidth = width;
-    context.strokeStyle = color;
-    context.shadowBlur = blur;
-    context.shadowColor = shadowColor;
-    context.beginPath();
-    context.moveTo(points[0].x, points[0].y);
-    for (let index = 1; index < points.length - 1; index++) {
-      const point = points[index];
-      const next = points[index + 1];
-      context.quadraticCurveTo(point.x, point.y, (point.x + next.x) * 0.5, (point.y + next.y) * 0.5);
+function getSystems(timestamp) {
+  const elapsedHours = timestamp / 3600000;
+  return BASE_SYSTEMS.map((system, index) => {
+    const wobble = Math.sin(timestamp / 26000 + index * 1.9) * (system.latitude > 0 ? 2.2 : 1.8);
+    const pulse = 0.88 + 0.12 * Math.sin(timestamp / 7000 + index * 2.4);
+    return {
+      ...system,
+      latitude: clamp(system.latitude + wobble, -72, 72),
+      longitude: wrapDegrees(system.longitude + elapsedHours * system.drift),
+      intensity: clamp(system.intensity * pulse, 0.48, 1),
+    };
+  });
+}
+
+function getPrecipitationSamples(timestamp) {
+  const systems = getSystems(timestamp);
+  const samples = [];
+
+  for (const system of systems) {
+    const phase = timestamp / 9500 + hashString(system.id) * TAU;
+    for (let ring = 0; ring < 4; ring++) {
+      const ringIntensity = clamp(system.intensity - ring * 0.12, 0, 1);
+      if (ringIntensity < 0.46) continue;
+      const distance = system.radius * (0.12 + ring * 0.22);
+      const count = ring === 0 ? 1 : 6 + ring * 2;
+      for (let index = 0; index < count; index++) {
+        const bearing = phase + system.spin * (index / Math.max(1, count)) * TAU + ring * 0.7;
+        const location = ring === 0
+          ? { latitude: system.latitude, longitude: system.longitude }
+          : destinationPoint(system.latitude, system.longitude, distance, bearing);
+        samples.push({
+          systemId: system.id,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          intensity: ringIntensity,
+          radius: system.radius,
+        });
+      }
     }
-    const last = points[points.length - 1];
-    context.lineTo(last.x, last.y);
-    context.stroke();
-    context.restore();
   }
+
+  return samples;
+}
+
+function destinationPoint(latitudeDegrees, longitudeDegrees, distanceDegrees, bearingRadians) {
+  const latitude = latitudeDegrees * DEG;
+  const longitude = longitudeDegrees * DEG;
+  const angularDistance = distanceDegrees * DEG;
+  const sinLatitude = Math.sin(latitude);
+  const cosLatitude = Math.cos(latitude);
+  const sinDistance = Math.sin(angularDistance);
+  const cosDistance = Math.cos(angularDistance);
+  const destinationLatitude = Math.asin(
+    sinLatitude * cosDistance + cosLatitude * sinDistance * Math.cos(bearingRadians),
+  );
+  const destinationLongitude = longitude + Math.atan2(
+    Math.sin(bearingRadians) * sinDistance * cosLatitude,
+    cosDistance - sinLatitude * Math.sin(destinationLatitude),
+  );
+  return {
+    latitude: destinationLatitude / DEG,
+    longitude: wrapDegrees(destinationLongitude / DEG),
+  };
+}
+
+function hashString(value) {
+  let hashValue = 2166136261;
+  for (let index = 0; index < value.length; index++) {
+    hashValue ^= value.charCodeAt(index);
+    hashValue = Math.imul(hashValue, 16777619);
+  }
+  return ((hashValue >>> 0) % 100000) / 100000;
 }
 
 function hash(a, b) {
@@ -197,9 +298,16 @@ function hash(a, b) {
   return ((value ^ (value >>> 16)) >>> 0) / 4294967295;
 }
 
+function wrapDegrees(value) {
+  let wrapped = value;
+  while (wrapped > 180) wrapped -= 360;
+  while (wrapped < -180) wrapped += 360;
+  return wrapped;
+}
+
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootLilacClouds, { once: true });
-else bootLilacClouds();
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootEarthRadar, { once: true });
+else bootEarthRadar();
