@@ -54,7 +54,9 @@ for (const dependency of ['three', 'pixi.js', 'howler', '@dimforge/rapier3d-comp
   requireDependency(dependency);
 }
 
-requireText('index.html', '20260804-lofi-living-root', 'lo-fi living root entry point');
+requireText('index.html', 'src="./app.js?', 'project-relative lo-fi living root entry point');
+forbidText('index.html', 'src="/app.js?', 'domain-root app entry point');
+forbidText('index.html', 'src="/core/', 'domain-root core entry points');
 requireText('index.html', 'single deterministic lo-fi pixel living world', 'simplified accessibility description');
 requireText('index.html', 'unified-runtime.css', 'living-world presentation stylesheet');
 forbidText('index.html', 'reality-v6-9-audio-volume', 'root audio preference bootstrap');
