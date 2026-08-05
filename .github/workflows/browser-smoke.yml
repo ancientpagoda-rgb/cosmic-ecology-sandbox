@@ -49,6 +49,13 @@ jobs:
           cat /tmp/reality-preview.log
           exit 1
 
+      - name: Verify iPhone sphere aspect
+        id: iphone_sphere_test
+        env:
+          REALITY_BASE_URL: http://127.0.0.1:4173/
+          REALITY_IPHONE_ARTIFACT_DIR: artifacts/iphone-sphere-smoke
+        run: node scripts/iphone-sphere-smoke.cjs
+
       - name: Run Phase 11 browser diagnostics
         id: browser_test
         env:
@@ -80,6 +87,7 @@ jobs:
             artifacts/browser-smoke
             artifacts/unified-smoke
             artifacts/root-renderer-smoke
+            artifacts/iphone-sphere-smoke
             /tmp/reality-preview.log
           if-no-files-found: warn
           retention-days: 30
@@ -92,13 +100,14 @@ jobs:
             const phase11Ok = '${{ steps.browser_test.outcome }}' === 'success';
             const unifiedOk = '${{ steps.unified_test.outcome }}' === 'success';
             const rootRendererOk = '${{ steps.root_renderer_test.outcome }}' === 'success';
-            const ok = phase11Ok && unifiedOk && rootRendererOk;
+            const iphoneSphereOk = '${{ steps.iphone_sphere_test.outcome }}' === 'success';
+            const ok = phase11Ok && unifiedOk && rootRendererOk && iphoneSphereOk;
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
               state: ok ? 'success' : 'failure',
               context: 'browser/unified-runtime',
-              description: ok ? 'Phase 11, lo-fi runtime, and Pixi-only root diagnostics passed' : 'Phase 11, lo-fi runtime, or Pixi-only root diagnostics failed',
+              description: ok ? 'Phase 11, runtime, Pixi root, and iPhone sphere diagnostics passed' : 'A browser, runtime, renderer, or iPhone sphere diagnostic failed',
               target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions`,
             });
