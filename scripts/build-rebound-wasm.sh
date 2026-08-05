@@ -57,7 +57,7 @@ emcc \
   -sFILESYSTEM=0 \
   -sASSERTIONS=0 \
   -sEXPORTED_FUNCTIONS="${EXPORTED_FUNCTIONS}" \
-  -sEXPORTED_RUNTIME_METHODS='["cwrap"]' \
+  -sEXPORTED_RUNTIME_METHODS='["cwrap","HEAPF64"]' \
   -o "${OUTPUT_DIR}/rebound.js"
 
 cat > "${OUTPUT_DIR}/BUILD.txt" <<EOF

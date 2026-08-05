@@ -109,8 +109,12 @@ export class ReboundWasmSystem {
     const count = this.api.writeState();
     const pointer = this.api.stateBuffer();
     if (!pointer || count <= 0) return [];
+    const heap = this.module.HEAPF64;
+    if (!heap || typeof heap.subarray !== 'function') {
+      throw new Error('The REBOUND Emscripten module did not export HEAPF64.');
+    }
     const start = pointer >> 3;
-    const raw = this.module.HEAPF64.subarray(start, start + count * STATE_STRIDE);
+    const raw = heap.subarray(start, start + count * STATE_STRIDE);
     const bodies = new Array(count);
     for (let index = 0; index < count; index += 1) {
       const offset = index * STATE_STRIDE;

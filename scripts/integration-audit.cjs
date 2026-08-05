@@ -105,6 +105,11 @@ requireText('scripts/unified-smoke.cjs', "seedUnifiedScenario('rebound')", 'REBO
 requireText('scripts/unified-smoke.cjs', "initial.controls === 0", 'zero visible controls assertion');
 requireText('scripts/unified-smoke.cjs', 'initial.unified.audio.enabled === false', 'audio absence assertion');
 requireText('.github/workflows/unified-live.yml', 'REALITY_REQUIRE_REBOUND: "1"', 'live REBOUND requirement');
+requireText('scripts/rebound-deploy-smoke.cjs', "seedUnifiedScenario('rebound')", 'generated REBOUND browser scenario');
+requireText('scripts/rebound-deploy-smoke.cjs', "status.mode === 'rebound-wasm'", 'generated REBOUND WASM assertion');
+requireText('scripts/rebound-deploy-smoke.cjs', 'rebound.sampleBodies.every', 'finite generated body snapshot assertion');
+requireText('.github/workflows/deploy-pages.yml', 'node scripts/rebound-deploy-smoke.cjs', 'predeployment REBOUND browser smoke');
+requireText('.github/workflows/deploy-pages.yml', 'pages/v6.9-rebound-browser', 'predeployment REBOUND browser status');
 
 for (const [phase, moduleId, obsoleteRootMarker] of [
   [8, 'civilization.phase8-institutions-industry-spaceflight', 'Unified interactive observable universe'],
@@ -132,6 +137,8 @@ requireText('core/reality-v6-8/pixi-presentation.js', "from 'pixi.js'", 'V6.9 Pi
 requireText('core/reality-v6-5/orbit-climate.js', 'astronomy-engine@2.1.19', 'V6.9 Astronomy Engine integration');
 requireText('scripts/build-rebound-wasm.sh', 'REBOUND_REF="${REBOUND_REF:-5.0.0}"', 'pinned REBOUND source');
 requireText('scripts/build-rebound-wasm.sh', 'rebound.wasm', 'REBOUND WebAssembly output');
+requireText('scripts/build-rebound-wasm.sh', '["cwrap","HEAPF64"]', 'REBOUND heap view export');
+requireText('core/reality-v6-6/rebound-client.js', 'did not export HEAPF64', 'clear missing heap export failure');
 requireText('integrations/rebound-adapter.js', 'orbit.rebound', 'REBOUND fallback adapter');
 requireText('integrations/rapier-adapter.js', '@dimforge/rapier3d-compat', 'Rapier runtime adapter');
 requireText('integrations/gdal-adapter.js', "from 'gdal3.js'", 'GDAL runtime adapter');
