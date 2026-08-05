@@ -67,19 +67,24 @@ jobs:
             if (!ok) {
               const fatalPath = 'artifacts/unified-live/fatal-error.txt';
               const scenarioPath = 'artifacts/unified-live/scenarios.json';
-              if (fs.existsSync(fatalPath)) {
-                failure = fs.readFileSync(fatalPath, 'utf8').split(/\r?\n/).find(Boolean) || failure;
-              } else if (fs.existsSync(scenarioPath)) {
+              if (fs.existsSync(scenarioPath)) {
                 try {
                   const scenarios = JSON.parse(fs.readFileSync(scenarioPath, 'utf8'));
                   const rebound = scenarios?.rebound?.status;
                   if (rebound?.error) failure = `REBOUND: ${rebound.error}`;
                 } catch {}
               }
+              if (failure === 'Unified runtime live verification failed' && fs.existsSync(fatalPath)) {
+                failure = fs.readFileSync(fatalPath, 'utf8').split(/\r?\n/).find(Boolean) || failure;
+              }
             }
             const description = ok
-              ? 'Unified Pixi, Howler, Astronomy, REBOUND, and V6.9 compatibility verified live'
+              ? 'Lo-fi living root and deployed REBOUND WASM verified live'
               : failure.replace(/^Error:\s*/i, '').replace(/\s+/g, ' ').slice(0, 140);
+            const baseUrl = `https://ancientpagoda-rgb.github.io/reality-sandbox/?verify=${sha}`;
+            const diagnosticText = ok ? 'ok' : failure.slice(0, 90);
+            const diagnosticB64 = Buffer.from(diagnosticText, 'utf8').toString('base64url');
+            const diagnosticUrl = `${baseUrl}&diagnostic_b64=${diagnosticB64}`;
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -87,5 +92,14 @@ jobs:
               state: ok ? 'success' : 'failure',
               context: 'pages/unified-runtime-live',
               description,
-              target_url: `https://ancientpagoda-rgb.github.io/reality-sandbox/?verify=${sha}`,
+              target_url: baseUrl,
+            });
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha,
+              state: ok ? 'success' : 'failure',
+              context: 'pages/unified-runtime-diagnostic',
+              description: ok ? 'No live runtime error' : 'Exact live error encoded in target URL',
+              target_url: diagnosticUrl,
             });
