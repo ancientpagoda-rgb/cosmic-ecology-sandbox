@@ -78,8 +78,10 @@ jobs:
               }
             }
             const description = ok
-              ? 'Unified Pixi, Howler, Astronomy, REBOUND, and V6.9 compatibility verified live'
+              ? 'Lo-fi living root and deployed REBOUND WASM verified live'
               : failure.replace(/^Error:\s*/i, '').replace(/\s+/g, ' ').slice(0, 140);
+            const baseUrl = `https://ancientpagoda-rgb.github.io/reality-sandbox/?verify=${sha}`;
+            const diagnosticUrl = `${baseUrl}&diagnostic=${encodeURIComponent(ok ? 'ok' : failure.slice(0, 240))}`;
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -87,5 +89,14 @@ jobs:
               state: ok ? 'success' : 'failure',
               context: 'pages/unified-runtime-live',
               description,
-              target_url: `https://ancientpagoda-rgb.github.io/reality-sandbox/?verify=${sha}`,
+              target_url: baseUrl,
+            });
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha,
+              state: ok ? 'success' : 'failure',
+              context: 'pages/unified-runtime-diagnostic',
+              description: ok ? 'No live runtime error' : 'Exact live error encoded in target URL',
+              target_url: diagnosticUrl,
             });
