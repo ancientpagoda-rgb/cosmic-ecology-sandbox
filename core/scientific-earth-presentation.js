@@ -1,4 +1,4 @@
-const MOBILE_BUFFER = { width: 768, height: 432 };
+const MOBILE_BUFFER = { width: 384, height: 216 };
 const DESKTOP_BUFFER = { width: 1280, height: 720 };
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 8;
@@ -41,7 +41,7 @@ function boot() {
   surfaceCanvas.width = buffer.width;
   surfaceCanvas.height = buffer.height;
   const surfaceContext = surfaceCanvas.getContext('2d', { alpha: true });
-  const stars = createStars(buffer.width, buffer.height, mobile ? 170 : 320);
+  const stars = createStars(buffer.width, buffer.height, mobile ? 100 : 320);
   const pointers = new Map();
   let drag = null;
   let pinch = null;

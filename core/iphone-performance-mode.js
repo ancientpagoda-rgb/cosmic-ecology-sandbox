@@ -1,49 +1,48 @@
 const MOBILE_QUERY = '(max-width: 720px), (pointer: coarse)';
-const INTERACTION_FRAME_INTERVAL_MS = 42;
-const IDLE_FRAME_INTERVAL_MS = 500;
-const INERTIA_STOP_SPEED = 0.000006;
-const INERTIA_DAMPING_PER_FRAME = 0.91;
+const TOUCH_FRAME_INTERVAL_MS = 33;
+const IDLE_FRAME_INTERVAL_MS = 600;
 let attempts = 0;
 
 function bootIPhonePerformanceMode() {
   if (window.realitySandboxIPhonePerformance?.ready) return;
 
+  const mobile = matchMedia(MOBILE_QUERY).matches;
   const unified = window.realitySandboxUnified;
   const hifi = window.realitySandboxHifi;
+  const upscaleReady = !mobile || window.realitySandboxMobileUpscale?.ready;
   const canvas = document.getElementById('lofiLivingCanvas');
-  if (!unified || !hifi?.ready || !canvas) {
+  if (!unified || !hifi?.ready || !upscaleReady || !canvas) {
     if (attempts++ < 240) setTimeout(bootIPhonePerformanceMode, 50);
     return;
   }
 
-  const mobile = matchMedia(MOBILE_QUERY).matches;
   if (!mobile) {
     window.realitySandboxIPhonePerformance = { ready: true, active: false };
     return;
   }
 
-  document.body.dataset.mobilePerformance = 'free-motion';
+  document.body.dataset.mobilePerformance = 'direct';
   canvas.style.touchAction = 'none';
+
+  const pointers = new Map();
+  const interactionState = { active: false };
+  window.realitySandboxMobileInteraction = interactionState;
 
   let lastVisualAt = 0;
   let lastCameraAt = 0;
   let scheduledCamera = null;
   let cameraTimer = 0;
   let cameraFrame = 0;
-  let inertiaFrame = 0;
-  let inertiaLastAt = 0;
-  let velocityX = 0;
-  let velocityY = 0;
   let drag = null;
   let pinch = null;
-  const pointers = new Map();
 
   const originalUnifiedRender = unified.render.bind(unified);
+  const fullRender = hifi.render.bind(hifi);
+
   unified.render = frame => {
+    if (interactionState.active) return;
     const now = frame?.timestamp ?? performance.now();
-    const active = pointers.size > 0 || inertiaFrame !== 0;
-    const interval = active ? INTERACTION_FRAME_INTERVAL_MS : IDLE_FRAME_INTERVAL_MS;
-    if (now - lastVisualAt < interval) return;
+    if (now - lastVisualAt < IDLE_FRAME_INTERVAL_MS) return;
     lastVisualAt = now;
     originalUnifiedRender(frame);
   };
@@ -58,16 +57,16 @@ function bootIPhonePerformanceMode() {
   window.realitySandboxIPhonePerformance = {
     ready: true,
     active: true,
-    mode: 'free-motion-24fps-inertia',
+    mode: 'direct-30fps-no-inertia',
     getState: () => ({
       ready: true,
       active: true,
-      mode: 'free-motion-24fps-inertia',
-      targetIntervalMs: pointers.size || inertiaFrame ? INTERACTION_FRAME_INTERVAL_MS : IDLE_FRAME_INTERVAL_MS,
+      mode: 'direct-30fps-no-inertia',
+      targetIntervalMs: interactionState.active ? TOUCH_FRAME_INTERVAL_MS : IDLE_FRAME_INTERVAL_MS,
       lastRenderMs: hifi.getState?.().lastRenderMs ?? null,
       pointerCount: pointers.size,
-      inertiaActive: inertiaFrame !== 0,
-      velocity: { x: velocityX, y: velocityY },
+      interacting: interactionState.active,
+      buffer: hifi.buffer,
     }),
   };
 
@@ -78,25 +77,14 @@ function bootIPhonePerformanceMode() {
 
   function onPointerDown(event) {
     consume(event);
-    cancelInertia();
+    interactionState.active = true;
     canvas.focus({ preventScroll: true });
     try { canvas.setPointerCapture?.(event.pointerId); } catch {}
-    pointers.set(event.pointerId, {
-      x: event.clientX,
-      y: event.clientY,
-      timestamp: performance.now(),
-    });
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
-    velocityX = 0;
-    velocityY = 0;
     if (pointers.size >= 2) beginPinch();
     else {
-      drag = {
-        id: event.pointerId,
-        x: event.clientX,
-        y: event.clientY,
-        camera: pendingOrCurrentCamera(),
-      };
+      drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
       pinch = null;
     }
     canvas.dataset.dragging = 'true';
@@ -106,43 +94,35 @@ function bootIPhonePerformanceMode() {
     const previous = pointers.get(event.pointerId);
     if (!previous) return;
     consume(event);
-
-    const now = performance.now();
-    pointers.set(event.pointerId, {
-      x: event.clientX,
-      y: event.clientY,
-      timestamp: now,
-    });
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
     if (pointers.size >= 2) {
-      velocityX = 0;
-      velocityY = 0;
-      if (!pinch) beginPinch();
       const pair = [...pointers.values()].slice(0, 2);
       const distance = Math.max(1, Math.hypot(pair[1].x - pair[0].x, pair[1].y - pair[0].y));
-      scheduleCamera({
-        ...pinch.camera,
-        zoom: clamp(pinch.camera.zoom * distance / pinch.distance, 1, 8),
-      });
+      if (!pinch) {
+        beginPinch();
+        return;
+      }
+      const camera = pendingOrCurrentCamera();
+      const ratio = distance / Math.max(1, pinch.distance);
+      scheduleCamera({ ...camera, zoom: clamp(camera.zoom * ratio, 1, 8) });
+      pinch.distance = distance;
       return;
     }
 
     if (!drag || drag.id !== event.pointerId) return;
     const rect = canvas.getBoundingClientRect();
+    const camera = pendingOrCurrentCamera();
     const dx = (event.clientX - drag.x) / Math.max(1, rect.width);
     const dy = (event.clientY - drag.y) / Math.max(1, rect.height);
-    const next = normalizeFreeCamera({
-      zoom: drag.camera.zoom,
-      centerX: drag.camera.centerX - dx / Math.max(1, drag.camera.zoom),
-      centerY: drag.camera.centerY + dy / Math.max(1, drag.camera.zoom),
-    });
+    drag.x = event.clientX;
+    drag.y = event.clientY;
 
-    const elapsed = clamp(now - previous.timestamp, 8, 80);
-    const localVelocityX = -(event.clientX - previous.x) / Math.max(1, rect.width) / Math.max(1, next.zoom) / elapsed;
-    const localVelocityY = (event.clientY - previous.y) / Math.max(1, rect.height) / Math.max(1, next.zoom) / elapsed;
-    velocityX = velocityX * 0.58 + localVelocityX * 0.42;
-    velocityY = velocityY * 0.58 + localVelocityY * 0.42;
-    scheduleCamera(next);
+    scheduleCamera({
+      zoom: camera.zoom,
+      centerX: wrap01(camera.centerX - dx / Math.max(1, camera.zoom)),
+      centerY: clamp(camera.centerY + dy / Math.max(1, camera.zoom), 0.015, 0.985),
+    });
   }
 
   function onPointerEnd(event) {
@@ -150,55 +130,45 @@ function bootIPhonePerformanceMode() {
     consume(event);
     pointers.delete(event.pointerId);
     try { canvas.releasePointerCapture?.(event.pointerId); } catch {}
-    flushCamera(true);
+    flushCamera(false);
     drag = null;
     pinch = null;
 
     if (pointers.size === 1) {
       const [id, point] = [...pointers.entries()][0];
-      drag = {
-        id,
-        x: point.x,
-        y: point.y,
-        camera: pendingOrCurrentCamera(),
-      };
-      velocityX = 0;
-      velocityY = 0;
+      drag = { id, x: point.x, y: point.y };
     } else if (pointers.size >= 2) {
       beginPinch();
     } else {
-      startInertia();
+      interactionState.active = false;
+      canvas.dataset.dragging = 'false';
+      requestAnimationFrame(() => {
+        lastVisualAt = performance.now();
+        fullRender();
+      });
     }
-    canvas.dataset.dragging = pointers.size ? 'true' : 'false';
   }
 
   function onWheel(event) {
     consume(event);
-    cancelInertia();
     const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
     const camera = pendingOrCurrentCamera();
-    scheduleCamera({
-      ...camera,
-      zoom: clamp(camera.zoom * Math.exp(-delta * 0.0015), 1, 8),
-    });
+    scheduleCamera({ ...camera, zoom: clamp(camera.zoom * Math.exp(-delta * 0.0015), 1, 8) });
   }
 
   function onDoubleClick(event) {
     consume(event);
-    cancelInertia();
-    scheduledCamera = null;
+    clearScheduledCamera();
+    interactionState.active = false;
     unified.resetCamera();
     lastVisualAt = performance.now();
-    hifi.render();
+    fullRender();
   }
 
   function beginPinch() {
     const pair = [...pointers.values()].slice(0, 2);
     if (pair.length < 2) return;
-    pinch = {
-      distance: Math.max(1, Math.hypot(pair[1].x - pair[0].x, pair[1].y - pair[0].y)),
-      camera: pendingOrCurrentCamera(),
-    };
+    pinch = { distance: Math.max(1, Math.hypot(pair[1].x - pair[0].x, pair[1].y - pair[0].y)) };
     drag = null;
   }
 
@@ -207,10 +177,9 @@ function bootIPhonePerformanceMode() {
   }
 
   function scheduleCamera(camera) {
-    scheduledCamera = normalizeFreeCamera(camera);
+    scheduledCamera = camera;
     if (cameraTimer || cameraFrame) return;
-
-    const delay = Math.max(0, INTERACTION_FRAME_INTERVAL_MS - (performance.now() - lastCameraAt));
+    const delay = Math.max(0, TOUCH_FRAME_INTERVAL_MS - (performance.now() - lastCameraAt));
     cameraTimer = window.setTimeout(() => {
       cameraTimer = 0;
       cameraFrame = requestAnimationFrame(() => {
@@ -220,93 +189,31 @@ function bootIPhonePerformanceMode() {
     }, delay);
   }
 
-  function flushCamera(force) {
-    if (cameraTimer) {
-      clearTimeout(cameraTimer);
-      cameraTimer = 0;
-    }
-    if (cameraFrame) {
-      cancelAnimationFrame(cameraFrame);
-      cameraFrame = 0;
-    }
-    if (!scheduledCamera && !force) return;
-
+  function flushCamera(forceFull) {
+    clearScheduledCallbacks();
+    if (!scheduledCamera && !forceFull) return;
     const camera = scheduledCamera;
     scheduledCamera = null;
     if (camera) unified.setCamera(camera);
     lastCameraAt = performance.now();
     lastVisualAt = lastCameraAt;
-    hifi.render();
+
+    const interactionRender = window.realitySandboxLilacClouds?.render || fullRender;
+    interactionRender();
+    if (forceFull) fullRender();
   }
 
-  function startInertia() {
-    const speed = Math.hypot(velocityX, velocityY);
-    if (speed < INERTIA_STOP_SPEED) {
-      velocityX = 0;
-      velocityY = 0;
-      return;
-    }
-
-    inertiaLastAt = performance.now();
-    inertiaFrame = requestAnimationFrame(stepInertia);
+  function clearScheduledCamera() {
+    clearScheduledCallbacks();
+    scheduledCamera = null;
   }
 
-  function stepInertia(now) {
-    const elapsed = Math.min(64, Math.max(1, now - inertiaLastAt));
-    if (elapsed < INTERACTION_FRAME_INTERVAL_MS) {
-      inertiaFrame = requestAnimationFrame(stepInertia);
-      return;
-    }
-    inertiaLastAt = now;
-
-    const camera = unified.getCamera();
-    unified.setCamera(normalizeFreeCamera({
-      ...camera,
-      centerX: camera.centerX + velocityX * elapsed,
-      centerY: camera.centerY + velocityY * elapsed,
-    }));
-    lastVisualAt = now;
-    hifi.render();
-
-    const damping = Math.pow(INERTIA_DAMPING_PER_FRAME, elapsed / 16.667);
-    velocityX *= damping;
-    velocityY *= damping;
-    if (Math.hypot(velocityX, velocityY) < INERTIA_STOP_SPEED || pointers.size) {
-      inertiaFrame = 0;
-      velocityX = 0;
-      velocityY = 0;
-      return;
-    }
-    inertiaFrame = requestAnimationFrame(stepInertia);
+  function clearScheduledCallbacks() {
+    if (cameraTimer) clearTimeout(cameraTimer);
+    if (cameraFrame) cancelAnimationFrame(cameraFrame);
+    cameraTimer = 0;
+    cameraFrame = 0;
   }
-
-  function cancelInertia() {
-    if (inertiaFrame) cancelAnimationFrame(inertiaFrame);
-    inertiaFrame = 0;
-    velocityX = 0;
-    velocityY = 0;
-  }
-}
-
-function normalizeFreeCamera(camera) {
-  let centerX = Number.isFinite(camera.centerX) ? camera.centerX : 0.5;
-  let centerY = Number.isFinite(camera.centerY) ? camera.centerY : 0.5;
-
-  while (centerY < 0 || centerY > 1) {
-    if (centerY < 0) {
-      centerY = -centerY;
-      centerX += 0.5;
-    } else {
-      centerY = 2 - centerY;
-      centerX += 0.5;
-    }
-  }
-
-  return {
-    ...camera,
-    centerX: wrap01(centerX),
-    centerY,
-  };
 }
 
 function wrap01(value) {
