@@ -52,9 +52,10 @@ for (const [file, id] of [
 }
 
 requireText('integrations/runtime.js', 'if (systems.globe)', 'conditional legacy Three.js registration');
-requireText('scripts/unified-smoke.cjs', "!initial.modules.includes('render.three')", 'runtime Three.js module exclusion');
-requireText('scripts/unified-smoke.cjs', 'initial.forbiddenResources.length === 0', 'runtime Three.js resource exclusion');
-requireText('scripts/unified-smoke.cjs', 'initial.visibleCanvases.length === 1', 'single visible root canvas');
+requireText('scripts/root-renderer-smoke.cjs', "!result.modules.includes('render.three')", 'runtime Three.js module exclusion');
+requireText('scripts/root-renderer-smoke.cjs', 'result.forbiddenResources.length === 0', 'runtime Three.js resource exclusion');
+requireText('scripts/root-renderer-smoke.cjs', 'result.visibleCanvases.length === 1', 'single visible root canvas');
+requireText('.github/workflows/browser-smoke.yml', 'node scripts/root-renderer-smoke.cjs', 'Pixi-only browser gate');
 requireText('README.md', 'Three.js stays available on the standalone', 'legacy-only Three.js boundary');
 requireText('core/globe-render-v4.js', "from 'three'", 'legacy Three.js globe retained');
 
