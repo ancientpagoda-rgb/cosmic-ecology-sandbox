@@ -21,8 +21,15 @@ body {
   height: 100vh;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  pointer-events: none;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
   background: #101820;
+}
+
+#lofiLivingCanvas[data-dragging="true"] {
+  cursor: grabbing;
 }
 
 body.lofi-living-root #world > :not(#lofiLivingCanvas):not(#errorState) {
