@@ -6,7 +6,9 @@ const MOBILE_SIZE = { width: 160, height: 90 };
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 8;
 const PALETTE = {
-  background: 0x101820,
+  background: 0x071018,
+  space: 0x0d1720,
+  atmosphere: 0x6f9ba8,
   water: 0x244958,
   shallow: 0x365d60,
   grass: 0x526947,
@@ -34,15 +36,10 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   let lastDrawnEntities = 0;
   let destroyed = false;
 
-  const camera = {
-    zoom: 1,
-    centerX: 0.5,
-    centerY: 0.5,
-  };
+  const camera = { zoom: 1, centerX: 0.5, centerY: 0.5 };
   const pointers = new Map();
   let drag = null;
   let pinch = null;
-
   let canvas = null;
   let app = null;
   let graphics = null;
@@ -75,13 +72,14 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     canvas.id = 'lofiLivingCanvas';
     canvas.tabIndex = 0;
     canvas.setAttribute('role', 'application');
-    canvas.setAttribute('aria-label', 'Lo-fi living world. Scroll or pinch to zoom and drag to pan.');
+    canvas.setAttribute('aria-label', 'Spherical lo-fi living world. Scroll or pinch to zoom and drag to rotate.');
     canvas.style.imageRendering = 'pixelated';
     if (!canvas.isConnected) host.append(canvas);
     installInteraction();
 
     document.getElementById('unifiedRuntimePanel')?.remove();
     document.body.dataset.unifiedView = 'living';
+    document.body.dataset.worldGeometry = 'sphere';
     document.body.classList.add('lofi-living-root');
   }
 
@@ -109,7 +107,6 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   async function ensurePixi() {
     if (app) return app;
     if (pixiLoadPromise) return pixiLoadPromise;
-
     pixiLoadPromise = (async () => {
       const next = new Application();
       await next.init({
@@ -134,7 +131,6 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     })().finally(() => {
       pixiLoadPromise = null;
     });
-
     return pixiLoadPromise;
   }
 
@@ -157,10 +153,8 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     canvas.focus({ preventScroll: true });
     canvas.setPointerCapture?.(event.pointerId);
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-
-    if (pointers.size >= 2) {
-      beginPinch();
-    } else {
+    if (pointers.size >= 2) beginPinch();
+    else {
       drag = {
         pointerId: event.pointerId,
         x: event.clientX,
@@ -182,9 +176,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       const pair = [...pointers.values()].slice(0, 2);
       const distance = pointDistance(pair[0], pair[1]);
       const midpoint = pointMidpoint(pair[0], pair[1]);
-      const nextZoom = pinch.distance > 0
-        ? pinch.zoom * distance / pinch.distance
-        : pinch.zoom;
+      const nextZoom = pinch.distance > 0 ? pinch.zoom * distance / pinch.distance : pinch.zoom;
       setCameraAroundAnchor(nextZoom, pinch.anchor, midpoint.x, midpoint.y);
       return;
     }
@@ -195,7 +187,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     setCamera({
       zoom: camera.zoom,
       centerX: drag.centerX - (event.clientX - drag.x) / rect.width / camera.zoom,
-      centerY: drag.centerY - (event.clientY - drag.y) / rect.height / camera.zoom,
+      centerY: drag.centerY + (event.clientY - drag.y) / rect.height / camera.zoom,
     });
   }
 
@@ -203,12 +195,10 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     if (!pointers.has(event.pointerId)) return;
     pointers.delete(event.pointerId);
     try { canvas.releasePointerCapture?.(event.pointerId); } catch {}
-
     if (pointers.size >= 2) {
       beginPinch();
       return;
     }
-
     pinch = null;
     const remaining = [...pointers.entries()][0];
     if (remaining) {
@@ -266,38 +256,30 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   }
 
   function setCameraAroundAnchor(nextZoom, anchor, clientX, clientY) {
-    const rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const screenX = clamp((clientX - rect.left) / rect.width, 0, 1);
-    const screenY = clamp((clientY - rect.top) / rect.height, 0, 1);
     const zoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+    camera.zoom = zoom;
+    const after = clientToWorld(clientX, clientY);
     setCamera({
       zoom,
-      centerX: anchor.x - (screenX - 0.5) / zoom,
-      centerY: anchor.y - (screenY - 0.5) / zoom,
+      centerX: camera.centerX + wrappedDelta(anchor.x - after.x),
+      centerY: camera.centerY + anchor.y - after.y,
     });
   }
 
   function clientToWorld(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
-    const screenX = rect.width ? clamp((clientX - rect.left) / rect.width, 0, 1) : 0.5;
-    const screenY = rect.height ? clamp((clientY - rect.top) / rect.height, 0, 1) : 0.5;
-    return {
-      x: wrap01(camera.centerX + (screenX - 0.5) / camera.zoom),
-      y: clamp(camera.centerY + (screenY - 0.5) / camera.zoom, 0, 1),
-    };
+    if (!rect.width || !rect.height) return { x: camera.centerX, y: camera.centerY };
+    const width = app?.renderer?.width || logicalSize.width;
+    const height = app?.renderer?.height || logicalSize.height;
+    const px = (clientX - rect.left) / rect.width * width;
+    const py = (clientY - rect.top) / rect.height * height;
+    return sphereScreenToWorld(px, py, width, height) || { x: camera.centerX, y: camera.centerY };
   }
 
   function setCamera(next = {}) {
-    const zoom = clamp(Number(next.zoom) || camera.zoom, MIN_ZOOM, MAX_ZOOM);
-    const halfHeight = 0.5 / zoom;
-    camera.zoom = zoom;
+    camera.zoom = clamp(Number(next.zoom) || camera.zoom, MIN_ZOOM, MAX_ZOOM);
     camera.centerX = wrap01(Number.isFinite(next.centerX) ? next.centerX : camera.centerX);
-    camera.centerY = clamp(
-      Number.isFinite(next.centerY) ? next.centerY : camera.centerY,
-      halfHeight,
-      1 - halfHeight,
-    );
+    camera.centerY = clamp(Number.isFinite(next.centerY) ? next.centerY : camera.centerY, 0.01, 0.99);
     invalidateRender();
     return getCamera();
   }
@@ -333,16 +315,71 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     else app.renderer.render({ container: app.stage });
   }
 
+  function getSphereFrame(width, height) {
+    const baseRadius = Math.min(width, height) * (mobile ? 0.43 : 0.44);
+    return {
+      cx: width * 0.5,
+      cy: height * 0.5,
+      radius: baseRadius * camera.zoom,
+    };
+  }
+
+  function sphereScreenToWorld(px, py, width, height) {
+    const { cx, cy, radius } = getSphereFrame(width, height);
+    const sx = (px - cx) / radius;
+    const sy = -(py - cy) / radius;
+    const rho2 = sx * sx + sy * sy;
+    if (rho2 > 1) return null;
+    const z = Math.sqrt(Math.max(0, 1 - rho2));
+    const lon0 = (camera.centerX - 0.5) * Math.PI * 2;
+    const lat0 = (0.5 - camera.centerY) * Math.PI;
+    const sinLat0 = Math.sin(lat0);
+    const cosLat0 = Math.cos(lat0);
+    const latitude = Math.asin(clamp(sy * cosLat0 + z * sinLat0, -1, 1));
+    const longitude = lon0 + Math.atan2(sx, z * cosLat0 - sy * sinLat0);
+    return {
+      x: wrap01(longitude / (Math.PI * 2) + 0.5),
+      y: clamp(0.5 - latitude / Math.PI, 0, 1),
+      normal: { x: sx, y: sy, z },
+    };
+  }
+
+  function worldToSphereScreen(worldX, worldY, width, height) {
+    const { cx, cy, radius } = getSphereFrame(width, height);
+    const lon = (worldX - 0.5) * Math.PI * 2;
+    const lat = (0.5 - worldY) * Math.PI;
+    const lon0 = (camera.centerX - 0.5) * Math.PI * 2;
+    const lat0 = (0.5 - camera.centerY) * Math.PI;
+    const delta = lon - lon0;
+    const sinLat = Math.sin(lat);
+    const cosLat = Math.cos(lat);
+    const sinLat0 = Math.sin(lat0);
+    const cosLat0 = Math.cos(lat0);
+    const x = cosLat * Math.sin(delta);
+    const y = sinLat * cosLat0 - cosLat * Math.cos(delta) * sinLat0;
+    const z = sinLat * sinLat0 + cosLat * Math.cos(delta) * cosLat0;
+    return { x: cx + x * radius, y: cy - y * radius, depth: z, visible: z > 0 };
+  }
+
   function drawLivingWorld() {
     const width = app.renderer.width;
     const height = app.renderer.height;
-    const tile = mobile ? 5 : 4;
+    const tile = mobile ? 4 : 3;
+    const { cx, cy, radius } = getSphereFrame(width, height);
     graphics.clear();
     graphics.rect(0, 0, width, height).fill(PALETTE.background);
+    graphics.circle(cx + 2, cy + 3, radius + 2).fill({ color: 0x000000, alpha: 0.58 });
+    graphics.circle(cx, cy, radius + 1).fill({ color: PALETTE.atmosphere, alpha: 0.32 });
 
-    for (let y = 0; y < height; y += tile) {
-      for (let x = 0; x < width; x += tile) {
-        const sample = screenToWorld((x + tile * 0.5) / width, (y + tile * 0.5) / height);
+    const left = Math.max(0, Math.floor((cx - radius) / tile) * tile);
+    const right = Math.min(width, Math.ceil((cx + radius) / tile) * tile);
+    const top = Math.max(0, Math.floor((cy - radius) / tile) * tile);
+    const bottom = Math.min(height, Math.ceil((cy + radius) / tile) * tile);
+
+    for (let y = top; y < bottom; y += tile) {
+      for (let x = left; x < right; x += tile) {
+        const sample = sphereScreenToWorld(x + tile * 0.5, y + tile * 0.5, width, height);
+        if (!sample) continue;
         const nx = sample.x;
         const ny = sample.y;
         const continental = Math.sin(nx * 7.2 + seed * 0.00001)
@@ -355,21 +392,36 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         else if (elevation < -0.22) color = PALETTE.shallow;
         else if (elevation > 0.68) color = PALETTE.dry;
         else if (elevation > 0.18 && hash2(Math.floor(ny * 512), Math.floor(nx * 256), seed + 17) > 0.42) color = PALETTE.forest;
-        graphics.rect(x, y, tile, tile).fill(color);
+
+        const light = clamp(
+          0.28 + 0.82 * (
+            sample.normal.x * -0.35
+            + sample.normal.y * 0.42
+            + sample.normal.z * 0.82
+          ),
+          0.2,
+          1,
+        );
+        graphics.rect(x, y, tile, tile).fill(shadeColor(color, light));
       }
     }
 
     const weather = dynamics.getWeather?.() || [];
     for (const cell of weather.slice(0, mobile ? 8 : 14)) {
-      const point = worldToScreen(cell.x / Math.max(1, world.width), cell.y / Math.max(1, world.height), width, height);
-      const radius = Math.max(2, Math.round((cell.radius || 10) / Math.max(1, world.width) * width * camera.zoom * 0.55));
-      if (point.x < -radius || point.x > width + radius || point.y < -radius || point.y > height + radius) continue;
-      const x = quantize(point.x, 2);
-      const y = quantize(point.y, 2);
+      const point = worldToSphereScreen(
+        cell.x / Math.max(1, world.width),
+        cell.y / Math.max(1, world.height),
+        width,
+        height,
+      );
+      if (!point.visible) continue;
+      const cloudRadius = Math.max(2, Math.round((cell.radius || 10) / Math.max(1, world.width) * radius * 0.7));
       const strength = clamp(cell.strength ?? 0.5, 0, 1);
       const color = cell.type === 'storm' ? PALETTE.storm : PALETTE.cloud;
-      graphics.rect(x - radius, y, radius * 2, 2).fill({ color, alpha: 0.28 + strength * 0.28 });
-      graphics.rect(x - Math.max(1, radius - 2), y - 2, Math.max(2, radius * 2 - 4), 2).fill({ color, alpha: 0.18 + strength * 0.22 });
+      const x = quantize(point.x, 2);
+      const y = quantize(point.y, 2);
+      graphics.rect(x - cloudRadius, y, cloudRadius * 2, 2).fill({ color, alpha: (0.2 + strength * 0.32) * point.depth });
+      graphics.rect(x - Math.max(1, cloudRadius - 2), y - 2, Math.max(2, cloudRadius * 2 - 4), 2).fill({ color, alpha: (0.14 + strength * 0.24) * point.depth });
     }
 
     const components = world.ecs.components;
@@ -384,47 +436,30 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       else if (components.predator?.has(id)) { color = PALETTE.predator; baseSize = 2; }
       else if (components.apex?.has(id)) { color = PALETTE.apex; baseSize = 2; }
       if (color === null) continue;
-
-      const point = worldToScreen(
+      const point = worldToSphereScreen(
         position.x / Math.max(1, world.width),
         position.y / Math.max(1, world.height),
         width,
         height,
       );
+      if (!point.visible) continue;
       const size = clamp(Math.round(baseSize * Math.sqrt(camera.zoom)), baseSize, baseSize * 3);
-      if (point.x < -size || point.x > width || point.y < -size || point.y > height) continue;
-      graphics.rect(Math.floor(point.x), Math.floor(point.y), size, size).fill(color);
+      graphics.rect(Math.floor(point.x), Math.floor(point.y), size, size).fill(shadeColor(color, 0.55 + point.depth * 0.45));
       drawn += 1;
     }
     lastDrawnEntities = drawn;
-  }
 
-  function screenToWorld(screenX, screenY) {
-    return {
-      x: wrap01(camera.centerX + (screenX - 0.5) / camera.zoom),
-      y: clamp(camera.centerY + (screenY - 0.5) / camera.zoom, 0, 1),
-    };
-  }
-
-  function worldToScreen(worldX, worldY, width, height) {
-    return {
-      x: (wrappedDelta(worldX - camera.centerX) * camera.zoom + 0.5) * width,
-      y: ((worldY - camera.centerY) * camera.zoom + 0.5) * height,
-    };
+    graphics.circle(cx, cy, radius).stroke({ color: PALETTE.atmosphere, width: 1, alpha: 0.72 });
+    graphics.circle(cx - radius * 0.18, cy - radius * 0.2, Math.max(1, radius * 0.7)).stroke({ color: 0xffffff, width: 1, alpha: 0.035 });
   }
 
   async function ensureRebound() {
     if (reboundSystem) return reboundSystem;
     if (reboundLoadPromise) return reboundLoadPromise;
     reboundStatus = { ...reboundStatus, mode: 'loading', error: null };
-
     reboundLoadPromise = ReboundWasmSystem.load()
       .then(system => {
-        const planets = clamp(
-          (orbitalSystem.getBodies?.() || []).filter(body => body.type === 'planet').length,
-          3,
-          8,
-        );
+        const planets = clamp((orbitalSystem.getBodies?.() || []).filter(body => body.type === 'planet').length, 3, 8);
         system.initialize({ seed, planets, asteroids: mobile ? 12 : 28 });
         system.setIntegrator(mobile ? 2 : 0);
         reboundSystem = system;
@@ -442,10 +477,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         };
         return null;
       })
-      .finally(() => {
-        reboundLoadPromise = null;
-      });
-
+      .finally(() => { reboundLoadPromise = null; });
     return reboundLoadPromise;
   }
 
@@ -478,42 +510,22 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       }
       return { ok: false, kind, status: { ...reboundStatus } };
     }
-
     if (kind === 'shared-clock') {
-      return {
-        ok: duplicateClockViolations === 0,
-        kind,
-        privateRafLoops: 0,
-        masterSteps,
-        source: 'root-module-host-fixed-step',
-      };
+      return { ok: duplicateClockViolations === 0, kind, privateRafLoops: 0, masterSteps, source: 'root-module-host-fixed-step' };
     }
-
     if (kind === 'view-switch') {
       const beforeTick = world.tick;
       const selected = setView('orbital');
       return { ok: selected === 'living' && world.tick === beforeTick, kind, beforeTick, afterTick: world.tick, selected };
     }
-
-    if (kind === 'mobile-lod') {
-      return { ok: logicalSize.width <= 256 && logicalSize.height <= 144, kind, mobile, ...logicalSize };
-    }
-
+    if (kind === 'mobile-lod') return { ok: logicalSize.width <= 256 && logicalSize.height <= 144, kind, mobile, ...logicalSize };
     if (kind === 'camera') {
       const before = getCamera();
       setCamera({ zoom: 2.5, centerX: 0.42, centerY: 0.57 });
       const after = getCamera();
       setCamera(before);
-      return {
-        ok: after.zoom > before.zoom
-          && Number.isFinite(after.centerX)
-          && Number.isFinite(after.centerY),
-        kind,
-        before,
-        after,
-      };
+      return { ok: after.zoom > before.zoom && Number.isFinite(after.centerX) && Number.isFinite(after.centerY), kind, before, after };
     }
-
     if (kind === 'scene') {
       return {
         ok: Boolean(canvas && app && graphics) && lastDrawnEntities >= 0,
@@ -522,10 +534,11 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         controls: 0,
         audio: false,
         interactiveCamera: true,
+        geometry: 'sphere',
+        projection: 'orthographic',
         drawnEntities: lastDrawnEntities,
       };
     }
-
     return { ok: true, kind, simplified: true };
   }
 
@@ -539,35 +552,29 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       audioEnabled: false,
       controls: 0,
       mobile,
+      geometry: 'sphere',
       camera: getCamera(),
     };
   }
 
   function getSnapshot() {
     return {
-      version: 2,
+      version: 3,
       mode: 'lofi-living-world',
       view: 'living',
       availableViews: ['living'],
-      clock: {
-        source: 'root-module-host-fixed-step',
-        masterSteps,
-        unifiedSeconds,
-        duplicateClockViolations,
-      },
+      clock: { source: 'root-module-host-fixed-step', masterSteps, unifiedSeconds, duplicateClockViolations },
       presentation: {
-        mode: 'lofi-pixel',
+        mode: 'lofi-pixel-sphere',
+        geometry: 'sphere',
+        projection: 'orthographic',
+        spherical: true,
         logicalWidth: logicalSize.width,
         logicalHeight: logicalSize.height,
         drawnEntities: lastDrawnEntities,
         tickerStarted: Boolean(app?.ticker?.started),
         camera: getCamera(),
-        interactions: {
-          wheelZoom: true,
-          pinchZoom: true,
-          dragPan: true,
-          keyboardZoom: true,
-        },
+        interactions: { wheelZoom: true, pinchZoom: true, dragPan: true, dragRotate: true, keyboardZoom: true },
         canvas: canvas ? {
           id: canvas.id,
           hidden: canvas.hidden,
@@ -577,32 +584,22 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
           touchAction: getComputedStyle(canvas).touchAction,
         } : null,
       },
-      audio: {
-        enabled: false,
-        started: false,
-        prepared: false,
-        muted: true,
-        volume: 0,
-        mix: {},
-      },
+      audio: { enabled: false, started: false, prepared: false, muted: true, volume: 0, mix: {} },
       rebound: { ...reboundStatus },
-      interface: {
-        controls: 0,
-        panel: false,
-        informationalOverlays: 0,
-      },
+      interface: { controls: 0, panel: false, informationalOverlays: 0 },
     };
   }
 
   function runInvariants() {
     const failures = [];
     if (document.body.dataset.unifiedView !== 'living') failures.push('Root view is not the living world.');
+    if (document.body.dataset.worldGeometry !== 'sphere') failures.push('The live root is not marked as spherical.');
     if (document.getElementById('unifiedRuntimePanel')) failures.push('The removed runtime control panel is still present.');
     if (document.querySelector('[data-unified-sound], select[data-unified-view], input[data-unified-volume]')) failures.push('Removed runtime controls are still present.');
     if (app?.ticker?.started) failures.push('PixiJS started a private ticker.');
     if (duplicateClockViolations > 0) failures.push('The presentation observed a reversed root clock.');
-    if (!Number.isFinite(camera.zoom) || camera.zoom < MIN_ZOOM || camera.zoom > MAX_ZOOM) failures.push('The lo-fi camera zoom is invalid.');
-    if (!Number.isFinite(camera.centerX) || !Number.isFinite(camera.centerY)) failures.push('The lo-fi camera center is invalid.');
+    if (!Number.isFinite(camera.zoom) || camera.zoom < MIN_ZOOM || camera.zoom > MAX_ZOOM) failures.push('The spherical camera zoom is invalid.');
+    if (!Number.isFinite(camera.centerX) || !Number.isFinite(camera.centerY)) failures.push('The spherical camera center is invalid.');
     if (canvas) {
       const style = getComputedStyle(canvas);
       if (style.imageRendering !== 'pixelated' && style.imageRendering !== 'crisp-edges') failures.push('The living-world canvas is not pixelated.');
@@ -613,12 +610,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   }
 
   function save() {
-    return {
-      version: 2,
-      masterSteps,
-      unifiedSeconds,
-      camera: getCamera(),
-    };
+    return { version: 3, masterSteps, unifiedSeconds, camera: getCamera() };
   }
 
   function load(state = {}) {
@@ -643,14 +635,15 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     canvas?.remove();
     canvas = null;
     document.body.classList.remove('lofi-living-root');
+    delete document.body.dataset.worldGeometry;
   }
 
   const api = {
     id: 'runtime.lofi-living-world',
-    name: 'Lo-fi Living World Runtime',
-    version: '1.1.0',
+    name: 'Spherical Lo-fi Living World Runtime',
+    version: '1.2.0',
     execution: 'browser-single-master-clock',
-    source: 'Single low-resolution PixiJS living-world presentation with direct gesture camera and optional hidden REBOUND verification',
+    source: 'Single low-resolution PixiJS orthographic sphere with direct gesture camera and optional hidden REBOUND verification',
     license: 'Project license plus dependency licenses in THIRD_PARTY_NOTICES.md',
     provides: ['runtime.unified', 'presentation.pixi-root', 'presentation.lofi-living', 'orbits.rebound-selected'],
     requires: [],
@@ -705,6 +698,14 @@ function hash2(x, y, seed) {
 
 function quantize(value, size) {
   return Math.round(value / size) * size;
+}
+
+function shadeColor(color, brightness) {
+  const amount = clamp(brightness, 0, 1.2);
+  const red = clamp(Math.round(((color >> 16) & 0xff) * amount), 0, 255);
+  const green = clamp(Math.round(((color >> 8) & 0xff) * amount), 0, 255);
+  const blue = clamp(Math.round((color & 0xff) * amount), 0, 255);
+  return (red << 16) | (green << 8) | blue;
 }
 
 function clamp(value, minimum, maximum) {

@@ -55,6 +55,12 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(result.visibleCanvases.length === 1, `Expected one visible canvas, found ${JSON.stringify(result.visibleCanvases)}`);
     assert(result.visibleCanvases[0].id === 'lofiLivingCanvas', 'The visible root canvas is not the lo-fi Pixi canvas.');
     assert(result.snapshot.presentation.logicalWidth <= 256 && result.snapshot.presentation.logicalHeight <= 144, 'The root presentation is not low resolution.');
+    assert(
+      result.snapshot.presentation.spherical === true
+        && result.snapshot.presentation.geometry === 'sphere'
+        && result.snapshot.presentation.projection === 'orthographic',
+      `The live root is not the spherical Pixi world: ${JSON.stringify(result.snapshot.presentation)}`,
+    );
     assert(pageErrors.length === 0, `Browser page errors: ${pageErrors.map(error => error.message).join(' | ')}`);
   } finally {
     fs.writeFileSync(path.join(artifactDir, 'page-errors.json'), JSON.stringify(pageErrors, null, 2));
