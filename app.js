@@ -24,6 +24,8 @@ import { registerCurrentModules } from './integrations/runtime.js';
 
 const FIXED_DT = 0.06;
 const STORAGE_KEY = 'reality-sandbox-globe-v1';
+const PLANET_AREA_SCALE = 100;
+const PLANET_LINEAR_SCALE = Math.sqrt(PLANET_AREA_SCALE);
 const saved = readSavedState();
 const rootView = {
   getCameraState: () => ({ mode: 'lofi-living-world', rotationX: 0, rotationY: 0, distance: 1, targetDistance: 1 }),
@@ -69,6 +71,29 @@ function saveState() {
 
 function restoreWorldState() {
   if (Number.isFinite(saved.tick)) world.tick = saved.tick;
+}
+
+function scalePlanetSurface(targetWorld, linearScale = PLANET_LINEAR_SCALE) {
+  if (!targetWorld || !Number.isFinite(linearScale) || linearScale <= 1) return;
+
+  targetWorld.width *= linearScale;
+  targetWorld.height *= linearScale;
+
+  if (targetWorld.camera) {
+    targetWorld.camera.x *= linearScale;
+    targetWorld.camera.y *= linearScale;
+  }
+
+  for (const position of targetWorld.ecs?.components?.position?.values?.() || []) {
+    position.x *= linearScale;
+    position.y *= linearScale;
+  }
+
+  targetWorld.globals = {
+    ...(targetWorld.globals || {}),
+    planetAreaScale: PLANET_AREA_SCALE,
+    planetLinearScale: linearScale,
+  };
 }
 
 function stepSimulation(dt = FIXED_DT) {
@@ -130,6 +155,7 @@ async function init() {
   try {
     const rng = createRng('stable-world');
     world = createWorld(rng);
+    scalePlanetSurface(world);
     restoreWorldState();
 
     const mobile = matchMedia('(max-width: 720px), (pointer: coarse)').matches;
