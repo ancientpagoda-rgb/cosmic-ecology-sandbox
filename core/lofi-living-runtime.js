@@ -3,6 +3,8 @@ import { ReboundWasmSystem } from './reality-v6-6/rebound-client.js';
 
 const DESKTOP_SIZE = { width: 256, height: 144 };
 const MOBILE_SIZE = { width: 160, height: 90 };
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 8;
 const PALETTE = {
   background: 0x101820,
   water: 0x244958,
@@ -31,6 +33,15 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   let lastRender = -Infinity;
   let lastDrawnEntities = 0;
   let destroyed = false;
+
+  const camera = {
+    zoom: 1,
+    centerX: 0.5,
+    centerY: 0.5,
+  };
+  const pointers = new Map();
+  let drag = null;
+  let pinch = null;
 
   let canvas = null;
   let app = null;
@@ -62,13 +73,37 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     const host = document.getElementById('world') || document.body;
     canvas = document.getElementById('lofiLivingCanvas') || document.createElement('canvas');
     canvas.id = 'lofiLivingCanvas';
-    canvas.setAttribute('aria-hidden', 'true');
+    canvas.tabIndex = 0;
+    canvas.setAttribute('role', 'application');
+    canvas.setAttribute('aria-label', 'Lo-fi living world. Scroll or pinch to zoom and drag to pan.');
     canvas.style.imageRendering = 'pixelated';
     if (!canvas.isConnected) host.append(canvas);
+    installInteraction();
 
     document.getElementById('unifiedRuntimePanel')?.remove();
     document.body.dataset.unifiedView = 'living';
     document.body.classList.add('lofi-living-root');
+  }
+
+  function installInteraction() {
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('pointercancel', onPointerUp);
+    canvas.addEventListener('dblclick', onDoubleClick);
+    canvas.addEventListener('keydown', onKeyDown);
+  }
+
+  function removeInteraction() {
+    if (!canvas) return;
+    canvas.removeEventListener('wheel', onWheel);
+    canvas.removeEventListener('pointerdown', onPointerDown);
+    canvas.removeEventListener('pointermove', onPointerMove);
+    canvas.removeEventListener('pointerup', onPointerUp);
+    canvas.removeEventListener('pointercancel', onPointerUp);
+    canvas.removeEventListener('dblclick', onDoubleClick);
+    canvas.removeEventListener('keydown', onKeyDown);
   }
 
   async function ensurePixi() {
@@ -103,6 +138,182 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     return pixiLoadPromise;
   }
 
+  function onWheel(event) {
+    if (destroyed) return;
+    event.preventDefault();
+    canvas.focus({ preventScroll: true });
+    const pixelDelta = event.deltaMode === 1
+      ? event.deltaY * 16
+      : event.deltaMode === 2
+        ? event.deltaY * window.innerHeight
+        : event.deltaY;
+    const sensitivity = event.ctrlKey ? 0.006 : 0.0015;
+    zoomAtClientPoint(camera.zoom * Math.exp(-pixelDelta * sensitivity), event.clientX, event.clientY);
+  }
+
+  function onPointerDown(event) {
+    if (destroyed) return;
+    event.preventDefault();
+    canvas.focus({ preventScroll: true });
+    canvas.setPointerCapture?.(event.pointerId);
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (pointers.size >= 2) {
+      beginPinch();
+    } else {
+      drag = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        centerX: camera.centerX,
+        centerY: camera.centerY,
+      };
+      canvas.dataset.dragging = 'true';
+    }
+  }
+
+  function onPointerMove(event) {
+    if (!pointers.has(event.pointerId) || destroyed) return;
+    event.preventDefault();
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (pointers.size >= 2) {
+      if (!pinch) beginPinch();
+      const pair = [...pointers.values()].slice(0, 2);
+      const distance = pointDistance(pair[0], pair[1]);
+      const midpoint = pointMidpoint(pair[0], pair[1]);
+      const nextZoom = pinch.distance > 0
+        ? pinch.zoom * distance / pinch.distance
+        : pinch.zoom;
+      setCameraAroundAnchor(nextZoom, pinch.anchor, midpoint.x, midpoint.y);
+      return;
+    }
+
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    setCamera({
+      zoom: camera.zoom,
+      centerX: drag.centerX - (event.clientX - drag.x) / rect.width / camera.zoom,
+      centerY: drag.centerY - (event.clientY - drag.y) / rect.height / camera.zoom,
+    });
+  }
+
+  function onPointerUp(event) {
+    if (!pointers.has(event.pointerId)) return;
+    pointers.delete(event.pointerId);
+    try { canvas.releasePointerCapture?.(event.pointerId); } catch {}
+
+    if (pointers.size >= 2) {
+      beginPinch();
+      return;
+    }
+
+    pinch = null;
+    const remaining = [...pointers.entries()][0];
+    if (remaining) {
+      drag = {
+        pointerId: remaining[0],
+        x: remaining[1].x,
+        y: remaining[1].y,
+        centerX: camera.centerX,
+        centerY: camera.centerY,
+      };
+      canvas.dataset.dragging = 'true';
+    } else {
+      drag = null;
+      canvas.dataset.dragging = 'false';
+    }
+  }
+
+  function onDoubleClick(event) {
+    event.preventDefault();
+    resetCamera();
+  }
+
+  function onKeyDown(event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = rect.left + rect.width * 0.5;
+    const y = rect.top + rect.height * 0.5;
+    if (event.key === '+' || event.key === '=' || event.key === 'PageUp') {
+      event.preventDefault();
+      zoomAtClientPoint(camera.zoom * 1.35, x, y);
+    } else if (event.key === '-' || event.key === '_' || event.key === 'PageDown') {
+      event.preventDefault();
+      zoomAtClientPoint(camera.zoom / 1.35, x, y);
+    } else if (event.key === '0' || event.key === 'Home') {
+      event.preventDefault();
+      resetCamera();
+    }
+  }
+
+  function beginPinch() {
+    const pair = [...pointers.values()].slice(0, 2);
+    if (pair.length < 2) return;
+    const midpoint = pointMidpoint(pair[0], pair[1]);
+    pinch = {
+      distance: Math.max(1, pointDistance(pair[0], pair[1])),
+      zoom: camera.zoom,
+      anchor: clientToWorld(midpoint.x, midpoint.y),
+    };
+    drag = null;
+    canvas.dataset.dragging = 'true';
+  }
+
+  function zoomAtClientPoint(nextZoom, clientX, clientY) {
+    const anchor = clientToWorld(clientX, clientY);
+    setCameraAroundAnchor(nextZoom, anchor, clientX, clientY);
+  }
+
+  function setCameraAroundAnchor(nextZoom, anchor, clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const screenX = clamp((clientX - rect.left) / rect.width, 0, 1);
+    const screenY = clamp((clientY - rect.top) / rect.height, 0, 1);
+    const zoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+    setCamera({
+      zoom,
+      centerX: anchor.x - (screenX - 0.5) / zoom,
+      centerY: anchor.y - (screenY - 0.5) / zoom,
+    });
+  }
+
+  function clientToWorld(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const screenX = rect.width ? clamp((clientX - rect.left) / rect.width, 0, 1) : 0.5;
+    const screenY = rect.height ? clamp((clientY - rect.top) / rect.height, 0, 1) : 0.5;
+    return {
+      x: wrap01(camera.centerX + (screenX - 0.5) / camera.zoom),
+      y: clamp(camera.centerY + (screenY - 0.5) / camera.zoom, 0, 1),
+    };
+  }
+
+  function setCamera(next = {}) {
+    const zoom = clamp(Number(next.zoom) || camera.zoom, MIN_ZOOM, MAX_ZOOM);
+    const halfHeight = 0.5 / zoom;
+    camera.zoom = zoom;
+    camera.centerX = wrap01(Number.isFinite(next.centerX) ? next.centerX : camera.centerX);
+    camera.centerY = clamp(
+      Number.isFinite(next.centerY) ? next.centerY : camera.centerY,
+      halfHeight,
+      1 - halfHeight,
+    );
+    invalidateRender();
+    return getCamera();
+  }
+
+  function resetCamera() {
+    return setCamera({ zoom: 1, centerX: 0.5, centerY: 0.5 });
+  }
+
+  function getCamera() {
+    return { ...camera, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM };
+  }
+
+  function invalidateRender() {
+    lastRender = -Infinity;
+  }
+
   function step(dt) {
     if (!Number.isFinite(dt) || dt <= 0 || destroyed) return;
     if (world.tick < lastWorldTick) duplicateClockViolations += 1;
@@ -131,30 +342,31 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
 
     for (let y = 0; y < height; y += tile) {
       for (let x = 0; x < width; x += tile) {
-        const nx = x / Math.max(1, width - tile);
-        const ny = y / Math.max(1, height - tile);
+        const sample = screenToWorld((x + tile * 0.5) / width, (y + tile * 0.5) / height);
+        const nx = sample.x;
+        const ny = sample.y;
         const continental = Math.sin(nx * 7.2 + seed * 0.00001)
           + Math.cos(ny * 8.6 - seed * 0.000013)
           + Math.sin((nx + ny) * 10.4);
-        const grain = hash2(x / tile, y / tile, seed) * 1.3 - 0.65;
+        const grain = hash2(Math.floor(nx * 512), Math.floor(ny * 256), seed) * 1.3 - 0.65;
         const elevation = continental * 0.34 + grain;
         let color = PALETTE.grass;
         if (elevation < -0.42) color = PALETTE.water;
         else if (elevation < -0.22) color = PALETTE.shallow;
         else if (elevation > 0.68) color = PALETTE.dry;
-        else if (elevation > 0.18 && hash2(y / tile, x / tile, seed + 17) > 0.42) color = PALETTE.forest;
+        else if (elevation > 0.18 && hash2(Math.floor(ny * 512), Math.floor(nx * 256), seed + 17) > 0.42) color = PALETTE.forest;
         graphics.rect(x, y, tile, tile).fill(color);
       }
     }
 
-    const sx = width / Math.max(1, world.width);
-    const sy = height / Math.max(1, world.height);
     const weather = dynamics.getWeather?.() || [];
     for (const cell of weather.slice(0, mobile ? 8 : 14)) {
-      const x = quantize(cell.x * sx, 2);
-      const y = quantize(cell.y * sy, 2);
+      const point = worldToScreen(cell.x / Math.max(1, world.width), cell.y / Math.max(1, world.height), width, height);
+      const radius = Math.max(2, Math.round((cell.radius || 10) / Math.max(1, world.width) * width * camera.zoom * 0.55));
+      if (point.x < -radius || point.x > width + radius || point.y < -radius || point.y > height + radius) continue;
+      const x = quantize(point.x, 2);
+      const y = quantize(point.y, 2);
       const strength = clamp(cell.strength ?? 0.5, 0, 1);
-      const radius = Math.max(2, Math.round((cell.radius || 10) * sx * 0.12));
       const color = cell.type === 'storm' ? PALETTE.storm : PALETTE.cloud;
       graphics.rect(x - radius, y, radius * 2, 2).fill({ color, alpha: 0.28 + strength * 0.28 });
       graphics.rect(x - Math.max(1, radius - 2), y - 2, Math.max(2, radius * 2 - 4), 2).fill({ color, alpha: 0.18 + strength * 0.22 });
@@ -166,19 +378,39 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     for (const [id, position] of components.position.entries()) {
       if (drawn >= maximum) break;
       let color = null;
-      let size = 1;
+      let baseSize = 1;
       if (components.resource?.has(id)) color = PALETTE.resource;
       else if (components.agent?.has(id)) color = PALETTE.agent;
-      else if (components.predator?.has(id)) { color = PALETTE.predator; size = 2; }
-      else if (components.apex?.has(id)) { color = PALETTE.apex; size = 2; }
+      else if (components.predator?.has(id)) { color = PALETTE.predator; baseSize = 2; }
+      else if (components.apex?.has(id)) { color = PALETTE.apex; baseSize = 2; }
       if (color === null) continue;
 
-      const x = clamp(Math.floor(position.x * sx), 0, width - size);
-      const y = clamp(Math.floor(position.y * sy), 0, height - size);
-      graphics.rect(x, y, size, size).fill(color);
+      const point = worldToScreen(
+        position.x / Math.max(1, world.width),
+        position.y / Math.max(1, world.height),
+        width,
+        height,
+      );
+      const size = clamp(Math.round(baseSize * Math.sqrt(camera.zoom)), baseSize, baseSize * 3);
+      if (point.x < -size || point.x > width || point.y < -size || point.y > height) continue;
+      graphics.rect(Math.floor(point.x), Math.floor(point.y), size, size).fill(color);
       drawn += 1;
     }
     lastDrawnEntities = drawn;
+  }
+
+  function screenToWorld(screenX, screenY) {
+    return {
+      x: wrap01(camera.centerX + (screenX - 0.5) / camera.zoom),
+      y: clamp(camera.centerY + (screenY - 0.5) / camera.zoom, 0, 1),
+    };
+  }
+
+  function worldToScreen(worldX, worldY, width, height) {
+    return {
+      x: (wrappedDelta(worldX - camera.centerX) * camera.zoom + 0.5) * width,
+      y: ((worldY - camera.centerY) * camera.zoom + 0.5) * height,
+    };
   }
 
   async function ensureRebound() {
@@ -267,6 +499,21 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       return { ok: logicalSize.width <= 256 && logicalSize.height <= 144, kind, mobile, ...logicalSize };
     }
 
+    if (kind === 'camera') {
+      const before = getCamera();
+      setCamera({ zoom: 2.5, centerX: 0.42, centerY: 0.57 });
+      const after = getCamera();
+      setCamera(before);
+      return {
+        ok: after.zoom > before.zoom
+          && Number.isFinite(after.centerX)
+          && Number.isFinite(after.centerY),
+        kind,
+        before,
+        after,
+      };
+    }
+
     if (kind === 'scene') {
       return {
         ok: Boolean(canvas && app && graphics) && lastDrawnEntities >= 0,
@@ -274,6 +521,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         view: 'living',
         controls: 0,
         audio: false,
+        interactiveCamera: true,
         drawnEntities: lastDrawnEntities,
       };
     }
@@ -291,12 +539,13 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       audioEnabled: false,
       controls: 0,
       mobile,
+      camera: getCamera(),
     };
   }
 
   function getSnapshot() {
     return {
-      version: 1,
+      version: 2,
       mode: 'lofi-living-world',
       view: 'living',
       availableViews: ['living'],
@@ -312,11 +561,20 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         logicalHeight: logicalSize.height,
         drawnEntities: lastDrawnEntities,
         tickerStarted: Boolean(app?.ticker?.started),
+        camera: getCamera(),
+        interactions: {
+          wheelZoom: true,
+          pinchZoom: true,
+          dragPan: true,
+          keyboardZoom: true,
+        },
         canvas: canvas ? {
           id: canvas.id,
           hidden: canvas.hidden,
           connected: canvas.isConnected,
           imageRendering: getComputedStyle(canvas).imageRendering,
+          pointerEvents: getComputedStyle(canvas).pointerEvents,
+          touchAction: getComputedStyle(canvas).touchAction,
         } : null,
       },
       audio: {
@@ -343,20 +601,31 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     if (document.querySelector('[data-unified-sound], select[data-unified-view], input[data-unified-volume]')) failures.push('Removed runtime controls are still present.');
     if (app?.ticker?.started) failures.push('PixiJS started a private ticker.');
     if (duplicateClockViolations > 0) failures.push('The presentation observed a reversed root clock.');
+    if (!Number.isFinite(camera.zoom) || camera.zoom < MIN_ZOOM || camera.zoom > MAX_ZOOM) failures.push('The lo-fi camera zoom is invalid.');
+    if (!Number.isFinite(camera.centerX) || !Number.isFinite(camera.centerY)) failures.push('The lo-fi camera center is invalid.');
     if (canvas) {
-      const imageRendering = getComputedStyle(canvas).imageRendering;
-      if (imageRendering !== 'pixelated' && imageRendering !== 'crisp-edges') failures.push('The living-world canvas is not pixelated.');
+      const style = getComputedStyle(canvas);
+      if (style.imageRendering !== 'pixelated' && style.imageRendering !== 'crisp-edges') failures.push('The living-world canvas is not pixelated.');
+      if (style.pointerEvents === 'none') failures.push('The living-world canvas cannot receive zoom gestures.');
+      if (style.touchAction !== 'none') failures.push('The living-world canvas cannot own pinch gestures.');
     }
     return { ok: failures.length === 0, failures };
   }
 
   function save() {
-    return { version: 1, masterSteps, unifiedSeconds };
+    return {
+      version: 2,
+      masterSteps,
+      unifiedSeconds,
+      camera: getCamera(),
+    };
   }
 
   function load(state = {}) {
     if (Number.isFinite(state.masterSteps)) masterSteps = Math.max(0, state.masterSteps);
     if (Number.isFinite(state.unifiedSeconds)) unifiedSeconds = Math.max(0, state.unifiedSeconds);
+    if (state.camera) setCamera(state.camera);
+    else resetCamera();
     setView('living');
   }
 
@@ -366,6 +635,8 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
 
   function destroy() {
     destroyed = true;
+    removeInteraction();
+    pointers.clear();
     app?.destroy?.(true, { children: true });
     app = null;
     graphics = null;
@@ -377,9 +648,9 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   const api = {
     id: 'runtime.lofi-living-world',
     name: 'Lo-fi Living World Runtime',
-    version: '1.0.0',
+    version: '1.1.0',
     execution: 'browser-single-master-clock',
-    source: 'Single low-resolution PixiJS living-world presentation with optional hidden REBOUND verification',
+    source: 'Single low-resolution PixiJS living-world presentation with direct gesture camera and optional hidden REBOUND verification',
     license: 'Project license plus dependency licenses in THIRD_PARTY_NOTICES.md',
     provides: ['runtime.unified', 'presentation.pixi-root', 'presentation.lofi-living', 'orbits.rebound-selected'],
     requires: [],
@@ -390,6 +661,9 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     load,
     destroy,
     setView,
+    setCamera,
+    resetCamera,
+    getCamera,
     startAudio,
     setMuted,
     setVolume,
@@ -403,6 +677,22 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   };
 
   return api;
+}
+
+function pointDistance(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function pointMidpoint(a, b) {
+  return { x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5 };
+}
+
+function wrap01(value) {
+  return value - Math.floor(value);
+}
+
+function wrappedDelta(value) {
+  return value - Math.floor(value + 0.5);
 }
 
 function hash2(x, y, seed) {
