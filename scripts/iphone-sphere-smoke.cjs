@@ -28,14 +28,20 @@ fs.mkdirSync(artifactDir, { recursive: true });
     url.searchParams.set('debug', '1');
     url.searchParams.set('test', '1');
     await page.goto(url.toString(), { waitUntil: 'domcontentloaded', timeout: 90000 });
-    await page.waitForFunction(() => Boolean(window.realitySandboxDebug?.ready), null, { timeout: 120000 });
-    await page.waitForTimeout(1500);
+    await page.waitForFunction(
+      () => Boolean(window.realitySandboxDebug?.ready && window.realitySandboxHifi?.ready),
+      null,
+      { timeout: 120000 },
+    );
+    await page.waitForTimeout(300);
 
     const metrics = await page.evaluate(() => {
       const canvas = document.getElementById('lofiLivingCanvas');
       if (!canvas) return null;
       const rect = canvas.getBoundingClientRect();
       const style = getComputedStyle(canvas);
+      const context = canvas.getContext('2d');
+      const center = context?.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data;
       return {
         bitmapWidth: canvas.width,
         bitmapHeight: canvas.height,
@@ -45,22 +51,33 @@ fs.mkdirSync(artifactDir, { recursive: true });
         top: rect.top,
         transform: style.transform,
         imageRendering: style.imageRendering,
+        hifi: window.realitySandboxHifi?.getState?.(),
+        centerPixel: center ? [...center] : null,
       };
     });
 
-    assert(metrics, 'The lo-fi living canvas was not found.');
+    assert(metrics, 'The living-world canvas was not found.');
     const bitmapAspect = metrics.bitmapWidth / metrics.bitmapHeight;
     const cssAspect = metrics.cssWidth / metrics.cssHeight;
     const estimatedSphereDiameter = metrics.cssHeight * 0.86;
+    const centerLuminance = metrics.centerPixel
+      ? metrics.centerPixel[0] + metrics.centerPixel[1] + metrics.centerPixel[2]
+      : 0;
 
     assert(Math.abs(cssAspect - bitmapAspect) < 0.01,
       `Canvas aspect mismatch: bitmap ${bitmapAspect}, CSS ${cssAspect}.`);
+    assert(metrics.bitmapWidth >= 640 && metrics.bitmapHeight >= 360,
+      `The iPhone renderer is not high resolution: ${metrics.bitmapWidth}x${metrics.bitmapHeight}.`);
+    assert(metrics.hifi?.ready && metrics.hifi.width === metrics.bitmapWidth,
+      `The high-fidelity presentation did not initialize: ${JSON.stringify(metrics.hifi)}.`);
     assert(metrics.cssWidth >= viewport.width * 1.8,
       `Portrait canvas is too narrow to keep the planet large: ${metrics.cssWidth}px.`);
     assert(estimatedSphereDiameter >= viewport.width * 0.9,
       `Estimated planet diameter is too small on iPhone: ${estimatedSphereDiameter}px.`);
     assert(metrics.left < 0 && metrics.left + metrics.cssWidth > viewport.width,
       'The portrait canvas is not centered across the viewport.');
+    assert(centerLuminance > 45,
+      `The high-fidelity sphere did not render at the canvas center: ${metrics.centerPixel}.`);
     assert(pageErrors.length === 0, `Browser page errors: ${pageErrors.join(' | ')}`);
 
     const report = {
@@ -70,6 +87,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
       bitmapAspect,
       cssAspect,
       estimatedSphereDiameter,
+      centerLuminance,
       pageErrors,
     };
     fs.writeFileSync(path.join(artifactDir, 'iphone-sphere.json'), JSON.stringify(report, null, 2));

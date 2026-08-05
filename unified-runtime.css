@@ -2,14 +2,14 @@ html,
 body {
   margin: 0;
   overflow: hidden;
-  background: #101820;
+  background: #010308;
 }
 
 #world {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background: #101820;
+  background: #010308;
 }
 
 #lofiLivingCanvas {
@@ -36,14 +36,30 @@ body {
   touch-action: none;
   user-select: none;
   cursor: grab;
-  background: #101820;
+  background: #010308;
+}
+
+#lofiLivingCanvas.hifi-living-canvas {
+  filter: saturate(1.08) contrast(1.04);
 }
 
 #lofiLivingCanvas[data-dragging="true"] {
   cursor: grabbing;
 }
 
-body.lofi-living-root #world > :not(#lofiLivingCanvas):not(#errorState) {
+#lofiLivingCanvasBacking {
+  position: fixed !important;
+  left: -10000px !important;
+  top: -10000px !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: auto !important;
+  touch-action: none !important;
+  image-rendering: pixelated !important;
+}
+
+body.lofi-living-root #world > :not(#lofiLivingCanvas):not(#lofiLivingCanvasBacking):not(#errorState) {
   opacity: 0 !important;
   pointer-events: none !important;
 }
