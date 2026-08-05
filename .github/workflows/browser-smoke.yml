@@ -64,6 +64,13 @@ jobs:
           REALITY_REQUIRE_REBOUND: "0"
         run: node scripts/unified-smoke.cjs
 
+      - name: Verify Pixi-only root
+        id: root_renderer_test
+        env:
+          REALITY_BASE_URL: http://127.0.0.1:4173/
+          REALITY_ROOT_RENDERER_ARTIFACT_DIR: artifacts/root-renderer-smoke
+        run: node scripts/root-renderer-smoke.cjs
+
       - name: Upload browser diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -72,6 +79,7 @@ jobs:
           path: |
             artifacts/browser-smoke
             artifacts/unified-smoke
+            artifacts/root-renderer-smoke
             /tmp/reality-preview.log
           if-no-files-found: warn
           retention-days: 30
@@ -83,13 +91,14 @@ jobs:
           script: |
             const phase11Ok = '${{ steps.browser_test.outcome }}' === 'success';
             const unifiedOk = '${{ steps.unified_test.outcome }}' === 'success';
-            const ok = phase11Ok && unifiedOk;
+            const rootRendererOk = '${{ steps.root_renderer_test.outcome }}' === 'success';
+            const ok = phase11Ok && unifiedOk && rootRendererOk;
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
               state: ok ? 'success' : 'failure',
               context: 'browser/unified-runtime',
-              description: ok ? 'Phase 11 and unified V6.9 runtime diagnostics passed' : 'Phase 11 or unified runtime diagnostics failed',
+              description: ok ? 'Phase 11, lo-fi runtime, and Pixi-only root diagnostics passed' : 'Phase 11, lo-fi runtime, or Pixi-only root diagnostics failed',
               target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions`,
             });
