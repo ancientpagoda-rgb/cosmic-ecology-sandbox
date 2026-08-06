@@ -1,8 +1,8 @@
 import { Application, Graphics } from 'pixi.js';
 import { biomeColor } from './planet.js';
 
-const MIN_ZOOM = 1;
-const MAX_ZOOM = 8;
+const MIN_ZOOM = 0.7;
+const MAX_ZOOM = 12;
 const UI_INTERVAL_MS = 300;
 const PALETTE = {
   background: 0x030806,
