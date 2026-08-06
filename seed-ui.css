@@ -1,0 +1,78 @@
+.planet-world-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(168, 215, 189, 0.14);
+}
+
+.planet-seed-field {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.planet-seed-field > span {
+  color: var(--muted);
+  font: 700 8px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.planet-seed-field input,
+.planet-seed-actions button {
+  min-height: 32px;
+  border: 1px solid rgba(179, 222, 197, 0.26);
+  border-radius: 9px;
+  background: rgba(139, 188, 156, 0.1);
+  color: var(--text);
+  font: inherit;
+}
+
+.planet-seed-field input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+}
+
+.planet-seed-actions {
+  display: flex;
+  align-items: end;
+  gap: 5px;
+}
+
+.planet-seed-actions button {
+  padding: 6px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.planet-seed-field input:hover,
+.planet-seed-actions button:hover {
+  background: rgba(139, 188, 156, 0.18);
+}
+
+.planet-seed-field input:focus-visible,
+.planet-seed-actions button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.planet-seed-status {
+  grid-column: 1 / -1;
+  min-height: 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.planet-seed-status:empty { display: none; }
+
+@media (max-width: 480px) {
+  .planet-world-controls { grid-template-columns: 1fr; }
+  .planet-seed-actions { align-items: center; }
+  .planet-seed-actions button { flex: 1; }
+}
