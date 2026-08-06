@@ -1,131 +1,61 @@
 # Reality Sandbox
 
-Reality Sandbox is a deterministic browser simulation connecting planetary formation, ecology, evolution, civilizations, spaceflight, stellar evolution, galaxies, and cosmology through one fixed timestep.
-
-## Live experiences
-
-- **Lo-fi living root:** https://ancientpagoda-rgb.github.io/reality-sandbox/
-- **Reality Engine V6.9 compatibility page:** https://ancientpagoda-rgb.github.io/reality-sandbox/reality-engine-v6-9.html
-
-## Lo-fi living root
-
-The root experience is deliberately small and quiet:
-
-- one living-world view;
-- one low-resolution PixiJS canvas, rendered at no more than 256×144 pixels and scaled with hard pixel edges;
-- mouse-wheel, trackpad, touch-pinch, drag, and keyboard camera navigation;
-- no sound;
-- no view selector, settings panel, volume control, status feed, palette switcher, or orbital buttons;
-- no Three.js renderer, globe, ground explorer, 3D creature scene, or 3D civilization layer;
-- no private presentation ticker or second simulation clock.
-
-The deeper simulation still runs underneath the simple scene. Weather, water, ecology, natural selection, cultures, settlements, institutions, economies, colonies, machine lineages, relativistic missions, galaxies, gravitational waves, and FLRW cosmology remain part of the deterministic world state. Headless adapters preserve those systems without creating additional renderers or interfaces.
-
-The root module order is:
+Reality Sandbox is a deterministic browser simulation of **Nysa**, a fictional procedural living planet. The public experience deliberately concentrates on one causal system:
 
 ```text
-galaxy → orbital system → cosmic and biological origin
-→ hydrology, ecology, and planet dynamics
-→ headless surface → headless evolution → headless civilizations
-→ Phase 8 → Phase 9 → Phase 10 → Phase 11
-→ lo-fi PixiJS living presentation
+terrain → water and climate → vegetation → animals → selection and speciation
 ```
 
-The module host is the only authoritative simulation clock. PixiJS renders manually from the root render hook with `autoStart: false` and `sharedTicker: false`.
+Nysa is not Earth and does not use measured Earth data. Every quantity labeled `model` or `index` is an internal approximation rather than an observation.
 
-REBOUND 5.0.0 remains available as a hidden same-origin WebAssembly verification backend. It is not exposed as another visible view or control.
+## Public experience
 
-## Reality Engine V6.9 compatibility
+https://ancientpagoda-rgb.github.io/reality-sandbox/
 
-Three.js stays available on the standalone V6.9 and legacy laboratory pages; it is not loaded by the root entry.
+The public root provides:
 
-The standalone V6.9 page remains independently deployable and tested. It preserves the larger experimental interface, including:
+- one procedural spherical planet;
+- one PixiJS renderer and one authoritative fixed simulation clock;
+- terrain generated from spherical plate and noise fields;
+- evaporation, clouds, precipitation, soil water, runoff, rivers, lakes, floods, droughts, tides, and seasons;
+- vegetation whose growth and spread respond to terrain and water;
+- herbivores, predators, and apex predators whose movement, feeding, reproduction, and survival occur in the same world;
+- inherited animal traits, climate stress, disease, population change, extinction, and branching species;
+- a regional inspector that reports the exact terrain, hydrology, weather, and nearby life state used by the simulation;
+- defined global statistics, with normalized model indices labeled as indices;
+- pause, single-step, speed, camera, touch, and keyboard controls.
 
-- CesiumJS planetary globe;
-- PixiJS presentation;
-- Howler.js deterministic and spatial soundscape;
-- Astronomy Engine ephemerides and climate coupling;
-- Three.js multi-system universe;
-- REBOUND WebAssembly N-body physics;
-- weather, orbital, sound, and time controls.
+The globe renderer reads `core/planet.js`, `core/living-systems.js`, `core/water-cycle.js`, `core/world.js`, and `core/biosphere.js` directly. It does not replace the canvas, monkey-patch a second renderer, or draw an unrelated Earth surface over the simulated planet.
 
-The simplified root does not inherit V6.9 sound or interface preferences.
+## Scope freeze
 
-## Core architecture
+Civilizations, spaceflight, relativistic missions, galaxies, cosmology, and Phase 12 are frozen. Their source and legacy experiments remain in repository history and compatibility pages, but the public root does not import, initialize, test, or advertise them.
 
-`core/module-host.js` provides deterministic module registration, capability dependencies, topological ordering, fixed-step updates, rendering hooks, save serialization, and loading.
+The standalone V6.9 compatibility page remains available at:
 
-Each module follows this general contract:
+https://ancientpagoda-rgb.github.io/reality-sandbox/reality-engine-v6-9.html
 
-```js
-{
-  id,
-  version,
-  execution,
-  provides: [],
-  requires: [],
-  after: [],
-  async initialize(context) {},
-  step(dt) {},
-  render(frame) {},
-  save() {},
-  async load(state) {}
-}
-```
+It is preserved as an archived experimental surface and is not the product direction of the public root.
 
-The root presentation lives in `core/lofi-living-runtime.js`. It draws a deterministic coarse terrain field, weather cells, resources, organisms, predators, and apex life as small pixel blocks.
-
-The renderer-free simulation adapters are:
-
-- `core/headless-ground-level.js` — geological and hydrological surface sampling;
-- `core/headless-evolution.js` — lineages, natural selection, culture, and settlement formation;
-- `core/headless-civilization-engine.js` — communities, languages, cultures, routes, technology, and history.
-
-### Save state
-
-The root stores the world tick and module states under `reality-sandbox-globe-v1`. The lo-fi runtime persists its camera and fixed-clock counters; there are no root view, palette, or audio settings.
-
-### Level of detail
-
-- Desktop presentation: 256×144 logical pixels.
-- Mobile presentation: 160×90 logical pixels.
-- Entity and weather samples are capped.
-- Expensive scientific systems retain deterministic statistical or analytic LOD when not directly inspected.
-- Three.js and Cesium remain confined to standalone compatibility and laboratory pages.
-
-## Debugging and inspection
-
-Open the root with debug mode:
+## Root module chain
 
 ```text
-https://ancientpagoda-rgb.github.io/reality-sandbox/?debug=1
+procedural orbit, seasons, and tides
+→ coupled water cycle
+→ plants, animals, and evolution
+→ climate and terrain feedbacks
+→ one PixiJS living-planet renderer and inspector
 ```
 
-The root exposes:
+The module host is the only authoritative simulation clock. PixiJS renders manually with `autoStart: false` and `sharedTicker: false`.
 
-```js
-window.realitySandboxDebug
-window.realitySandboxModules
-window.realitySandboxPhase8
-window.realitySandboxPhase9
-window.realitySandboxPhase10
-window.realitySandboxPhase11
-window.realitySandboxUnified
-window.realitySandboxFactories
-```
+## Statistics and units
 
-Relevant simplified-runtime scenarios include:
-
-```js
-realitySandboxDebug.seedUnifiedScenario('shared-clock')
-realitySandboxDebug.seedUnifiedScenario('scene')
-realitySandboxDebug.seedUnifiedScenario('camera')
-realitySandboxDebug.seedUnifiedScenario('view-switch')
-realitySandboxDebug.seedUnifiedScenario('rebound')
-realitySandboxDebug.seedUnifiedScenario('mobile-lod')
-```
-
-`setUnifiedView()` always resolves to `living` on the root.
+- Entity counts are counts of current simulated entities.
+- Temperature, elevation, and annual rainfall are explicitly marked as model quantities.
+- Soil moisture, flood risk, and trait spread are normalized indices, not physical measurements.
+- Region coordinates are procedural latitude and longitude.
+- Hovering or focusing a global statistic exposes its exact definition.
 
 ## Validation
 
@@ -133,34 +63,21 @@ realitySandboxDebug.seedUnifiedScenario('mobile-lod')
 npm ci
 npm run audit:integration
 npm run build
-npm run dev
 ```
 
-The permanent audit verifies:
+Browser validation additionally checks:
 
-- the complete Phase 8–11 registration chain;
-- one authoritative fixed clock;
-- the single-view and zero-control root contract;
-- audio absence on the root;
-- no Three.js import or module registration in the root;
-- exactly one visible low-resolution PixiJS canvas;
-- interactive camera behavior and save/load;
-- standalone V6.9 compatibility;
-- pinned REBOUND source and deployed WebAssembly verification;
-- dependency notices and CI hooks.
+- production boot with no page errors;
+- exactly one visible root canvas;
+- absence of Earth, Three.js, Phase 8–12, galaxy, civilization, and cosmology resources from the root;
+- fixed-clock behavior;
+- camera and region-inspection interactions;
+- terrain/water/inspector coupling at the same world coordinate;
+- visible and defined statistics;
+- desktop and iPhone screenshots.
 
-GitHub Actions performs production builds, deterministic Phase 8–11 Chromium scenarios, simplified-root browser checks, a Pixi-only resource audit, Playwright screenshots and traces, Spector.js WebGL capture, REBOUND compilation, GitHub Pages deployment, and live browser verification.
+No new phase should be added until these experience checks are green and the visual artifacts have been reviewed.
 
-## Scientific boundaries
+## Scientific boundary
 
-- Planetary climate, ecology, societies, economies, stellar evolution, galaxies, and cosmology are scientifically motivated approximations rather than precision research solvers.
-- The generated planetary system remains authoritative for its own non-Earth orbital climate.
-- REBOUND integrates a selected deterministic orbital system under the root clock; distant systems continue using analytic or statistical LOD.
-- The simple pixel presentation is an intentionally abstract visualization of the deeper state.
-
-## Project references
-
-- Unified runtime issue: [#25](https://github.com/ancientpagoda-rgb/reality-sandbox/issues/25)
-- Integration roadmap: [`INTEGRATION_ROADMAP.md`](./INTEGRATION_ROADMAP.md)
-- Third-party notices: [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md)
-- Phase 12 issue: [#23](https://github.com/ancientpagoda-rgb/reality-sandbox/issues/23)
+The models are deterministic, causal approximations intended for an interactive sandbox. They are not research solvers and do not predict real Earth conditions. A future Earth mode must use versioned real datasets, explicit units, reference epochs, provenance, uncertainty, and validation before it may be called Earth.

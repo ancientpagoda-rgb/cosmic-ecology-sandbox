@@ -3,107 +3,64 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 
 const baseUrl = process.env.REALITY_BASE_URL || 'http://127.0.0.1:4173/';
-const artifactDir = process.env.REALITY_IPHONE_ARTIFACT_DIR
-  || path.join(process.cwd(), 'artifacts', 'iphone-sphere-smoke');
+const artifactDir = process.env.REALITY_IPHONE_ARTIFACT_DIR || path.join(process.cwd(), 'artifacts', 'iphone-sphere-smoke');
 fs.mkdirSync(artifactDir, { recursive: true });
 
 (async () => {
   const viewport = { width: 393, height: 852 };
+  const executablePath = process.env.REALITY_CHROMIUM_PATH;
   const browser = await chromium.launch({
     headless: true,
-    args: ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--disable-dev-shm-usage'],
+    ...(executablePath ? { executablePath } : {}),
+    args: ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--disable-dev-shm-usage', '--no-sandbox'],
   });
-  const context = await browser.newContext({
-    viewport,
-    deviceScaleFactor: 3,
-    isMobile: true,
-    hasTouch: true,
-  });
+  const context = await browser.newContext({ viewport, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   const page = await context.newPage();
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
-
   try {
-    const url = new URL(baseUrl);
-    url.searchParams.set('debug', '1');
-    url.searchParams.set('test', '1');
-    await page.goto(url.toString(), { waitUntil: 'domcontentloaded', timeout: 90000 });
-    await page.waitForFunction(
-      () => Boolean(window.realitySandboxDebug?.ready && window.realitySandboxHifi?.ready),
-      null,
-      { timeout: 120000 },
-    );
-    await page.waitForTimeout(300);
-
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
+    await page.waitForFunction(() => Boolean(window.realitySandboxDebug?.ready), null, { timeout: 120000 });
+    await page.waitForTimeout(700);
+    const before = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().selectedRegion);
+    await page.touchscreen.tap(viewport.width * 0.56, viewport.height * 0.48);
+    await page.waitForTimeout(120);
     const metrics = await page.evaluate(() => {
       const canvas = document.getElementById('lofiLivingCanvas');
-      if (!canvas) return null;
-      const rect = canvas.getBoundingClientRect();
-      const style = getComputedStyle(canvas);
-      const context = canvas.getContext('2d');
-      const center = context?.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data;
+      const canvasRect = canvas.getBoundingClientRect();
+      const dashboard = document.querySelector('.planet-dashboard').getBoundingClientRect();
+      const inspector = document.querySelector('.planet-inspector').getBoundingClientRect();
+      const masthead = document.querySelector('.planet-masthead').getBoundingClientRect();
       return {
-        bitmapWidth: canvas.width,
-        bitmapHeight: canvas.height,
-        cssWidth: rect.width,
-        cssHeight: rect.height,
-        left: rect.left,
-        top: rect.top,
-        transform: style.transform,
-        imageRendering: style.imageRendering,
-        visibleCanvasCount: document.querySelectorAll('#lofiLivingCanvas').length,
-        hiddenLowResolutionCanvas: Boolean(document.getElementById('lofiLivingCanvasLowRes')),
-        hifi: window.realitySandboxHifi?.getState?.(),
-        centerPixel: center ? [...center] : null,
+        canvas: { bitmapWidth: canvas.width, bitmapHeight: canvas.height, cssWidth: canvasRect.width, cssHeight: canvasRect.height },
+        dashboard: { left: dashboard.left, right: dashboard.right, top: dashboard.top, bottom: dashboard.bottom },
+        inspector: { left: inspector.left, right: inspector.right, top: inspector.top, bottom: inspector.bottom },
+        masthead: { left: masthead.left, right: masthead.right, top: masthead.top, bottom: masthead.bottom },
+        visibleCanvasCount: [...document.querySelectorAll('canvas')].filter(node => getComputedStyle(node).display !== 'none').length,
+        statDefinitions: document.querySelectorAll('.planet-stat[title][tabindex="0"]').length,
+        snapshot: window.realitySandboxUnified.getSnapshot(),
+        after: window.realitySandboxUnified.getSnapshot().selectedRegion,
       };
     });
-
-    assert(metrics, 'The living-world canvas was not found.');
-    const bitmapAspect = metrics.bitmapWidth / metrics.bitmapHeight;
-    const cssAspect = metrics.cssWidth / metrics.cssHeight;
-    const estimatedSphereDiameter = metrics.cssHeight * 0.86;
-    const centerLuminance = metrics.centerPixel
-      ? metrics.centerPixel[0] + metrics.centerPixel[1] + metrics.centerPixel[2]
-      : 0;
-
-    assert(Math.abs(cssAspect - bitmapAspect) < 0.01,
-      `Canvas aspect mismatch: bitmap ${bitmapAspect}, CSS ${cssAspect}.`);
-    assert(metrics.bitmapWidth >= 384 && metrics.bitmapHeight >= 216,
-      `The iPhone renderer is below the mobile performance floor: ${metrics.bitmapWidth}x${metrics.bitmapHeight}.`);
-    assert(metrics.visibleCanvasCount === 1 && !metrics.hiddenLowResolutionCanvas,
-      'The iPhone renderer must use one visible canvas without a hidden canvas handoff.');
-    assert(metrics.hifi?.ready && metrics.hifi.width === metrics.bitmapWidth,
-      `The high-fidelity presentation did not initialize: ${JSON.stringify(metrics.hifi)}.`);
-    assert(metrics.cssWidth >= viewport.width * 1.8,
-      `Portrait canvas is too narrow to keep the planet large: ${metrics.cssWidth}px.`);
-    assert(estimatedSphereDiameter >= viewport.width * 0.9,
-      `Estimated planet diameter is too small on iPhone: ${estimatedSphereDiameter}px.`);
-    assert(metrics.left < 0 && metrics.left + metrics.cssWidth > viewport.width,
-      'The portrait canvas is not centered across the viewport.');
-    assert(centerLuminance > 45,
-      `The scientific Earth did not render at the canvas center: ${metrics.centerPixel}.`);
-    assert(pageErrors.length === 0, `Browser page errors: ${pageErrors.join(' | ')}`);
-
-    const report = {
-      ok: true,
-      viewport,
-      metrics,
-      bitmapAspect,
-      cssAspect,
-      estimatedSphereDiameter,
-      centerLuminance,
-      pageErrors,
-    };
-    fs.writeFileSync(path.join(artifactDir, 'iphone-sphere.json'), JSON.stringify(report, null, 2));
-    await page.screenshot({ path: path.join(artifactDir, 'iphone-sphere.png'), fullPage: true });
+    fs.writeFileSync(path.join(artifactDir, 'iphone-living-planet.json'), JSON.stringify({ ok: null, viewport, metrics, pageErrors }, null, 2));
+    const bitmapAspect = metrics.canvas.bitmapWidth / metrics.canvas.bitmapHeight;
+    const cssAspect = metrics.canvas.cssWidth / metrics.canvas.cssHeight;
+    assert(Math.abs(bitmapAspect - cssAspect) < 0.03, `Canvas aspect mismatch: ${bitmapAspect} vs ${cssAspect}.`);
+    assert(metrics.canvas.bitmapWidth >= 170 && metrics.canvas.bitmapHeight >= 340, `Mobile logical resolution is too low: ${metrics.canvas.bitmapWidth}x${metrics.canvas.bitmapHeight}.`);
+    assert(metrics.visibleCanvasCount === 1 && metrics.snapshot.presentation.renderer === 'pixi-single-canvas', 'Mobile must use one integrated renderer.');
+    assert(metrics.dashboard.left >= 0 && metrics.dashboard.right <= viewport.width && metrics.dashboard.bottom <= viewport.height, 'Dashboard overflows the iPhone viewport.');
+    assert(metrics.inspector.left >= 0 && metrics.inspector.right <= viewport.width && metrics.inspector.bottom <= viewport.height, 'Inspector overflows the iPhone viewport.');
+    assert(metrics.masthead.bottom <= metrics.inspector.top, 'Inspector overlaps the iPhone masthead.');
+    assert(metrics.statDefinitions === 8, 'Mobile statistics lost their definitions.');
+    assert(Math.abs(metrics.after.longitude - before.longitude) > 0.5 || Math.abs(metrics.after.latitude - before.latitude) > 0.5, 'Touch inspection did not select a region.');
+    assert(metrics.snapshot.presentation.drawnEntities > 0 && pageErrors.length === 0, `Mobile scene is empty or errored: ${pageErrors.join(' | ')}`);
+    fs.writeFileSync(path.join(artifactDir, 'iphone-living-planet.json'), JSON.stringify({ ok: true, viewport, metrics, pageErrors }, null, 2));
+    await page.screenshot({ path: path.join(artifactDir, 'iphone-living-planet.png'), fullPage: true });
   } finally {
     await context.close();
     await browser.close();
   }
-
-  function assert(condition, message) {
-    if (!condition) throw new Error(message);
-  }
+  function assert(condition, message) { if (!condition) throw new Error(message); }
 })().catch(error => {
   fs.writeFileSync(path.join(artifactDir, 'fatal-error.txt'), `${error.stack || error.message}\n`);
   console.error(error);

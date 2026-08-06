@@ -56,13 +56,6 @@ jobs:
           REALITY_IPHONE_ARTIFACT_DIR: artifacts/iphone-sphere-smoke
         run: node scripts/iphone-sphere-smoke.cjs
 
-      - name: Run Phase 11 browser diagnostics
-        id: browser_test
-        env:
-          REALITY_BASE_URL: http://127.0.0.1:4173/
-          REALITY_ARTIFACT_DIR: artifacts/browser-smoke
-        run: node scripts/browser-smoke.cjs
-
       - name: Run unified runtime diagnostics
         id: unified_test
         env:
@@ -84,7 +77,6 @@ jobs:
         with:
           name: reality-browser-diagnostics-${{ github.sha }}
           path: |
-            artifacts/browser-smoke
             artifacts/unified-smoke
             artifacts/root-renderer-smoke
             artifacts/iphone-sphere-smoke
@@ -97,17 +89,16 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const phase11Ok = '${{ steps.browser_test.outcome }}' === 'success';
             const unifiedOk = '${{ steps.unified_test.outcome }}' === 'success';
             const rootRendererOk = '${{ steps.root_renderer_test.outcome }}' === 'success';
             const iphoneSphereOk = '${{ steps.iphone_sphere_test.outcome }}' === 'success';
-            const ok = phase11Ok && unifiedOk && rootRendererOk && iphoneSphereOk;
+            const ok = unifiedOk && rootRendererOk && iphoneSphereOk;
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
               state: ok ? 'success' : 'failure',
               context: 'browser/unified-runtime',
-              description: ok ? 'Phase 11, runtime, Pixi root, and iPhone sphere diagnostics passed' : 'A browser, runtime, renderer, or iPhone sphere diagnostic failed',
+              description: ok ? 'Living planet, single renderer, inspector, and iPhone checks passed' : 'A living-planet browser or visual check failed',
               target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions`,
             });

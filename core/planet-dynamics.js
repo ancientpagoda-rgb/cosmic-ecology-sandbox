@@ -1,7 +1,8 @@
 import { samplePlanet } from './planet.js';
 import { sampleHydrology } from './hydrology.js';
 
-export function createPlanetDynamics(world, living, waterCycle) {
+export function createPlanetDynamics(world, living, waterCycle, rng = Math.random) {
+  const random = typeof rng === 'function' ? rng : rng.float.bind(rng);
   const events = [];
   const geology = [];
   let time = 0;
@@ -27,11 +28,11 @@ export function createPlanetDynamics(world, living, waterCycle) {
   function seedGeology() {
     for (let i = 0; i < 12; i++) {
       for (let tries = 0; tries < 100; tries++) {
-        const x = Math.random() * world.width;
-        const y = Math.random() * world.height;
+        const x = random() * world.width;
+        const y = random() * world.height;
         const p = samplePlanet(x, y, world.width, world.height);
         if (p.land && p.plateBoundary > 0.55) {
-          geology.push({ x, y, type: p.convergence > 0 ? 'volcano' : 'fault', activity: Math.random(), age: 0 });
+          geology.push({ x, y, type: p.convergence > 0 ? 'volcano' : 'fault', activity: random(), age: 0 });
           break;
         }
       }
@@ -41,17 +42,17 @@ export function createPlanetDynamics(world, living, waterCycle) {
   function geologicalCycle() {
     for (const site of geology) {
       site.age += 14;
-      site.activity = clamp(site.activity + (Math.random() - 0.48) * 0.18, 0, 1);
+      site.activity = clamp(site.activity + (random() - 0.48) * 0.18, 0, 1);
     }
     const active = geology.filter(g => g.activity > 0.76);
     if (!active.length) return;
-    const site = active[Math.floor(Math.random() * active.length)];
+    const site = active[Math.floor(random() * active.length)];
     if (site.type === 'volcano') {
       emit('Volcanic eruption', 'A plate-boundary volcano erupted, spreading ash and enriching nearby soils.', site);
       site.activity *= 0.35;
     } else {
       emit('Earthquake', 'A strong earthquake released accumulated stress along a tectonic fault.', site);
-      if (samplePlanet(site.x, site.y, world.width, world.height).elevation < 0.56 && Math.random() < 0.35) {
+      if (samplePlanet(site.x, site.y, world.width, world.height).elevation < 0.56 && random() < 0.35) {
         emit('Tsunami', 'Seafloor movement generated a tsunami across the nearby ocean basin.', site);
       }
       site.activity *= 0.42;

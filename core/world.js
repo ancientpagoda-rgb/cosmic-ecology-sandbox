@@ -694,7 +694,7 @@ export function createWorld(rng) {
       res.regenTimer -= dt * (0.8 + fertility * 1.2);
       if (res.regenTimer <= 0) {
         res.amount = 1;
-        res.regenTimer = 6 + Math.random() * 4; // slightly faster, staggered regrowth
+        res.regenTimer = 6 + rng.float() * 4; // deterministic staggered regrowth
         res.cycles = (res.cycles || 0) + 1;
         res.age = 0; // new visible growth cycle
       }

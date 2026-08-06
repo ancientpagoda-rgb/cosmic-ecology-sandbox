@@ -4,13 +4,14 @@ const { chromium } = require('playwright');
 
 const baseUrl = process.env.REALITY_BASE_URL || 'http://127.0.0.1:4173/';
 const artifactDir = process.env.REALITY_UNIFIED_ARTIFACT_DIR || path.join(process.cwd(), 'artifacts', 'unified-smoke');
-const requireRebound = process.env.REALITY_REQUIRE_REBOUND === '1';
 fs.mkdirSync(artifactDir, { recursive: true });
 
 (async () => {
+  const executablePath = process.env.REALITY_CHROMIUM_PATH;
   const browser = await chromium.launch({
     headless: true,
-    args: ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--disable-dev-shm-usage'],
+    ...(executablePath ? { executablePath } : {}),
+    args: ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--disable-dev-shm-usage', '--no-sandbox'],
   });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   const page = await context.newPage();
@@ -24,82 +25,71 @@ fs.mkdirSync(artifactDir, { recursive: true });
   try {
     const url = new URL(baseUrl);
     url.searchParams.set('debug', '1');
-    url.searchParams.set('test', '1');
     await page.goto(url.toString(), { waitUntil: 'domcontentloaded', timeout: 120000 });
     await page.waitForFunction(() => Boolean(window.realitySandboxDebug?.ready && window.realitySandboxUnified), null, { timeout: 120000 });
-    await page.waitForTimeout(1200);
+    await page.waitForTimeout(900);
 
     const initial = await page.evaluate(() => {
-      const controls = [...document.querySelectorAll('button, select, input, output, [data-unified-sound]')]
-        .filter(element => {
-          const style = getComputedStyle(element);
-          const rect = element.getBoundingClientRect();
-          return style.display !== 'none'
-            && style.visibility !== 'hidden'
-            && Number(style.opacity) > 0
-            && rect.width > 0
-            && rect.height > 0;
-        }).length;
+      const visible = element => {
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0 && rect.width > 0 && rect.height > 0;
+      };
       const canvas = document.getElementById('lofiLivingCanvas');
-      const canvasStyle = canvas ? getComputedStyle(canvas) : null;
       return {
+        title: document.title,
         diagnostics: window.realitySandboxDebug.diagnostics(),
-        unified: window.realitySandboxUnified.getSnapshot(),
+        snapshot: window.realitySandboxUnified.getSnapshot(),
         modules: window.realitySandboxModules.list().map(module => module.id),
-        panel: Boolean(document.getElementById('unifiedRuntimePanel')),
-        controls,
-        canvas: canvas ? {
-          connected: canvas.isConnected,
-          imageRendering: canvasStyle.imageRendering,
-          pointerEvents: canvasStyle.pointerEvents,
-          touchAction: canvasStyle.touchAction,
-        } : null,
+        visibleCanvases: [...document.querySelectorAll('canvas')].filter(visible).length,
+        visibleControls: [...document.querySelectorAll('.planet-dashboard button, .planet-dashboard select')].filter(visible).length,
+        statDefinitions: document.querySelectorAll('.planet-stat[title][tabindex="0"]').length,
+        statValues: [...document.querySelectorAll('[data-stat]')].map(node => node.textContent.trim()),
+        inspector: Boolean(document.querySelector('.planet-inspector')),
+        canvas: canvas ? { width: canvas.width, height: canvas.height, imageRendering: getComputedStyle(canvas).imageRendering } : null,
+        retiredGlobals: Boolean(window.realitySandboxHifi || window.realitySandboxLilacClouds || window.realitySandboxRainRunoff),
+        universeGlobals: Boolean(window.realitySandboxPhase8 || window.realitySandboxPhase9 || window.realitySandboxPhase10 || window.realitySandboxPhase11),
       };
     });
     writeJson('initial.json', initial);
+    assert(initial.title.includes('Procedural Living Planet'), 'The public title does not identify the procedural living planet.');
     assert(initial.diagnostics.ok, `Initial diagnostics failed: ${initial.diagnostics.failures.join(', ')}`);
-    assert(initial.modules.includes('runtime.lofi-living-world'), 'The lo-fi living-world runtime was not registered.');
-    assert(initial.unified.mode === 'lofi-living-world', 'The root did not use the distilled living-world mode.');
-    assert(initial.unified.view === 'living' && initial.unified.availableViews.length === 1, 'The root exposed more than one view.');
-    assert(initial.unified.audio.enabled === false && initial.unified.audio.started === false, 'Audio remained enabled in the simplified root.');
-    assert(initial.unified.interface.controls === 0 && !initial.panel && initial.controls === 0, 'Runtime controls or informational panels remained visible.');
-    assert(initial.canvas?.connected, 'The lo-fi living-world canvas is missing.');
-    assert(initial.canvas.imageRendering === 'pixelated' || initial.canvas.imageRendering === 'crisp-edges', 'The root canvas is not pixelated.');
-    assert(initial.canvas.pointerEvents !== 'none', 'The lo-fi canvas cannot receive zoom gestures.');
-    assert(initial.canvas.touchAction === 'none', 'The lo-fi canvas cannot own pinch gestures.');
-    assert(initial.unified.presentation.logicalWidth <= 256 && initial.unified.presentation.logicalHeight <= 144, 'The presentation is not low resolution.');
-    assert(initial.unified.presentation.tickerStarted === false, 'PixiJS started an independent ticker.');
-    assert(initial.unified.presentation.camera.zoom === 1, 'The lo-fi camera did not start at world scale.');
-    assert(initial.unified.presentation.interactions.wheelZoom && initial.unified.presentation.interactions.pinchZoom, 'Zoom interaction support was not exposed.');
+    assert(initial.modules.join('|') === 'planet.orbit-seasons|planet.water-cycle|planet.living-ecology|planet.climate-terrain-feedbacks|runtime.procedural-living-planet', `Unexpected root modules: ${initial.modules.join(', ')}`);
+    assert(initial.snapshot.mode === 'procedural-living-planet' && initial.snapshot.planet.fictional && !initial.snapshot.planet.earthData, 'The root is not honestly labeled as a fictional procedural planet.');
+    assert(initial.snapshot.presentation.renderer === 'pixi-single-canvas' && !initial.snapshot.presentation.tickerStarted, 'The single-renderer contract failed.');
+    assert(initial.visibleCanvases === 1 && initial.canvas, 'The root must have exactly one visible canvas.');
+    assert(initial.visibleControls === 3 && initial.inspector, 'The integrated controls or inspector are missing.');
+    assert(initial.statDefinitions === 8, 'All eight global statistics must expose definitions.');
+    assert(initial.statValues.every(value => value && value !== '—'), `A statistic did not initialize: ${initial.statValues.join(', ')}`);
+    assert(!initial.retiredGlobals && !initial.universeGlobals, 'A retired renderer or universe phase loaded in the public root.');
 
     const canvasBox = await page.locator('#lofiLivingCanvas').boundingBox();
-    assert(canvasBox && canvasBox.width > 0 && canvasBox.height > 0, 'The lo-fi canvas has no interactive bounds.');
+    assert(canvasBox && canvasBox.width > 0 && canvasBox.height > 0, 'The planet canvas has no interactive bounds.');
     const centerX = canvasBox.x + canvasBox.width * 0.5;
     const centerY = canvasBox.y + canvasBox.height * 0.5;
-    const cameraBefore = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().presentation.camera);
+    const cameraBefore = await page.evaluate(() => window.realitySandboxUnified.getCamera());
     await page.mouse.move(centerX, centerY);
-    await page.mouse.wheel(0, -520);
-    await page.waitForTimeout(180);
-    const cameraZoomed = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().presentation.camera);
-    assert(cameraZoomed.zoom > cameraBefore.zoom, 'Mouse-wheel zoom did not change the lo-fi camera.');
-
+    await page.mouse.wheel(0, -480);
+    await page.waitForTimeout(150);
+    const cameraZoomed = await page.evaluate(() => window.realitySandboxUnified.getCamera());
+    assert(cameraZoomed.zoom > cameraBefore.zoom, 'Mouse-wheel zoom did not change the camera.');
     await page.mouse.move(centerX, centerY);
     await page.mouse.down();
-    await page.mouse.move(centerX + 120, centerY + 55, { steps: 8 });
+    await page.mouse.move(centerX + 100, centerY + 45, { steps: 6 });
     await page.mouse.up();
-    await page.waitForTimeout(120);
-    const cameraPanned = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().presentation.camera);
-    assert(
-      Math.abs(cameraPanned.centerX - cameraZoomed.centerX) > 0.0001
-        || Math.abs(cameraPanned.centerY - cameraZoomed.centerY) > 0.0001,
-      'Drag-to-pan did not move the lo-fi camera.',
-    );
-
+    const cameraDragged = await page.evaluate(() => window.realitySandboxUnified.getCamera());
+    assert(Math.abs(cameraDragged.centerX - cameraZoomed.centerX) > 0.0001 || Math.abs(cameraDragged.centerY - cameraZoomed.centerY) > 0.0001, 'Drag rotation did not move the camera.');
     await page.keyboard.press('0');
-    await page.waitForTimeout(120);
-    const cameraReset = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().presentation.camera);
-    writeJson('camera-interaction.json', { before: cameraBefore, zoomed: cameraZoomed, panned: cameraPanned, reset: cameraReset });
+    const cameraReset = await page.evaluate(() => window.realitySandboxUnified.getCamera());
     assert(cameraReset.zoom === 1 && cameraReset.centerX === 0.5 && cameraReset.centerY === 0.5, 'Keyboard camera reset failed.');
+
+    const regionBefore = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().selectedRegion);
+    await page.mouse.click(canvasBox.x + canvasBox.width * 0.62, canvasBox.y + canvasBox.height * 0.56);
+    await page.waitForTimeout(120);
+    const regionAfter = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().selectedRegion);
+    assert(Math.abs(regionAfter.longitude - regionBefore.longitude) > 0.5 || Math.abs(regionAfter.latitude - regionBefore.latitude) > 0.5, 'Clicking the globe did not select a new simulated region.');
+    assert(Number.isFinite(regionAfter.temperature) && Number.isFinite(regionAfter.soilMoisture), 'The selected region lacks climate or water readings.');
+    assert(await page.locator('[data-reading="water"]').getAttribute('title'), 'A regional reading is not inspectable in full.');
 
     await page.evaluate(() => window.realitySandboxDebug.pause());
     const clock = await page.evaluate(() => {
@@ -109,81 +99,25 @@ fs.mkdirSync(artifactDir, { recursive: true });
       return { before, after, diagnostics: window.realitySandboxDebug.diagnostics() };
     });
     writeJson('clock.json', clock);
-    assert(clock.after.masterSteps - clock.before.masterSteps === 50, 'The presentation did not receive exactly one step per root master step.');
-    assert(clock.after.duplicateClockViolations === 0, 'A reversed presentation clock was detected.');
-    assert(clock.diagnostics.ok, `Clock diagnostics failed: ${clock.diagnostics.failures.join(', ')}`);
+    assert(clock.after.masterSteps - clock.before.masterSteps === 50, 'The runtime did not receive one step per master step.');
+    assert(clock.after.duplicateClockViolations === 0 && clock.diagnostics.ok, 'Fixed-clock diagnostics failed.');
 
     const scenarios = await page.evaluate(async () => ({
-      sharedClock: await window.realitySandboxDebug.seedUnifiedScenario('shared-clock'),
-      viewSwitch: await window.realitySandboxDebug.seedUnifiedScenario('view-switch'),
-      scene: await window.realitySandboxDebug.seedUnifiedScenario('scene'),
-      camera: await window.realitySandboxDebug.seedUnifiedScenario('camera'),
-      rebound: await window.realitySandboxDebug.seedUnifiedScenario('rebound'),
-      mobileLod: await window.realitySandboxDebug.seedUnifiedScenario('mobile-lod'),
+      sharedClock: await window.realitySandboxDebug.seedScenario('shared-clock'),
+      scene: await window.realitySandboxDebug.seedScenario('scene'),
+      camera: await window.realitySandboxDebug.seedScenario('camera'),
+      coupling: await window.realitySandboxDebug.seedScenario('coupling'),
     }));
     writeJson('scenarios.json', scenarios);
-    assert(scenarios.sharedClock.ok && scenarios.sharedClock.privateRafLoops === 0, 'The presentation started a private simulation loop.');
-    assert(scenarios.viewSwitch.ok && scenarios.viewSwitch.selected === 'living', 'A second visible view remained selectable.');
-    assert(scenarios.scene.ok && scenarios.scene.controls === 0 && scenarios.scene.audio === false && scenarios.scene.interactiveCamera, 'The simplified interactive scene contract failed.');
-    assert(scenarios.camera.ok && scenarios.camera.after.zoom > scenarios.camera.before.zoom, 'The deterministic camera scenario failed.');
-    assert(scenarios.mobileLod.ok, 'The low-resolution presentation limit failed.');
-    if (requireRebound) {
-      const status = scenarios.rebound.status;
-      assert(
-        status.mode === 'rebound-wasm'
-          && status.count > 0
-          && Number.isFinite(status.timeDays)
-          && Number.isFinite(status.energyError),
-        `Live REBOUND WASM was required but unavailable: ${JSON.stringify(status)}`,
-      );
-    }
-
-    const cameraRoundTrip = await page.evaluate(() => {
-      window.realitySandboxUnified.setCamera({ zoom: 3.2, centerX: 0.31, centerY: 0.62 });
-      const saved = window.realitySandboxUnified.save();
-      window.realitySandboxUnified.resetCamera();
-      window.realitySandboxUnified.load(saved);
-      return {
-        saved,
-        restored: window.realitySandboxUnified.getSnapshot().presentation.camera,
-      };
-    });
-    writeJson('camera-round-trip.json', cameraRoundTrip);
-    assert(Math.abs(cameraRoundTrip.restored.zoom - 3.2) < 0.001, 'Saved camera zoom did not round trip.');
-    assert(Math.abs(cameraRoundTrip.restored.centerX - 0.31) < 0.001, 'Saved camera longitude did not round trip.');
-    assert(Math.abs(cameraRoundTrip.restored.centerY - 0.62) < 0.001, 'Saved camera latitude did not round trip.');
-    await page.evaluate(() => window.realitySandboxUnified.resetCamera());
-
-    const lockedView = await page.evaluate(() => {
-      const before = {
-        tick: window.realitySandboxDebug.snapshot().tick,
-        phase11Years: window.realitySandboxPhase11.getState().simulatedYears,
-      };
-      const selected = window.realitySandboxDebug.setUnifiedView('universe');
-      const after = {
-        tick: window.realitySandboxDebug.snapshot().tick,
-        phase11Years: window.realitySandboxPhase11.getState().simulatedYears,
-        snapshot: window.realitySandboxUnified.getSnapshot(),
-      };
-      return { before, selected, after };
-    });
-    writeJson('locked-view.json', lockedView);
-    assert(lockedView.selected === 'living' && lockedView.after.snapshot.view === 'living', 'The root escaped the living-world view.');
-    assert(lockedView.before.tick === lockedView.after.tick && lockedView.before.phase11Years === lockedView.after.phase11Years, 'A rejected view change mutated simulation history.');
-
-    const entry = new URL(baseUrl);
-    const v69Url = entry.pathname.includes('/reality-sandbox/')
-      ? new URL('reality-engine-v6-9.html', entry)
-      : new URL('/reality-sandbox/reality-engine-v6-9.html', entry.origin);
-    const v69Response = await page.request.get(v69Url.toString());
-    const v69Html = await v69Response.text();
-    assert(v69Response.ok(), `Standalone V6.9 compatibility page is unavailable at ${v69Url}.`);
-    assert(v69Html.includes('ENGINE V6.9 · HOWLER.JS SOUNDSCAPE'), 'The preserved standalone V6.9 page lost its marker.');
+    assert(scenarios.sharedClock.ok && scenarios.sharedClock.privateRafLoops === 0, 'The renderer started a second simulation loop.');
+    assert(scenarios.scene.ok && scenarios.scene.renderer === 'pixi-single-canvas' && scenarios.scene.inspector, 'The public scene contract failed.');
+    assert(scenarios.camera.ok, 'The deterministic camera scenario failed.');
+    assert(scenarios.coupling.ok, 'The terrain-water-inspector coupling scenario failed.');
 
     const finalDiagnostics = await page.evaluate(() => window.realitySandboxDebug.diagnostics());
     writeJson('diagnostics.json', finalDiagnostics);
-    await page.screenshot({ path: path.join(artifactDir, 'lofi-living-world.png'), fullPage: true });
-    assert(finalDiagnostics.ok, `Final simplified-runtime diagnostics failed: ${finalDiagnostics.failures.join(', ')}`);
+    await page.screenshot({ path: path.join(artifactDir, 'procedural-living-planet.png'), fullPage: true });
+    assert(finalDiagnostics.ok, `Final diagnostics failed: ${finalDiagnostics.failures.join(', ')}`);
     assert(pageErrors.length === 0, `Browser page errors: ${pageErrors.map(error => error.message).join(' | ')}`);
   } finally {
     writeJson('console.json', consoleEntries);
@@ -193,12 +127,8 @@ fs.mkdirSync(artifactDir, { recursive: true });
     await browser.close();
   }
 
-  function assert(condition, message) {
-    if (!condition) throw new Error(message);
-  }
-  function writeJson(filename, value) {
-    fs.writeFileSync(path.join(artifactDir, filename), JSON.stringify(value, null, 2));
-  }
+  function assert(condition, message) { if (!condition) throw new Error(message); }
+  function writeJson(filename, value) { fs.writeFileSync(path.join(artifactDir, filename), JSON.stringify(value, null, 2)); }
 })().catch(error => {
   fs.writeFileSync(path.join(artifactDir, 'fatal-error.txt'), `${error.stack || error.message}\n`);
   console.error(error);

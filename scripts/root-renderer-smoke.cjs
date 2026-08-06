@@ -7,70 +7,51 @@ const artifactDir = process.env.REALITY_ROOT_RENDERER_ARTIFACT_DIR || path.join(
 fs.mkdirSync(artifactDir, { recursive: true });
 
 (async () => {
+  const executablePath = process.env.REALITY_CHROMIUM_PATH;
   const browser = await chromium.launch({
     headless: true,
-    args: ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--disable-dev-shm-usage'],
+    ...(executablePath ? { executablePath } : {}),
+    args: ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--disable-dev-shm-usage', '--no-sandbox'],
   });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   const pageErrors = [];
-  const failedRequests = [];
-  page.on('pageerror', error => pageErrors.push({ message: error.message, stack: error.stack }));
-  page.on('requestfailed', request => failedRequests.push({ url: request.url(), failure: request.failure() }));
-
+  page.on('pageerror', error => pageErrors.push(error.message));
   try {
-    const url = new URL(baseUrl);
-    url.searchParams.set('debug', '1');
-    url.searchParams.set('rendererAudit', '1');
-    await page.goto(url.toString(), { waitUntil: 'domcontentloaded', timeout: 120000 });
-    await page.waitForFunction(() => Boolean(window.realitySandboxDebug?.ready && window.realitySandboxUnified), null, { timeout: 120000 });
-    await page.waitForTimeout(1200);
-
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
+    await page.waitForFunction(() => Boolean(window.realitySandboxDebug?.ready), null, { timeout: 120000 });
+    await page.waitForTimeout(700);
     const result = await page.evaluate(() => {
       const visible = element => {
         const style = getComputedStyle(element);
         const rect = element.getBoundingClientRect();
-        return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0 && rect.width > 0 && rect.height > 0;
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
       };
       const resources = performance.getEntriesByType('resource').map(entry => entry.name);
-      const forbiddenResources = resources.filter(name => /(?:three\.module|globe-render|galaxy-render-layer|ground-level-phase|origin-surface-visuals|embodied-evolution|creature-body-3d|civilization-visuals|surface-character|closeup-polish)/i.test(name));
-      const visibleCanvases = [...document.querySelectorAll('canvas')]
-        .filter(visible)
-        .map(canvas => ({ id: canvas.id, className: canvas.className, width: canvas.width, height: canvas.height }));
+      const forbiddenResources = resources.filter(name => /(?:three\.module|scientific-earth|earth-observation|lilac-cloud|rain-runoff|iphone-performance|phase8|phase9|phase10|phase11|galaxy-render|civilization)/i.test(name));
+      const visibleCanvases = [...document.querySelectorAll('canvas')].filter(visible).map(canvas => ({ id: canvas.id, width: canvas.width, height: canvas.height }));
       return {
         modules: window.realitySandboxModules.list().map(module => module.id),
         visibleCanvases,
         forbiddenResources,
-        diagnostics: window.realitySandboxDebug.diagnostics(),
         snapshot: window.realitySandboxUnified.getSnapshot(),
+        diagnostics: window.realitySandboxDebug.diagnostics(),
+        inspector: Boolean(document.querySelector('.planet-inspector')),
       };
     });
     fs.writeFileSync(path.join(artifactDir, 'root-renderer.json'), JSON.stringify(result, null, 2));
-    await page.screenshot({ path: path.join(artifactDir, 'pixi-only-root.png'), fullPage: true });
-
+    await page.evaluate(() => window.realitySandboxDebug.pause());
+    await page.waitForTimeout(120);
+    await page.screenshot({ path: path.join(artifactDir, 'single-pixi-root.png'), fullPage: true });
     assert(result.diagnostics.ok, `Root diagnostics failed: ${result.diagnostics.failures.join(', ')}`);
-    assert(!result.modules.includes('render.three'), 'The live root registered render.three.');
-    assert(result.modules.includes('terrain.headless-surface'), 'The headless surface module is missing.');
-    assert(result.modules.includes('evolution.headless-lineages'), 'The headless evolution module is missing.');
-    assert(result.forbiddenResources.length === 0, `Retired Three.js resources loaded: ${result.forbiddenResources.join(', ')}`);
-    assert(result.visibleCanvases.length === 1, `Expected one visible canvas, found ${JSON.stringify(result.visibleCanvases)}`);
-    assert(result.visibleCanvases[0].id === 'lofiLivingCanvas', 'The visible root canvas is not the lo-fi Pixi canvas.');
-    assert(result.snapshot.presentation.logicalWidth <= 256 && result.snapshot.presentation.logicalHeight <= 144, 'The root presentation is not low resolution.');
-    assert(
-      result.snapshot.presentation.spherical === true
-        && result.snapshot.presentation.geometry === 'sphere'
-        && result.snapshot.presentation.projection === 'orthographic',
-      `The live root is not the spherical Pixi world: ${JSON.stringify(result.snapshot.presentation)}`,
-    );
-    assert(pageErrors.length === 0, `Browser page errors: ${pageErrors.map(error => error.message).join(' | ')}`);
+    assert(result.visibleCanvases.length === 1 && result.visibleCanvases[0].id === 'lofiLivingCanvas', `Expected one visible root canvas: ${JSON.stringify(result.visibleCanvases)}`);
+    assert(result.forbiddenResources.length === 0, `Frozen or retired root resources loaded: ${result.forbiddenResources.join(', ')}`);
+    assert(result.modules.length === 5 && result.modules.at(-1) === 'runtime.procedural-living-planet', `Unexpected root module graph: ${result.modules.join(', ')}`);
+    assert(result.snapshot.presentation.renderer === 'pixi-single-canvas' && result.snapshot.coupling.waterSource === 'core/water-cycle.js', 'The renderer is not coupled to the living-planet state.');
+    assert(result.inspector && pageErrors.length === 0, `Inspector missing or browser error: ${pageErrors.join(' | ')}`);
   } finally {
-    fs.writeFileSync(path.join(artifactDir, 'page-errors.json'), JSON.stringify(pageErrors, null, 2));
-    fs.writeFileSync(path.join(artifactDir, 'request-failures.json'), JSON.stringify(failedRequests, null, 2));
     await browser.close();
   }
-
-  function assert(condition, message) {
-    if (!condition) throw new Error(message);
-  }
+  function assert(condition, message) { if (!condition) throw new Error(message); }
 })().catch(error => {
   fs.writeFileSync(path.join(artifactDir, 'fatal-error.txt'), `${error.stack || error.message}\n`);
   console.error(error);

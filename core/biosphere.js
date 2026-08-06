@@ -6,7 +6,8 @@ const ROOT_SPECIES = [
   { id: 'violet-apex', name: 'Violet Apex', guild: 'apex', color: 0xcf8dff, temp: 0.47, social: 0.22, diseaseResistance: 0.76 },
 ];
 
-export function createBiosphere(world) {
+export function createBiosphere(world, rng = Math.random) {
+  const random = typeof rng === 'function' ? rng : rng.float.bind(rng);
   const species = new Map(ROOT_SPECIES.map(s => [s.id, { ...s, parentId: null, generation: 0, population: 0 }]));
   const organismSpecies = new Map();
   const ancestry = [];
@@ -143,8 +144,8 @@ export function createBiosphere(world) {
   function diseaseCycle() {
     recount();
     const crowded = [...species.values()].filter(s => s.population >= 8);
-    if (!crowded.length || Math.random() > 0.34) return;
-    const target = crowded[Math.floor(Math.random() * crowded.length)];
+    if (!crowded.length || random() > 0.34) return;
+    const target = crowded[Math.floor(random() * crowded.length)];
     let infected = 0;
     const c = world.ecs.components;
     for (const [id, speciesId] of organismSpecies) {
@@ -152,9 +153,9 @@ export function createBiosphere(world) {
       const organism = c.agent.get(id) || c.predator.get(id) || c.apex.get(id);
       if (!organism) continue;
       const resistance = organism.diseaseResistance ?? target.diseaseResistance;
-      if (Math.random() > resistance) {
+      if (random() > resistance) {
         organism.energy = Math.max(0.05, (organism.energy ?? 1) * 0.72);
-        organism.infected = 10 + Math.random() * 15;
+        organism.infected = 10 + random() * 15;
         infected++;
       }
     }
@@ -164,8 +165,8 @@ export function createBiosphere(world) {
   function speciationCycle() {
     recount();
     const candidates = [...species.values()].filter(s => s.population >= 7 && s.generation < 5);
-    if (!candidates.length || Math.random() > 0.42) return;
-    const parent = candidates[Math.floor(Math.random() * candidates.length)];
+    if (!candidates.length || random() > 0.42) return;
+    const parent = candidates[Math.floor(random() * candidates.length)];
     const members = [...organismSpecies.entries()].filter(([, sid]) => sid === parent.id);
     if (members.length < 7) return;
 
@@ -182,10 +183,10 @@ export function createBiosphere(world) {
       id,
       name: generateSpeciesName(parent.guild, species.size),
       guild: parent.guild,
-      color: mutateColor(parent.color),
-      temp: clamp(parent.temp + (Math.random() - 0.5) * 0.18, 0.08, 0.92),
-      social: clamp(parent.social + (Math.random() - 0.5) * 0.22, 0.05, 0.95),
-      diseaseResistance: clamp(parent.diseaseResistance + (Math.random() - 0.5) * 0.16, 0.2, 0.95),
+      color: mutateColor(parent.color, random),
+      temp: clamp(parent.temp + (random() - 0.5) * 0.18, 0.08, 0.92),
+      social: clamp(parent.social + (random() - 0.5) * 0.22, 0.05, 0.95),
+      diseaseResistance: clamp(parent.diseaseResistance + (random() - 0.5) * 0.16, 0.2, 0.95),
       parentId: parent.id,
       generation: parent.generation + 1,
       population: branch.length,
@@ -264,11 +265,11 @@ function generateSpeciesName(guild, index) {
   return `${prefixes[index % prefixes.length]} ${suffixes[(index * 3) % suffixes.length]}`;
 }
 
-function mutateColor(color) {
+function mutateColor(color, random) {
   const r = (color >> 16) & 255;
   const g = (color >> 8) & 255;
   const b = color & 255;
-  const shift = () => Math.round(clamp((Math.random() - 0.5) * 70, -40, 40));
+  const shift = () => Math.round(clamp((random() - 0.5) * 70, -40, 40));
   return (clamp(r + shift(), 25, 255) << 16) | (clamp(g + shift(), 25, 255) << 8) | clamp(b + shift(), 25, 255);
 }
 

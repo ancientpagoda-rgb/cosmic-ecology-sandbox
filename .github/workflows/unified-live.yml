@@ -41,7 +41,6 @@ jobs:
         env:
           REALITY_BASE_URL: https://ancientpagoda-rgb.github.io/reality-sandbox/?verify=${{ github.event.workflow_run.head_sha }}
           REALITY_UNIFIED_ARTIFACT_DIR: artifacts/unified-live
-          REALITY_REQUIRE_REBOUND: "1"
         run: node scripts/unified-smoke.cjs
 
       - name: Upload live unified evidence
@@ -66,20 +65,12 @@ jobs:
             let failure = 'Unified runtime live verification failed';
             if (!ok) {
               const fatalPath = 'artifacts/unified-live/fatal-error.txt';
-              const scenarioPath = 'artifacts/unified-live/scenarios.json';
-              if (fs.existsSync(scenarioPath)) {
-                try {
-                  const scenarios = JSON.parse(fs.readFileSync(scenarioPath, 'utf8'));
-                  const rebound = scenarios?.rebound?.status;
-                  if (rebound?.error) failure = `REBOUND: ${rebound.error}`;
-                } catch {}
-              }
-              if (failure === 'Unified runtime live verification failed' && fs.existsSync(fatalPath)) {
+              if (fs.existsSync(fatalPath)) {
                 failure = fs.readFileSync(fatalPath, 'utf8').split(/\r?\n/).find(Boolean) || failure;
               }
             }
             const description = ok
-              ? 'Lo-fi living root and deployed REBOUND WASM verified live'
+              ? 'Procedural living planet and integrated inspector verified live'
               : failure.replace(/^Error:\s*/i, '').replace(/\s+/g, ' ').slice(0, 140);
             const baseUrl = `https://ancientpagoda-rgb.github.io/reality-sandbox/?verify=${sha}`;
             const diagnosticText = ok ? 'ok' : failure.slice(0, 90);

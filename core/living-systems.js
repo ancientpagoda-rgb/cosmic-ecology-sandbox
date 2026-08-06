@@ -1,7 +1,8 @@
 import { samplePlanet, randomHabitablePoint } from './planet.js';
 import { sampleHydrology } from './hydrology.js';
 
-export function createLivingSystems(world) {
+export function createLivingSystems(world, rng = Math.random) {
+  const random = typeof rng === 'function' ? rng : rng.float.bind(rng);
   const history = [];
   let season = 0;
   let climatePhase = 0;
@@ -49,7 +50,7 @@ export function createLivingSystems(world) {
         const terrain = sampleDynamicPlanet(pos.x, pos.y);
         const water = sampleHydrology(pos.x, pos.y, world.width, world.height);
         if (!terrain.land || terrain.biome === 'ice' || water.lake > 0.65) {
-          const safe = randomHabitablePoint(world.width, world.height, Math.random, 'land');
+          const safe = randomHabitablePoint(world.width, world.height, random, 'land');
           pos.x = safe.x;
           pos.y = safe.y;
           vel.vx *= -0.35;
@@ -96,16 +97,16 @@ export function createLivingSystems(world) {
 
       const waterProtection = clamp(water.river * 0.75 + water.lake * 0.9 + water.delta * 0.65, 0, 0.9);
       const dryFireRisk = terrain.temperature * (1 - terrain.rainfall) * 0.018 * (1 - waterProtection);
-      if (Math.random() < dryFireRisk) {
+      if (random() < dryFireRisk) {
         plant.amount *= 0.18;
         fires++;
         continue;
       }
 
       if (plants.length + births > 280) break;
-      if (Math.random() < plantSuitability(terrain, water) * 0.06) {
-        const angle = Math.random() * Math.PI * 2;
-        const distance = 6 + Math.random() * 28;
+      if (random() < plantSuitability(terrain, water) * 0.06) {
+        const angle = random() * Math.PI * 2;
+        const distance = 6 + random() * 28;
         const x = wrap(pos.x + Math.cos(angle) * distance, world.width);
         const y = Math.max(0, Math.min(world.height, pos.y + Math.sin(angle) * distance));
         const target = sampleDynamicPlanet(x, y);
@@ -124,12 +125,12 @@ export function createLivingSystems(world) {
   function hydrologyCycle() {
     const wetSeason = Math.max(0, Math.sin(season * Math.PI * 2));
     const floodChance = 0.08 + wetSeason * 0.2;
-    if (Math.random() < floodChance) {
-      const severity = 1 + Math.floor(Math.random() * 4);
+    if (random() < floodChance) {
+      const severity = 1 + Math.floor(random() * 4);
       addHistory('Seasonal flooding', `${severity} major river basin${severity === 1 ? '' : 's'} overflowed, enriching floodplains and disturbing nearby life.`);
     }
 
-    if (Math.random() < 0.06) {
+    if (random() < 0.06) {
       addHistory('Erosion cycle', 'Rivers cut deeper channels through uplifted terrain and carried sediment toward lakes and coastal deltas.');
     }
   }
@@ -140,12 +141,12 @@ export function createLivingSystems(world) {
     for (const group of groups) {
       for (const [, organism] of group.entries()) {
         const dna = organism.dna;
-        if (!dna || Math.random() > 0.22) continue;
+        if (!dna || random() > 0.22) continue;
         const stress = organism.climateStress ?? 0;
-        dna.speed = clamp(dna.speed + (Math.random() - 0.5) * (0.025 + stress * 0.04), 0.45, 2.1);
-        dna.sense = clamp(dna.sense + (Math.random() - 0.5) * 0.035, 0.35, 2.2);
-        dna.metabolism = clamp(dna.metabolism + (Math.random() - 0.5) * 0.025, 0.4, 2.2);
-        organism.preferredTemperature = clamp((organism.preferredTemperature ?? 0.55) + (Math.random() - 0.5) * 0.04, 0.05, 0.95);
+        dna.speed = clamp(dna.speed + (random() - 0.5) * (0.025 + stress * 0.04), 0.45, 2.1);
+        dna.sense = clamp(dna.sense + (random() - 0.5) * 0.035, 0.35, 2.2);
+        dna.metabolism = clamp(dna.metabolism + (random() - 0.5) * 0.025, 0.4, 2.2);
+        organism.preferredTemperature = clamp((organism.preferredTemperature ?? 0.55) + (random() - 0.5) * 0.04, 0.05, 0.95);
         mutations++;
       }
     }

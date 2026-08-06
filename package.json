@@ -1,14 +1,14 @@
 {
   "name": "reality-sandbox",
   "private": true,
-  "version": "2.3.0",
+  "version": "3.0.0",
   "type": "module",
-  "description": "A modular living planetary and universe simulation sandbox.",
+  "description": "A deterministic procedural living-planet simulation.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "audit:integration": "node scripts/integration-audit.cjs && node scripts/root-renderer-audit.cjs && node scripts/headless-route-contract.cjs",
+    "audit:integration": "node scripts/integration-audit.cjs && node scripts/root-renderer-audit.cjs",
     "check": "npm run audit:integration && npm run build",
     "lint": "eslint \"core/reality-v6*/**/*.js\"",
     "lint:all": "eslint ."

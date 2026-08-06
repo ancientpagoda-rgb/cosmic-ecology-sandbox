@@ -1,93 +1,283 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --panel: rgba(6, 16, 14, 0.88);
+  --panel-strong: rgba(5, 13, 12, 0.95);
+  --line: rgba(168, 215, 189, 0.2);
+  --text: #e5f2e9;
+  --muted: #98afa1;
+  --accent: #a8d998;
+  --water: #79b8d1;
+  --danger: #e59278;
+}
+
+* { box-sizing: border-box; }
+
 html,
 body {
+  width: 100%;
+  height: 100%;
   margin: 0;
   overflow: hidden;
-  background: #010308;
+  background: #030806;
+  color: var(--text);
+  overscroll-behavior: none;
+}
+
+button,
+select { font: inherit; }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 #world {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background: #010308;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(29, 62, 48, 0.28), transparent 34%),
+    radial-gradient(circle at 50% 50%, #0b1713 0%, #050a08 58%, #020504 100%);
 }
 
 #lofiLivingCanvas {
-  position: fixed !important;
-  inset: auto !important;
-  left: 50% !important;
-  top: 50% !important;
-  right: auto !important;
-  bottom: auto !important;
-  z-index: 60;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   display: block;
-  width: min(200vw, 177.7778vh) !important;
-  height: min(112.5vw, 100vh) !important;
-  width: min(200vw, 177.7778dvh) !important;
-  height: min(112.5vw, 100dvh) !important;
-  aspect-ratio: 16 / 9 !important;
-  max-width: none !important;
-  max-height: none !important;
-  transform: translate(-50%, -50%) !important;
-  transform-origin: center;
+  width: 100%;
+  height: 100%;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   pointer-events: auto;
   touch-action: none;
   user-select: none;
   cursor: grab;
-  background: #010308;
 }
 
-#lofiLivingCanvas.hifi-living-canvas {
-  filter: saturate(1.08) contrast(1.04);
+#lofiLivingCanvas[data-dragging="true"] { cursor: grabbing; }
+
+.planet-shell {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
 }
 
-#lofiLivingCanvas[data-dragging="true"] {
-  cursor: grabbing;
+.planet-masthead,
+.planet-dashboard,
+.planet-inspector,
+.planet-legend {
+  position: absolute;
+  border: 1px solid var(--line);
+  background: linear-gradient(145deg, var(--panel-strong), var(--panel));
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.34);
 }
 
-#lofiLivingCanvasBacking {
-  position: fixed !important;
-  left: -10000px !important;
-  top: -10000px !important;
-  width: 1px !important;
-  height: 1px !important;
-  opacity: 0 !important;
-  pointer-events: auto !important;
-  touch-action: none !important;
-  image-rendering: pixelated !important;
+.planet-masthead {
+  top: max(14px, env(safe-area-inset-top));
+  left: max(14px, env(safe-area-inset-left));
+  width: min(430px, calc(100vw - 28px));
+  padding: 12px 14px;
+  border-radius: 14px;
 }
 
-body.lofi-living-root #world > :not(#lofiLivingCanvas):not(#lofiLivingCanvasBacking):not(#errorState) {
-  opacity: 0 !important;
-  pointer-events: none !important;
+.planet-eyebrow {
+  margin: 0 0 3px;
+  color: var(--accent);
+  font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
-body.lofi-living-root > :not(#world):not(script):not(#errorState) {
-  display: none !important;
+.planet-title {
+  margin: 0;
+  font-size: clamp(20px, 3vw, 30px);
+  font-weight: 620;
+  letter-spacing: -0.025em;
 }
 
-body.lofi-living-root button,
-body.lofi-living-root select,
-body.lofi-living-root input,
-body.lofi-living-root output,
-body.lofi-living-root [role="status"],
-body.lofi-living-root [class*="panel" i],
-body.lofi-living-root [id*="panel" i] {
-  display: none !important;
+.planet-subtitle {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
-#unifiedRuntimePanel,
-.unified-runtime-grid,
-select[data-unified-view],
-[data-unified-sound],
-[data-unified-volume],
-[data-unified-pixel],
-[data-unified-palette],
-[data-unified-backend],
-[data-unified-astronomy] {
-  display: none !important;
+.planet-dashboard {
+  top: max(14px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  width: min(410px, calc(100vw - 28px));
+  padding: 11px;
+  border-radius: 14px;
+  pointer-events: auto;
+}
+
+.planet-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.planet-stat {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(184, 222, 198, 0.12);
+  border-radius: 10px;
+  background: rgba(164, 211, 180, 0.055);
+}
+
+.planet-stat dt {
+  overflow: hidden;
+  margin: 0;
+  color: var(--muted);
+  font: 700 8px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.planet-stat dd {
+  margin: 4px 0 0;
+  font: 650 15px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.planet-controls {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.planet-controls button,
+.planet-controls select,
+.planet-help summary {
+  min-height: 32px;
+  border: 1px solid rgba(179, 222, 197, 0.26);
+  border-radius: 9px;
+  background: rgba(139, 188, 156, 0.1);
+  color: var(--text);
+}
+
+.planet-controls button,
+.planet-controls select {
+  padding: 6px 9px;
+  cursor: pointer;
+}
+
+.planet-controls button:hover,
+.planet-controls select:hover,
+.planet-help summary:hover { background: rgba(139, 188, 156, 0.18); }
+
+.planet-controls button:focus-visible,
+.planet-controls select:focus-visible,
+.planet-help summary:focus-visible,
+.planet-stat:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.planet-clock {
+  margin-left: auto;
+  color: var(--muted);
+  font: 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.planet-help { margin-top: 8px; }
+.planet-help summary {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 8px;
+  cursor: pointer;
+  font-size: 10px;
+  list-style: none;
+}
+.planet-help summary::-webkit-details-marker { display: none; }
+.planet-help p {
+  margin: 8px 2px 1px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.planet-inspector {
+  left: max(14px, env(safe-area-inset-left));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  width: min(410px, calc(100vw - 28px));
+  padding: 12px 14px;
+  border-radius: 14px;
+  pointer-events: auto;
+}
+
+.planet-inspector h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.planet-inspector__hint,
+.planet-inspector__coords {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.planet-inspector__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 10px;
+  margin-top: 9px;
+}
+
+.planet-reading span {
+  display: block;
+  color: var(--muted);
+  font: 700 8px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.planet-reading b {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.planet-legend {
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px 11px;
+  width: min(430px, calc(100vw - 28px));
+  padding: 9px 11px;
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.planet-legend span { white-space: nowrap; }
+.planet-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  border-radius: 2px;
+  vertical-align: -1px;
 }
 
 #errorState {
@@ -98,11 +288,57 @@ select[data-unified-view],
   place-items: center;
   padding: 24px;
   background: #101820;
-  color: #e5d6a8;
+  color: #ffd0d0;
   font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   text-align: center;
 }
 
-#errorState[hidden] {
-  display: none;
+#errorState[hidden] { display: none; }
+
+@media (max-width: 800px) {
+  .planet-masthead { width: min(330px, calc(100vw - 28px)); }
+  .planet-subtitle { font-size: 10px; }
+  .planet-dashboard {
+    top: auto;
+    right: max(10px, env(safe-area-inset-right));
+    bottom: max(10px, env(safe-area-inset-bottom));
+    left: max(10px, env(safe-area-inset-left));
+    width: auto;
+  }
+  .planet-stats { grid-template-columns: repeat(4, 1fr); }
+  .planet-stat { padding: 6px; }
+  .planet-stat dd { font-size: 12px; }
+  .planet-inspector {
+    top: max(112px, calc(env(safe-area-inset-top) + 104px));
+    bottom: auto;
+    left: max(10px, env(safe-area-inset-left));
+    width: min(310px, calc(100vw - 20px));
+    padding: 9px 10px;
+  }
+  .planet-inspector__grid { grid-template-columns: repeat(3, 1fr); }
+  .planet-legend { display: none; }
+}
+
+@media (max-width: 480px) {
+  .planet-masthead {
+    top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    width: calc(100vw - 16px);
+    padding: 9px 10px;
+  }
+  .planet-title { font-size: 18px; }
+  .planet-masthead .planet-subtitle { display: none; }
+  .planet-inspector {
+    top: max(94px, calc(env(safe-area-inset-top) + 88px));
+    width: calc(100vw - 20px);
+  }
+  .planet-inspector__grid { grid-template-columns: repeat(3, 1fr); }
+  .planet-inspector__hint { display: none; }
+  .planet-controls { gap: 5px; }
+  .planet-clock { font-size: 9px; }
+  .planet-help { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { scroll-behavior: auto !important; transition: none !important; }
 }
