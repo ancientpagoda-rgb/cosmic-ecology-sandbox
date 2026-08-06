@@ -1,4 +1,4 @@
-name: Deploy Vite site to Pages
+name: Deploy Nysa living planet to Pages
 
 on:
   push:
@@ -22,139 +22,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Mark V6.9 verification pending
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          jq -n --arg state pending --arg target_url "https://ancientpagoda-rgb.github.io/reality-sandbox/reality-engine-v6-9.html?verify=${GITHUB_SHA}" --arg description "Building and deploying V6.9" --arg context "pages/v6.9-live" '{state:$state,target_url:$target_url,description:$description,context:$context}' > /tmp/status.json
-          curl --fail --silent --show-error --location --request POST --header "Authorization: Bearer ${GH_TOKEN}" --header "Accept: application/vnd.github+json" --header "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" --data-binary @/tmp/status.json
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Report dependencies ready
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-dependencies', description: 'npm dependencies installed', target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions`});
+      - name: Audit and build Nysa
+        run: npm run check
 
-      - name: Cache Emscripten SDK
-        uses: actions/cache@v4
-        with:
-          path: .cache/emsdk
-          key: emsdk-${{ runner.os }}-latest-v1
-
-      - name: Report Emscripten cache ready
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-emsdk-cache', description: 'Emscripten cache step completed'});
-
-      - name: Prepare Emscripten SDK repository
+      - name: Verify public artifact identity
         run: |
-          if [ ! -f .cache/emsdk/emsdk ]; then
-            rm -rf .cache/emsdk
-            git clone --depth 1 https://github.com/emscripten-core/emsdk.git .cache/emsdk
-          else
-            git -C .cache/emsdk fetch --depth 1 origin main
-            git -C .cache/emsdk reset --hard origin/main
-          fi
-
-      - name: Report Emscripten repository ready
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-emsdk-repo', description: 'Emscripten SDK repository prepared'});
-
-      - name: Install Emscripten SDK
-        run: |
-          .cache/emsdk/emsdk install latest
-          .cache/emsdk/emsdk activate latest
-          test -f .cache/emsdk/emsdk_env.sh
-
-      - name: Report Emscripten ready
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-emsdk', description: 'Emscripten SDK installed'});
-
-      - name: Prepare REBOUND 5.0.0 source
-        run: |
-          if [ ! -d .cache/rebound-5.0.0/.git ]; then
-            rm -rf .cache/rebound-5.0.0
-            git clone --depth 1 --branch 5.0.0 https://github.com/hannorein/rebound.git .cache/rebound-5.0.0
-          fi
-
-      - name: Report REBOUND source ready
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-rebound-source', description: 'REBOUND 5.0.0 source prepared'});
-
-      - name: Build same-origin REBOUND WebAssembly
-        id: rebound_build
-        run: |
-          set +e
-          source .cache/emsdk/emsdk_env.sh
-          bash scripts/build-rebound-wasm.sh 2>&1 | tee /tmp/rebound-build.log
-          BUILD_EXIT=${PIPESTATUS[0]}
-          set -e
-          exit "$BUILD_EXIT"
-
-      - name: Report REBOUND compiler error
-        if: failure() && steps.rebound_build.outcome == 'failure'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const log = fs.existsSync('/tmp/rebound-build.log') ? fs.readFileSync('/tmp/rebound-build.log', 'utf8') : 'compiler log missing';
-            const lines = log.split(/\r?\n/).filter(Boolean);
-            const raw = lines.find((line) => /(?:fatal )?error:|undefined symbol|wasm-ld:/i.test(line)) || lines.slice(-1)[0] || 'unknown compiler error';
-            const slug = raw.replace(/^.*?error:\s*/i, '').replace(/[^A-Za-z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 62) || 'unknown';
-            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'failure', context: `pages/v6.9-error/${slug}`, description: raw.slice(0, 140), target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions`});
-
-      - name: Report REBOUND ready
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-rebound', description: 'REBOUND WebAssembly compiled'});
-
-      - name: Build
-        run: npm run build
-
-      - name: Report Vite build ready
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-build', description: 'Vite production build completed'});
-
-      - name: Smoke test V6.9 artifact
-        run: |
-          test -f dist/reality-engine-v6-8.html
-          test -f dist/reality-engine-v6-9.html
-          test -f dist/rebound-v6-6/rebound.js
-          test -f dist/rebound-v6-6/rebound.wasm
-          grep -q "HOWLER.JS SOUNDSCAPE" dist/reality-engine-v6-9.html
-          grep -R -q "reality-v6-9-audio-volume" dist/assets
-          grep -R -q "Synthesizing deterministic sound loops" dist/assets
-          grep -R -q "PixiJS pixel weather" dist/assets
-          grep -R -q "automatic astronomical scaling" dist/assets
-          grep -R -q "Cinematic" dist/assets
-          grep -R -q "Show controls" dist/assets
-          grep -R -q "maxStormSystems" dist/assets
-          grep -q '"HEAPF64"' dist/rebound-v6-6/rebound.js
-          test -s dist/rebound-v6-6/rebound.wasm
-
-      - name: Report artifact ready
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'success', context: 'pages/v6.9-artifact', description: 'V6.9 artifact smoke tests passed'});
+          test -f dist/index.html
+          grep -q "Reality Sandbox · Procedural Living Planet" dist/index.html
+          grep -q "Nysa, a fictional procedural living planet" dist/index.html
+          grep -R -q "procedural-living-planet" dist/assets
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -178,70 +63,67 @@ jobs:
         uses: actions/deploy-pages@v4
 
   verify-live:
-    name: Verify live V6.9
+    name: Verify live Nysa root
     runs-on: ubuntu-latest
     needs: deploy
     steps:
-      - name: Check deployed V6.9 and REBOUND assets
+      - name: Check deployed Nysa identity
         id: livecheck
         env:
           PAGE_URL: ${{ needs.deploy.outputs.page_url }}
         run: |
           set -euo pipefail
           test -n "${PAGE_URL}"
-          BASE_URL="${PAGE_URL%/}/"
+          ROOT_URL="${PAGE_URL%/}/?verify=${GITHUB_SHA}"
 
-          fetch_live() {
-            local relative_path="$1"
-            local output_path="$2"
-            local url="${BASE_URL}${relative_path}?verify=${GITHUB_SHA}"
-            rm -f "${output_path}"
+          for attempt in $(seq 1 24); do
+            if curl --fail --silent --show-error --location \
+              --header 'Cache-Control: no-cache' \
+              --header 'Pragma: no-cache' \
+              "${ROOT_URL}" --output /tmp/nysa-index.html \
+              && grep -q "Reality Sandbox · Procedural Living Planet" /tmp/nysa-index.html \
+              && grep -q "Nysa, a fictional procedural living planet" /tmp/nysa-index.html; then
+              exit 0
+            fi
+            sleep 10
+          done
 
-            for attempt in $(seq 1 18); do
-              echo "Live verification attempt ${attempt}/18: ${url}"
-              if curl --fail --silent --show-error --location --connect-timeout 15 --max-time 45 \
-                --header 'Cache-Control: no-cache' \
-                --header 'Pragma: no-cache' \
-                "${url}" --output "${output_path}"; then
-                if test -s "${output_path}"; then
-                  echo "Fetched ${relative_path} ($(wc -c < "${output_path}") bytes)"
-                  return 0
-                fi
-              fi
-              rm -f "${output_path}"
-              sleep 10
-            done
+          echo "Nysa root did not propagate within the verification window" >&2
+          exit 1
 
-            echo "Failed to fetch ${relative_path} after Pages propagation window" >&2
-            curl --silent --show-error --location --head "${url}" || true
-            return 1
-          }
-
-          fetch_live "reality-engine-v6-9.html" /tmp/reality-engine-v6-9.html
-          grep -q "HOWLER.JS SOUNDSCAPE" /tmp/reality-engine-v6-9.html
-          fetch_live "rebound-v6-6/rebound.js" /tmp/rebound.js
-          fetch_live "rebound-v6-6/rebound.wasm" /tmp/rebound.wasm
-          test -s /tmp/rebound.js
-          test -s /tmp/rebound.wasm
-
-      - name: Publish live verification status
+      - name: Publish Nysa live status
         if: always()
         uses: actions/github-script@v7
         with:
           script: |
             const ok = '${{ steps.livecheck.outcome }}' === 'success';
             const base = '${{ needs.deploy.outputs.page_url }}'.replace(/\/$/, '');
-            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: ok ? 'success' : 'failure', context: 'pages/v6.9-live', description: ok ? 'V6.9 HTML and REBOUND assets verified live' : 'V6.9 live verification failed', target_url: `${base}/reality-engine-v6-9.html?verify=${context.sha}`});
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: ok ? 'success' : 'failure',
+              context: 'pages/nysa-live',
+              description: ok ? 'Nysa procedural living planet verified live' : 'Nysa root live verification failed',
+              target_url: `${base}/?verify=${context.sha}`,
+            });
 
   report-failure:
-    name: Report V6.9 deployment failure
+    name: Report Nysa deployment failure
     runs-on: ubuntu-latest
     needs: [build, deploy, verify-live]
     if: always() && needs.verify-live.result != 'success'
     steps:
-      - name: Publish failure status
+      - name: Publish deployment failure
         uses: actions/github-script@v7
         with:
           script: |
-            const description = `V6.9 failed: build ${{ needs.build.result }}, deploy ${{ needs.deploy.result }}, verify ${{ needs.verify-live.result }}`;
-            await github.rest.repos.createCommitStatus({owner: context.repo.owner, repo: context.repo.repo, sha: context.sha, state: 'failure', context: 'pages/v6.9-live', description, target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions`});
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: 'failure',
+              context: 'pages/nysa-live',
+              description: `Nysa failed: build ${{ needs.build.result }}, deploy ${{ needs.deploy.result }}, verify ${{ needs.verify-live.result }}`,
+              target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions`,
+            });
