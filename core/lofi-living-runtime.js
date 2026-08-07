@@ -4,6 +4,11 @@ import { biomeColor } from './planet.js';
 const MIN_ZOOM = 0.7;
 const MAX_ZOOM = 12;
 const UI_INTERVAL_MS = 300;
+const LOGICAL_SIZE_PX = 420;
+const REDRAW_INTERVAL_MS = 1000 / 7;
+const TERRAIN_TILE_PX = 10;
+const MAX_DRAWN_ORGANISMS = 420;
+const MAX_DRAWN_WEATHER = 13;
 const PALETTE = {
   background: 0x030806,
   atmosphere: 0x8bb8a8,
@@ -23,7 +28,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   const seed = options.seed ?? 734221;
   const planetName = options.planetName || world.planetName || 'Procedural Planet';
   const controls = options.controls || {};
-  const logicalSize = chooseLogicalSize(mobile);
+  const logicalSize = chooseLogicalSize();
 
   let masterSteps = 0;
   let unifiedSeconds = 0;
@@ -365,7 +370,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   function render(frame = {}) {
     if (!app || !graphics || destroyed) return;
     const timestamp = frame.timestamp ?? performance.now();
-    const minimumInterval = mobile ? 125 : 80;
+    const minimumInterval = REDRAW_INTERVAL_MS;
     if (timestamp - lastRender >= minimumInterval) {
       lastRender = timestamp;
       drawLivingWorld();
@@ -416,7 +421,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   function drawLivingWorld() {
     const width = app.renderer.width;
     const height = app.renderer.height;
-    const tile = mobile ? 3 : 3;
+    const tile = TERRAIN_TILE_PX;
     const { cx, cy, radius } = getSphereFrame(width, height);
     graphics.clear();
     graphics.rect(0, 0, width, height).fill(PALETTE.background);
@@ -444,7 +449,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
 
     const weather = dynamics.getWeather?.() || [];
     lastDrawnWeather = 0;
-    for (const cell of weather.slice(0, mobile ? 12 : 24)) {
+    for (const cell of weather.slice(0, MAX_DRAWN_WEATHER)) {
       const point = worldToSphereScreen(cell.x / world.width, cell.y / world.height, width, height);
       if (!point.visible) continue;
       const cloudRadius = Math.max(2, Math.round((cell.radius || 10) / world.width * radius * 2.4));
@@ -463,7 +468,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
 
     lastDrawnEntities = 0;
     const components = world.ecs.components;
-    const maximum = mobile ? 150 : 320;
+    const maximum = MAX_DRAWN_ORGANISMS;
     for (const [id, position] of components.position.entries()) {
       if (lastDrawnEntities >= maximum) break;
       let color = null;
@@ -642,6 +647,10 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         spherical: true,
         logicalWidth: logicalSize.width,
         logicalHeight: logicalSize.height,
+        redrawFps: 7,
+        terrainTilePx: TERRAIN_TILE_PX,
+        maxDrawnOrganisms: MAX_DRAWN_ORGANISMS,
+        maxDrawnWeather: MAX_DRAWN_WEATHER,
         drawnEntities: lastDrawnEntities,
         drawnWeather: lastDrawnWeather,
         tickerStarted: Boolean(app?.ticker?.started),
@@ -745,13 +754,13 @@ function readingMarkup(key, label) {
   return `<div class="planet-reading"><span>${escapeHtml(label)}</span><b data-reading="${key}">—</b></div>`;
 }
 
-function chooseLogicalSize(mobile) {
+function chooseLogicalSize() {
   const aspect = clamp(innerWidth / Math.max(1, innerHeight), 0.45, 2.4);
   if (aspect < 1) {
-    const height = mobile ? 384 : 480;
+    const height = LOGICAL_SIZE_PX;
     return { width: Math.max(176, Math.round(height * aspect)), height };
   }
-  const width = mobile ? 384 : 480;
+  const width = LOGICAL_SIZE_PX;
   return { width, height: Math.max(200, Math.round(width / aspect)) };
 }
 
