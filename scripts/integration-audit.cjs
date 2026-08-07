@@ -29,25 +29,29 @@ function requireMissing(file, label) {
   else passes.push(`${file}: ${label}`);
 }
 
+const rootEntry = 'app-seeded.js';
+
 requireText('index.html', 'Procedural Living Planet', 'honest fictional-planet title');
 requireText('index.html', 'fictional procedural living planet', 'fictional-world accessibility label');
-requireText('index.html', 'src="./app.js?', 'project-relative root entry point');
+requireText('index.html', 'src="./app-seeded.js?', 'seeded project-relative root entry point');
 forbidText('index.html', 'scientific-earth-presentation', 'retired Earth renderer');
 forbidText('index.html', 'lilac-cloud-overlay', 'retired cloud sidecar');
 forbidText('index.html', 'rain-runoff-overlay', 'retired rain sidecar');
 forbidText('index.html', 'iphone-performance-mode', 'retired mobile sidecar');
 
 for (const marker of [
-  "createOrbitalSystem",
-  "createWaterCycle",
-  "createLivingSystems",
-  "createBiosphere",
-  "createPlanetDynamics",
-  "createLofiLivingRuntime",
-  "planet.water-cycle",
-  "planet.living-ecology",
-  "planet.climate-terrain-feedbacks",
-]) requireText('app.js', marker, `root chain ${marker}`);
+  'createOrbitalSystem',
+  'configurePlanetGeneration',
+  'createWaterCycle',
+  'createLivingSystems',
+  'createBiosphere',
+  'createPlanetDynamics',
+  'createLofiLivingRuntime',
+  'planet.geodynamics',
+  'planet.water-cycle',
+  'planet.living-ecology',
+  'planet.climate-terrain-feedbacks',
+]) requireText(rootEntry, marker, `root chain ${marker}`);
 requireText(
   'core/lofi-living-runtime.js',
   "id: 'runtime.procedural-living-planet'",
@@ -64,7 +68,13 @@ for (const marker of [
   'createHeadlessCivilizationEngine',
   'installUnifiedDebugExtension',
   'createDebugBridge',
-]) forbidText('app.js', marker, `frozen root import ${marker}`);
+]) forbidText(rootEntry, marker, `frozen root import ${marker}`);
+
+requireText('core/plate-tectonics.js', 'createGeodynamicModel', 'seeded planetary interior and convection model');
+requireText('core/plate-tectonics.js', 'stepTectonics', 'evolving tectonic plates');
+requireText('core/plate-tectonics.js', "boundaryType = 'ridge'", 'divergent ridge classification');
+requireText('core/plate-tectonics.js', "boundaryType = 'trench'", 'convergent trench classification');
+requireText('core/plate-tectonics.js', "boundaryType = 'transform'", 'transform-fault classification');
 
 requireText('core/lofi-living-runtime.js', "from 'pixi.js'", 'single PixiJS root renderer');
 requireText('core/lofi-living-runtime.js', 'living.sampleDynamicPlanet', 'renderer uses simulated terrain and climate');
