@@ -47,7 +47,7 @@ for (const marker of [
   'createBiosphere',
   'createPlanetDynamics',
   'createLofiLivingRuntime',
-  'planet.geodynamics',
+  'planet.interior-tectonics',
   'planet.water-cycle',
   'planet.living-ecology',
   'planet.climate-terrain-feedbacks',
