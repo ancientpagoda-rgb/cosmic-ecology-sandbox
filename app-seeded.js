@@ -4,7 +4,14 @@ import { createSphericalStepper } from './core/sphere.js';
 import { createModuleHost } from './core/module-host.js';
 import { createOrbitalSystem } from './core/orbital-system.js';
 import { createLofiLivingRuntime } from './core/lofi-living-runtime.js';
-import { placeExistingEntitiesOnBiomes } from './core/planet.js';
+import {
+  configurePlanetGeneration,
+  getPlanetGenerationState,
+  loadPlanetGeology,
+  placeExistingEntitiesOnBiomes,
+  savePlanetGeology,
+  stepPlanetGeology,
+} from './core/planet.js';
 import { createLivingSystems } from './core/living-systems.js';
 import { createPlanetDynamics } from './core/planet-dynamics.js';
 import { createBiosphere } from './core/biosphere.js';
@@ -117,6 +124,23 @@ function createRootModules() {
     },
   };
 
+  const geodynamicsModule = {
+    id: 'planet.interior-tectonics',
+    name: 'Interior, Mantle Convection, and Evolving Plates',
+    version: '2.0.0',
+    execution: 'browser-reduced-order-geodynamics',
+    provides: ['planet.interior', 'planet.tectonics'],
+    requires: [],
+    initialize({ provideCapability }) {
+      const generation = getPlanetGenerationState();
+      provideCapability('planet.interior', generation.tectonics.interior);
+      provideCapability('planet.tectonics', generation.tectonics);
+    },
+    step(dt) { stepPlanetGeology(dt); },
+    save: savePlanetGeology,
+    load: loadPlanetGeology,
+  };
+
   const waterModule = {
     id: 'planet.water-cycle',
     name: 'Coupled Water Cycle',
@@ -154,7 +178,7 @@ function createRootModules() {
     version: '1.0.0',
     execution: 'browser',
     provides: ['planet.weather', 'planet.inspection'],
-    requires: ['hydrology.surface', 'vegetation.dynamic'],
+    requires: ['hydrology.surface', 'vegetation.dynamic', 'planet.tectonics'],
     initialize({ provideCapability }) {
       provideCapability('planet.weather', dynamics);
       provideCapability('planet.inspection', dynamics);
@@ -162,7 +186,7 @@ function createRootModules() {
     step(dt) { dynamics.step(dt); },
   };
 
-  return [orbitModule, waterModule, ecologyModule, dynamicsModule, livingPlanetRuntime];
+  return [orbitModule, geodynamicsModule, waterModule, ecologyModule, dynamicsModule, livingPlanetRuntime];
 }
 
 function installDebugApi() {
@@ -183,6 +207,7 @@ function installDebugApi() {
       livingPlanetRuntime.updateInterface(true);
       return api.snapshot();
     },
+    tectonics: () => getPlanetGenerationState().tectonics,
     snapshot() {
       return {
         planet: PLANET_NAME,
@@ -192,6 +217,7 @@ function installDebugApi() {
         tick: world.tick,
         paused,
         timeScale,
+        geodynamics: getPlanetGenerationState().tectonics,
         runtime: livingPlanetRuntime.getSnapshot(),
       };
     },
@@ -199,9 +225,12 @@ function installDebugApi() {
       const runtime = livingPlanetRuntime.runInvariants();
       const rootIds = moduleHost.getStatus().map(module => module.id);
       const forbidden = rootIds.filter(id => /phase(?:8|9|10|11)|civilization|galaxy|cosmology|relativ/i.test(id));
+      const tectonics = getPlanetGenerationState().tectonics;
       const failures = [...runtime.failures];
       if (forbidden.length) failures.push(`Frozen universe modules loaded: ${forbidden.join(', ')}`);
-      return { ok: failures.length === 0, failures, modules: rootIds };
+      if (!Number.isFinite(tectonics.interior.rayleighNumber)) failures.push('The geodynamic Rayleigh number is invalid.');
+      if (!tectonics.plateCount) failures.push('The geodynamic model generated no lithospheric provinces.');
+      return { ok: failures.length === 0, failures, modules: rootIds, tectonics };
     },
     seedScenario: kind => livingPlanetRuntime.debugScenario(kind),
   };
@@ -228,9 +257,6 @@ async function init() {
     if (Number.isFinite(saved.timeScale)) timeScale = Math.max(0.25, Math.min(20, saved.timeScale));
     paused = Boolean(saved.paused);
 
-    placeExistingEntitiesOnBiomes(world, rng);
-    stepSphere = createSphericalStepper(world);
-
     orbitalSystem = createOrbitalSystem(world, {
       seed: NUMERIC_SEED,
       star: {
@@ -247,6 +273,32 @@ async function init() {
     });
     orbitalSystem.setFormationProgress(1);
 
+    const home = orbitalSystem.getHomePlanet();
+    const star = orbitalSystem.getStar();
+    const disk = orbitalSystem.getDisk();
+    const formation = orbitalSystem.getFormationState();
+    const moon = formation.moon;
+    const generation = configurePlanetGeneration({
+      seed: NUMERIC_SEED,
+      worldSeed: PLANET_SEED,
+      massEarth: home.massEarth,
+      radiusEarth: home.radiusEarth,
+      ageGyr: star.age,
+      composition: home.composition,
+      waterFraction: home.waterFraction,
+      radioactiveAbundance: disk.metalFactor,
+      metallicity: star.metallicity,
+      equilibriumTemperature: home.equilibriumTemperature,
+      atmosphereRetention: home.atmosphereRetention,
+      moonMassEarth: moon.massEarth,
+      moonPeriodDays: moon.periodDays,
+      moonOrbitRadius: moon.orbitRadius,
+      impactEnergy: moon.impactEnergy,
+    });
+    world.geodynamicProfile = generation.tectonics;
+
+    placeExistingEntitiesOnBiomes(world, rng);
+    stepSphere = createSphericalStepper(world);
     living = createLivingSystems(world, rng);
     waterCycle = createWaterCycle(world, orbitalSystem);
     biosphere = createBiosphere(world, rng);
@@ -272,6 +324,7 @@ async function init() {
     await moduleHost.initialize();
     await moduleHost.load(saved.modules || {});
     moduleHost.list = moduleHost.getStatus;
+    world.geodynamicProfile = getPlanetGenerationState().tectonics;
 
     window.realitySandboxSeed = {
       seed: PLANET_SEED,
@@ -281,7 +334,15 @@ async function init() {
     };
     window.dispatchEvent(new CustomEvent('reality-sandbox-seed-ready', { detail: window.realitySandboxSeed }));
     window.realitySandboxModules = moduleHost;
-    window.realitySandboxPlanet = { world, orbitalSystem, living, waterCycle, biosphere, dynamics };
+    window.realitySandboxPlanet = {
+      world,
+      orbitalSystem,
+      living,
+      waterCycle,
+      biosphere,
+      dynamics,
+      geodynamics: getPlanetGenerationState,
+    };
     window.realitySandboxUnified = livingPlanetRuntime;
     installDebugApi();
 
