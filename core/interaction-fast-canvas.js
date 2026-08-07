@@ -1,8 +1,7 @@
 import { biomeColor } from './planet.js';
 
 const TAU = Math.PI * 2;
-const DESKTOP_TILE = 8;
-const TOUCH_TILE = 10;
+const TILE_SIZE = 10;
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -60,7 +59,7 @@ async function installFastInteractionCanvas() {
   sourceCanvas.parentElement?.insertBefore(fastCanvas, sourceCanvas.nextSibling);
 
   const coarsePointer = matchMedia('(pointer: coarse)').matches;
-  const tile = coarsePointer ? TOUCH_TILE : DESKTOP_TILE;
+  const tile = TILE_SIZE;
   let active = false;
   let resumeSimulation = false;
 
