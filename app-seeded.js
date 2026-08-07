@@ -3,7 +3,7 @@ import { createWorld } from './core/world.js';
 import { createSphericalStepper } from './core/sphere.js';
 import { createModuleHost } from './core/module-host.js';
 import { createOrbitalSystem } from './core/orbital-system.js';
-import { createLofiLivingRuntime } from './core/lofi-living-runtime.js';
+import { createLofiLivingRuntime } from './core/lofi-living-runtime.js?v=20260807-unified-performance-v1';
 import {
   configurePlanetGeneration,
   getPlanetGenerationState,
@@ -18,6 +18,7 @@ import { createBiosphere } from './core/biosphere.js';
 import { createWaterCycle } from './core/water-cycle.js';
 
 const FIXED_DT = 0.06;
+const MAX_STEPS_PER_FRAME = 3;
 const STORAGE_PREFIX = 'reality-sandbox-living-planet-v2';
 const PLANET_NAME = 'Nysa';
 const DEFAULT_PLANET_SEED = 'nysa-living-planet-734221';
@@ -97,7 +98,7 @@ function loop(timestamp) {
   lastTime = timestamp;
 
   let steps = 0;
-  const maxSteps = matchMedia('(pointer: coarse)').matches ? 3 : 6;
+  const maxSteps = MAX_STEPS_PER_FRAME;
   while (!paused && accumulator >= FIXED_DT && steps < maxSteps) {
     stepSimulation();
     accumulator -= FIXED_DT;
