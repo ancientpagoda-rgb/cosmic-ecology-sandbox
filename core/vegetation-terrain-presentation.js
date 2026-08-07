@@ -114,10 +114,12 @@ async function installVegetationTerrainPresentation() {
   function visualTerrain(x, y, source = originalSampleDynamicPlanet) {
     const terrain = source(x, y);
     if (!terrain?.land) return terrain;
-    const vegetation = sampleBiomass(x, y);
-    const biome = chooseVisualBiome(terrain, vegetation);
-    if (biome === terrain.biome) return { ...terrain, visualVegetation: vegetation };
-    return { ...terrain, biome, visualVegetation: vegetation };
+
+    // Keep biomass available to diagnostics/presentation APIs, but do not
+    // convert individual terrain samples into grass/forest/rainforest tiles.
+    // The procedural biome itself is the vegetation visualization; localized
+    // plant entities must never reappear as green spots or squares.
+    return { ...terrain, visualVegetation: sampleBiomass(x, y) };
   }
 
   function patchInteractionCache() {
@@ -134,14 +136,14 @@ async function installVegetationTerrainPresentation() {
     const plantTerm = plantStat?.querySelector('dt');
     if (plantTerm) plantTerm.textContent = 'Vegetation patches';
     if (plantStat) {
-      const definition = 'Simulated vegetation patches. Their biomass is shown through terrain and biome shading rather than individual plant markers.';
+      const definition = 'Simulated vegetation patches. Their biomass remains part of the ecology while the base grassland and forest biomes provide the vegetation visualization.';
       plantStat.title = definition;
       plantStat.setAttribute('aria-label', `Vegetation patches. ${definition}`);
     }
 
     const legend = document.querySelector('.planet-legend');
     const plantLegend = [...(legend?.querySelectorAll('span') || [])].find(node => node.textContent.trim().toLowerCase() === 'plants');
-    if (plantLegend) plantLegend.innerHTML = '<i style="background:#6b9a4f"></i>vegetation in terrain';
+    if (plantLegend) plantLegend.innerHTML = '<i style="background:#6b9a4f"></i>vegetation biomes';
   }
 
   runtime.render = frame => {
@@ -187,7 +189,7 @@ async function installVegetationTerrainPresentation() {
   patchInteractionCache();
   updateLabels();
   runtime.__vegetationTerrainPresentationInstalled = true;
-  document.documentElement.dataset.vegetationPresentation = 'terrain';
+  document.documentElement.dataset.vegetationPresentation = 'terrain-biomes-only';
   window.realitySandboxVegetationPresentation = {
     sampleBiomass,
     rebuild: () => rebuildField(performance.now(), true),
