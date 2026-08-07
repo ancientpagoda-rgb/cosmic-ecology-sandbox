@@ -1,6 +1,51 @@
-import { sampleTectonics } from './plate-tectonics.js';
+import {
+  configureTectonics,
+  getTectonicState,
+  loadTectonics,
+  sampleTectonics,
+  saveTectonics,
+  stepTectonics,
+} from './plate-tectonics.js';
 
 export const PLANET_SEED = 734221;
+let activeTerrainSeed = PLANET_SEED;
+let activeWorldSeed = String(PLANET_SEED);
+
+export function configurePlanetGeneration(options = {}) {
+  activeTerrainSeed = normalizeSeed(options.seed ?? PLANET_SEED);
+  activeWorldSeed = String(options.worldSeed ?? options.seed ?? PLANET_SEED);
+  const tectonics = configureTectonics({ ...options, seed: activeTerrainSeed });
+  return getPlanetGenerationState(tectonics);
+}
+
+export function stepPlanetGeology(dt) {
+  stepTectonics(dt);
+}
+
+export function savePlanetGeology() {
+  return {
+    version: 2,
+    terrainSeed: activeTerrainSeed,
+    worldSeed: activeWorldSeed,
+    tectonics: saveTectonics(),
+  };
+}
+
+export function loadPlanetGeology(state = {}) {
+  if (state?.version !== 2) return false;
+  if (Number.isFinite(state.terrainSeed) && normalizeSeed(state.terrainSeed) !== activeTerrainSeed) return false;
+  if (state.worldSeed && String(state.worldSeed) !== activeWorldSeed) return false;
+  return loadTectonics(state.tectonics);
+}
+
+export function getPlanetGenerationState(tectonics = getTectonicState()) {
+  return {
+    version: 2,
+    terrainSeed: activeTerrainSeed,
+    worldSeed: activeWorldSeed,
+    tectonics,
+  };
+}
 
 export function samplePlanet(x, y, width = 1200, height = 720) {
   const lon = (x / width) * Math.PI * 2;
@@ -10,27 +55,58 @@ export function samplePlanet(x, y, width = 1200, height = 720) {
   const nz = Math.cos(lat) * Math.sin(lon);
 
   const tectonics = sampleTectonics(nx, ny, nz);
-  const continentalNoise = fbm3(nx * 1.25, ny * 1.25, nz * 1.25, PLANET_SEED, 5);
-  const detail = fbm3(nx * 7.5, ny * 7.5, nz * 7.5, PLANET_SEED + 203, 3);
+  const continentalNoise = fbm3(nx * 1.18, ny * 1.18, nz * 1.18, activeTerrainSeed, 5);
+  const provinceNoise = fbm3(nx * 2.85 + 4, ny * 2.85 - 7, nz * 2.85 + 2, activeTerrainSeed + 89, 4);
+  const detail = fbm3(nx * 7.5, ny * 7.5, nz * 7.5, activeTerrainSeed + 203, 3);
 
-  // Plate type establishes broad continental/oceanic crust. Convergent
-  // boundaries raise mountain chains; divergent boundaries create rifts.
-  const crustBase = tectonics.continentalBias * 0.33 + continentalNoise * 0.43;
-  const mountainUplift = Math.min(0.30, tectonics.uplift * 1.55);
-  const riftDrop = Math.min(0.18, tectonics.rift * 1.15);
-  const boundaryRoughness = tectonics.boundaryStrength * detail * 0.12;
-  const elevation = clamp(0.20 + crustBase + mountainUplift + boundaryRoughness - riftDrop + detail * 0.06, 0, 1);
+  // Interior buoyancy and plate composition establish broad crustal elevation.
+  // Boundary kinematics add ridges, trenches, transform roughness, and volcanism.
+  const crustBase = tectonics.continentalBias * 0.34 + continentalNoise * 0.35 + provinceNoise * 0.08;
+  const mountainUplift = Math.min(0.34, tectonics.uplift * 1.52);
+  const ridgeRise = Math.min(0.16, tectonics.rift * 0.62);
+  const trenchDrop = Math.min(0.20, tectonics.convergence * tectonics.boundaryStrength * 0.72);
+  const transformRoughness = tectonics.shear * (detail - 0.5) * 0.13;
+  const boundaryRoughness = tectonics.boundaryStrength * detail * 0.08;
+  const volcanicConstruction = tectonics.volcanism * (0.035 + detail * 0.075);
+  const oceanicCooling = tectonics.continentalBias < 0.48
+    ? clamp(tectonics.crustAgeMyr / 220, 0, 1) * 0.08
+    : 0;
+  const stagnantLidRelief = tectonics.tectonicMode === 'stagnant lid'
+    ? (tectonics.mantleHeat - 0.45) * 0.07
+    : 0;
+  const heatPipeRelief = tectonics.tectonicMode === 'heat-pipe volcanism'
+    ? tectonics.volcanism * 0.11
+    : 0;
+
+  const elevation = clamp(
+    0.205 +
+    crustBase +
+    mountainUplift +
+    ridgeRise +
+    boundaryRoughness +
+    transformRoughness +
+    volcanicConstruction +
+    stagnantLidRelief +
+    heatPipeRelief -
+    trenchDrop -
+    oceanicCooling +
+    detail * 0.045,
+    0,
+    1,
+  );
 
   const seaLevel = 0.53;
   const land = elevation >= seaLevel;
   const latitudeCooling = Math.pow(Math.abs(lat) / (Math.PI / 2), 1.35);
   const altitudeCooling = land ? Math.max(0, elevation - 0.62) * 1.65 : 0;
-  const temperature = clamp(1 - latitudeCooling - altitudeCooling, 0, 1);
+  const geothermalOffset = tectonics.volcanism * 0.035 + tectonics.mantleHeat * 0.018;
+  const temperature = clamp(1 - latitudeCooling - altitudeCooling + geothermalOffset, 0, 1);
 
-  const moistureNoise = fbm3(nx * 2.2 + 9, ny * 2.2 - 4, nz * 2.2 + 2, PLANET_SEED + 417, 4);
+  const moistureNoise = fbm3(nx * 2.2 + 9, ny * 2.2 - 4, nz * 2.2 + 2, activeTerrainSeed + 417, 4);
   const coastalMoisture = land ? clamp(1 - (elevation - seaLevel) * 2.8, 0, 1) : 1;
   const rainShadow = land ? tectonics.uplift * 0.18 : 0;
-  const rainfall = clamp(moistureNoise * 0.7 + coastalMoisture * 0.3 - rainShadow, 0, 1);
+  const volcanicRainBoost = land ? tectonics.volcanism * 0.035 : 0;
+  const rainfall = clamp(moistureNoise * 0.68 + coastalMoisture * 0.3 - rainShadow + volcanicRainBoost, 0, 1);
 
   let biome;
   if (!land) biome = elevation > seaLevel - 0.055 ? 'shallow-ocean' : 'deep-ocean';
@@ -49,8 +125,16 @@ export function samplePlanet(x, y, width = 1200, height = 720) {
     biome,
     land,
     plateId: tectonics.plateId,
+    neighborPlateId: tectonics.neighborPlateId,
     plateBoundary: tectonics.boundaryStrength,
+    boundaryType: tectonics.boundaryType,
     convergence: tectonics.convergence,
+    divergence: tectonics.divergence,
+    transform: tectonics.transform,
+    volcanism: tectonics.volcanism,
+    mantleHeat: tectonics.mantleHeat,
+    tectonicMode: tectonics.tectonicMode,
+    crustAgeMyr: tectonics.crustAgeMyr,
   };
 }
 
@@ -71,22 +155,23 @@ export function biomeColor(sample) {
   };
   const base = colors[sample.biome] || [100, 100, 100];
   const shade = sample.land ? 0.82 + sample.elevation * 0.30 : 0.82 + sample.elevation * 0.22;
-  const boundaryHighlight = sample.plateBoundary > 0.65 && sample.land ? 1.08 : 1;
-  return base.map(v => Math.round(clamp(v * shade * boundaryHighlight, 0, 255)));
+  const boundaryHighlight = sample.plateBoundary > 0.65 && sample.land ? 1.06 : 1;
+  const volcanicWarmth = sample.volcanism > 0.55 && sample.land ? [12, -4, -8] : [0, 0, 0];
+  return base.map((value, index) => Math.round(clamp((value + volcanicWarmth[index]) * shade * boundaryHighlight, 0, 255)));
 }
 
 export function randomHabitablePoint(width, height, random = Math.random, preference = 'land') {
   for (let i = 0; i < 1000; i++) {
     const x = random() * width;
     const y = random() * height;
-    const s = samplePlanet(x, y, width, height);
+    const sample = samplePlanet(x, y, width, height);
     if (preference === 'plant') {
-      if (s.land && !['ice', 'cold-desert', 'snow-mountain', 'mountain', 'desert'].includes(s.biome)) return { x, y, sample: s };
+      if (sample.land && !['ice', 'cold-desert', 'snow-mountain', 'mountain', 'desert'].includes(sample.biome)) return { x, y, sample };
     } else if (preference === 'land') {
-      if (s.land && s.biome !== 'ice') return { x, y, sample: s };
+      if (sample.land && sample.biome !== 'ice') return { x, y, sample };
     } else if (preference === 'ocean') {
-      if (!s.land) return { x, y, sample: s };
-    } else return { x, y, sample: s };
+      if (!sample.land) return { x, y, sample };
+    } else return { x, y, sample };
   }
   return { x: width * 0.5, y: height * 0.5, sample: samplePlanet(width * 0.5, height * 0.5, width, height) };
 }
@@ -94,15 +179,15 @@ export function randomHabitablePoint(width, height, random = Math.random, prefer
 export function placeExistingEntitiesOnBiomes(world, random = Math.random) {
   const { position, resource, agent, predator, apex } = world.ecs.components;
   for (const [id] of resource.entries()) {
-    const p = randomHabitablePoint(world.width, world.height, random, 'plant');
+    const point = randomHabitablePoint(world.width, world.height, random, 'plant');
     const pos = position.get(id);
-    if (pos) Object.assign(pos, p);
+    if (pos) Object.assign(pos, point);
   }
   for (const collection of [agent, predator, apex]) {
     for (const [id] of collection.entries()) {
-      const p = randomHabitablePoint(world.width, world.height, random, 'land');
+      const point = randomHabitablePoint(world.width, world.height, random, 'land');
       const pos = position.get(id);
-      if (pos) Object.assign(pos, p);
+      if (pos) Object.assign(pos, point);
     }
   }
 }
@@ -134,11 +219,23 @@ function valueNoise3(x, y, z, seed) {
 }
 
 function hash3(x, y, z, seed) {
-  let h = seed ^ Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 2147483647);
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  let hash = seed ^ Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 2147483647);
+  hash = Math.imul(hash ^ (hash >>> 13), 1274126177);
+  return ((hash ^ (hash >>> 16)) >>> 0) / 4294967295;
 }
 
-const smooth = t => t * t * (3 - 2 * t);
-const lerp = (a, b, t) => a + (b - a) * t;
-const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+function normalizeSeed(value) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return (Math.floor(numeric) >>> 0) || PLANET_SEED;
+  const text = String(value || PLANET_SEED);
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index++) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0 || PLANET_SEED;
+}
+
+const smooth = value => value * value * (3 - 2 * value);
+const lerp = (a, b, amount) => a + (b - a) * amount;
+const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
