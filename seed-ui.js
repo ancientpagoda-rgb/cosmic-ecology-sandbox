@@ -62,6 +62,25 @@ async function copyWorldLink(seed, button, status) {
   }, 1800);
 }
 
+async function formNewWorld(seed, controls, input, status) {
+  const normalized = normalizeSeed(seed);
+  if (!normalized) return false;
+
+  input.value = normalized;
+  status.textContent = 'Forming new world…';
+  const interactive = [...controls.querySelectorAll('button, input')];
+  for (const element of interactive) element.disabled = true;
+
+  try {
+    const formation = window.realitySandboxWorldFormation;
+    if (formation?.start) await formation.start(normalized);
+  } catch (error) {
+    console.warn('World formation presentation failed; loading world directly.', error);
+  }
+
+  return navigateToSeed(normalized);
+}
+
 function installSeedControls() {
   const dashboard = document.querySelector('.planet-dashboard');
   if (!dashboard || dashboard.querySelector('[data-world-seed-controls]')) return Boolean(dashboard);
@@ -98,7 +117,10 @@ function installSeedControls() {
     }
   });
 
-  newButton.addEventListener('click', () => navigateToSeed(randomSeed()));
+  newButton.addEventListener('click', () => {
+    if (newButton.disabled) return;
+    formNewWorld(randomSeed(), controls, input, status);
+  });
   copyButton.addEventListener('click', () => copyWorldLink(input.value || currentSeed(), copyButton, status));
   return true;
 }
