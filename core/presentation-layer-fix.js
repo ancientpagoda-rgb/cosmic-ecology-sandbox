@@ -1,6 +1,6 @@
 const TAU = Math.PI * 2;
 const MAX_WEATHER = 13;
-const ANIMAL_SCALE_BOOST = 1.65;
+const ANIMAL_SCALE_BOOST = 2.35;
 const GLOBE_RADIUS_FACTOR = 0.43;
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -36,7 +36,7 @@ async function installPresentationLayerFix() {
     height: '100%',
     zIndex: '2',
     pointerEvents: 'none',
-    imageRendering: 'pixelated',
+    imageRendering: 'auto',
   });
   host.insertBefore(weatherCanvas, sourceCanvas.nextSibling);
   const ctx = weatherCanvas.getContext('2d', { alpha: true, desynchronized: true });
@@ -106,7 +106,16 @@ async function installPresentationLayerFix() {
         return `scale(${Number.isFinite(scale) ? (scale * ANIMAL_SCALE_BOOST).toFixed(2) : value})`;
       });
       group.setAttribute('transform', boosted);
+      group.setAttribute('opacity', String(Math.max(0.82, Number(group.getAttribute('opacity')) || 0)));
       group.style.display = '';
+      group.style.filter = 'drop-shadow(0 0 0.6px rgba(245,255,250,0.9))';
+
+      const body = group.querySelector('path');
+      if (body) {
+        body.setAttribute('stroke', '#101713');
+        body.setAttribute('stroke-width', '0.22');
+        body.setAttribute('paint-order', 'stroke fill');
+      }
       visible += 1;
     }
     document.documentElement.dataset.visibleAnimalMorphology = String(visible);
@@ -137,30 +146,30 @@ async function installPresentationLayerFix() {
       if (!point.visible) continue;
 
       const strength = clamp(cell.strength ?? 0.5, 0, 1);
-      const cloudRadius = Math.max(4, Math.round((cell.radius || 10) / world.width * point.radius * 3.25));
-      const alpha = clamp((0.52 + strength * 0.38) * point.depth, 0.24, 0.92);
+      const cloudRadius = Math.max(3, Math.round((cell.radius || 10) / world.width * point.radius * 2.55));
+      const alpha = clamp((0.34 + strength * 0.28) * point.depth, 0.12, 0.68);
       const x = Math.round(point.x);
       const y = Math.round(point.y);
 
       ctx.globalAlpha = alpha;
       ctx.fillStyle = cell.type === 'storm' ? '#8d999f' : '#e1e9e5';
-      ctx.fillRect(x - cloudRadius, y - 2, cloudRadius * 2, 5);
-      ctx.fillRect(x - Math.max(2, cloudRadius - 3), y - 6, Math.max(4, cloudRadius * 2 - 6), 4);
-      ctx.fillRect(x - Math.max(1, cloudRadius - 5), y + 3, Math.max(2, cloudRadius * 2 - 10), 2);
+      ctx.fillRect(x - cloudRadius, y - 1, cloudRadius * 2, 3);
+      ctx.fillRect(x - Math.max(2, cloudRadius - 3), y - 4, Math.max(4, cloudRadius * 2 - 6), 3);
+      ctx.fillRect(x - Math.max(1, cloudRadius - 5), y + 2, Math.max(2, cloudRadius * 2 - 10), 1);
 
       if (cell.type === 'rain' || cell.type === 'storm' || cell.type === 'snow') {
-        ctx.globalAlpha = clamp(alpha * 0.92, 0.25, 0.88);
+        ctx.globalAlpha = clamp(alpha * 0.84, 0.18, 0.62);
         ctx.fillStyle = cell.type === 'snow' ? '#dce9ee' : '#78b9d5';
-        for (let offset = -cloudRadius + 2; offset <= cloudRadius - 2; offset += 4) {
-          ctx.fillRect(x + offset, y + 6 + (Math.abs(offset) % 2), 1, cell.type === 'snow' ? 2 : 5);
+        for (let offset = -cloudRadius + 2; offset <= cloudRadius - 2; offset += 5) {
+          ctx.fillRect(x + offset, y + 5 + (Math.abs(offset) % 2), 1, cell.type === 'snow' ? 1 : 3);
         }
       }
 
       if (cell.type === 'storm' && strength > 0.62) {
-        ctx.globalAlpha = clamp(alpha * 0.95, 0.3, 0.95);
+        ctx.globalAlpha = clamp(alpha * 0.9, 0.22, 0.72);
         ctx.fillStyle = '#f4f0bd';
-        ctx.fillRect(x, y + 6, 1, 3);
-        ctx.fillRect(x - 1, y + 9, 1, 2);
+        ctx.fillRect(x, y + 5, 1, 2);
+        ctx.fillRect(x - 1, y + 7, 1, 2);
       }
 
       drawn += 1;
