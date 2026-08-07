@@ -73,6 +73,7 @@ window.realitySandboxPresentationDiagnostics = () => {
     totalWeatherCells: Number(document.documentElement.dataset.totalWeatherCells || 0),
     visibleWeatherCells: Number(document.documentElement.dataset.visibleWeatherCells || 0),
     presentationFixInstalled: document.documentElement.dataset.presentationLayerFix || 'no',
+    presentationLayerError: document.documentElement.dataset.presentationLayerError || '',
     webglContext: document.documentElement.dataset.webglContext || 'unknown',
     pageErrorVisible: Boolean(errorPanel && !errorPanel.hidden),
     pageErrorText: errorPanel?.textContent || '',
