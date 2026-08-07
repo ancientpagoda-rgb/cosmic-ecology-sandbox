@@ -1,0 +1,287 @@
+.world-formation {
+  --formation-rock-hue: 24;
+  --formation-ocean-hue: 205;
+  --formation-life-hue: 105;
+  --formation-tilt: 0deg;
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  place-items: center;
+  overflow: hidden;
+  padding: clamp(18px, 4vw, 48px);
+  background:
+    radial-gradient(circle at 50% 38%, rgba(72, 104, 111, 0.14), transparent 28%),
+    radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.16) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 76% 28%, rgba(255, 255, 255, 0.12) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 35% 76%, rgba(255, 255, 255, 0.1) 0 1px, transparent 1.5px),
+    #020706;
+  color: #eef7f1;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+
+.world-formation[hidden] { display: none; }
+.world-formation--active { opacity: 1; }
+
+.world-formation__space {
+  position: relative;
+  width: min(72vw, 520px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+}
+
+.world-formation__planet {
+  position: relative;
+  width: clamp(170px, 38vw, 310px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  transform: rotate(var(--formation-tilt)) scale(0.16);
+  opacity: 0.3;
+  box-shadow: 0 0 70px rgba(255, 92, 30, 0.12);
+  transition: transform 650ms cubic-bezier(.2,.78,.25,1), opacity 520ms ease, box-shadow 650ms ease;
+}
+
+.world-formation__planet > div {
+  position: absolute;
+  border-radius: 50%;
+  transition: opacity 520ms ease, transform 650ms ease, filter 650ms ease;
+}
+
+.world-formation__core {
+  inset: 34%;
+  z-index: 7;
+  opacity: 0;
+  background: radial-gradient(circle at 38% 32%, #fff5aa 0 9%, #ffd15c 30%, #ff7028 68%, #b62d18 100%);
+  box-shadow: 0 0 28px rgba(255, 125, 36, 0.85);
+}
+
+.world-formation__mantle {
+  inset: 13%;
+  z-index: 5;
+  opacity: 0.25;
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255, 221, 92, 0.72), transparent 18%),
+    repeating-conic-gradient(from 8deg, #ff8c37 0 12deg, #a93621 12deg 26deg, #e9582b 26deg 41deg);
+  filter: saturate(1.35) brightness(1.1);
+}
+
+.world-formation__crust {
+  inset: 0;
+  z-index: 8;
+  opacity: 0.08;
+  background:
+    radial-gradient(circle at 35% 28%, hsl(var(--formation-rock-hue) 28% 52%) 0 5%, transparent 5.5%),
+    radial-gradient(circle at 65% 46%, hsl(var(--formation-rock-hue) 20% 38%) 0 10%, transparent 10.5%),
+    radial-gradient(circle at 45% 70%, hsl(var(--formation-rock-hue) 24% 45%) 0 12%, transparent 12.5%),
+    hsl(var(--formation-rock-hue) 20% 24%);
+}
+
+.world-formation__ocean {
+  inset: 0;
+  z-index: 9;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse at 28% 42%, hsla(var(--formation-ocean-hue) 78% 48% / 0.95) 0 18%, transparent 18.5%),
+    radial-gradient(ellipse at 68% 62%, hsla(var(--formation-ocean-hue) 82% 43% / 0.9) 0 24%, transparent 24.5%),
+    radial-gradient(ellipse at 60% 20%, hsla(var(--formation-ocean-hue) 72% 54% / 0.72) 0 11%, transparent 11.5%);
+}
+
+.world-formation__life {
+  inset: 0;
+  z-index: 10;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse at 36% 36%, hsla(var(--formation-life-hue) 54% 43% / 0.9) 0 9%, transparent 10%),
+    radial-gradient(ellipse at 57% 55%, hsla(var(--formation-life-hue) 62% 36% / 0.92) 0 13%, transparent 14%),
+    radial-gradient(ellipse at 72% 33%, hsla(var(--formation-life-hue) 55% 46% / 0.82) 0 7%, transparent 8%),
+    radial-gradient(ellipse at 45% 77%, hsla(var(--formation-life-hue) 50% 39% / 0.86) 0 8%, transparent 9%);
+}
+
+.world-formation__clouds {
+  inset: 0;
+  z-index: 12;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse at 42% 30%, rgba(239, 248, 245, 0.68) 0 7%, transparent 8%),
+    radial-gradient(ellipse at 68% 48%, rgba(236, 245, 243, 0.6) 0 10%, transparent 11%),
+    radial-gradient(ellipse at 32% 68%, rgba(225, 238, 239, 0.5) 0 8%, transparent 9%);
+  animation: worldFormationCloudDrift 3.2s linear infinite;
+}
+
+.world-formation__atmosphere {
+  inset: -2%;
+  z-index: 14;
+  opacity: 0;
+  border: 4px solid rgba(126, 204, 224, 0.5);
+  box-shadow: inset -22px -18px 34px rgba(0, 0, 0, 0.36), 0 0 28px rgba(104, 190, 222, 0.42);
+}
+
+.world-formation__dust,
+.world-formation__orbit {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.world-formation__dust {
+  background:
+    radial-gradient(circle at 50% 1%, #f1b273 0 2px, transparent 3px),
+    radial-gradient(circle at 82% 18%, #9a7152 0 3px, transparent 4px),
+    radial-gradient(circle at 96% 53%, #d8a267 0 2px, transparent 3px),
+    radial-gradient(circle at 75% 88%, #80634f 0 4px, transparent 5px),
+    radial-gradient(circle at 27% 92%, #d9a970 0 2px, transparent 3px),
+    radial-gradient(circle at 3% 54%, #8f6c53 0 3px, transparent 4px),
+    radial-gradient(circle at 20% 17%, #e3b27c 0 2px, transparent 3px);
+  opacity: 0;
+  animation: worldFormationOrbit 2.8s linear infinite;
+  transition: opacity 420ms ease, transform 650ms ease;
+}
+
+.world-formation__orbit {
+  inset: 16%;
+  border: 1px solid rgba(220, 179, 123, 0.26);
+  transform: scaleY(0.38) rotate(-11deg);
+  opacity: 0;
+  transition: opacity 420ms ease;
+}
+
+.world-formation__copy {
+  width: min(620px, 92vw);
+  text-align: center;
+  padding-bottom: max(4px, env(safe-area-inset-bottom));
+}
+
+.world-formation__eyebrow,
+.world-formation__counter {
+  margin: 0;
+  color: rgba(210, 230, 220, 0.68);
+  font: 700 10px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.world-formation__copy h2 {
+  margin: 8px 0 5px;
+  font-size: clamp(24px, 5vw, 42px);
+  line-height: 1;
+}
+
+.world-formation__copy > p[data-formation-detail] {
+  min-height: 2.7em;
+  margin: 0 auto;
+  max-width: 540px;
+  color: rgba(230, 242, 235, 0.78);
+  font-size: clamp(12px, 2.5vw, 15px);
+  line-height: 1.45;
+}
+
+.world-formation__progress {
+  width: min(360px, 72vw);
+  height: 3px;
+  margin: 17px auto 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(205, 230, 217, 0.12);
+}
+
+.world-formation__progress i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(205, 239, 221, 0.82);
+  transition: width 480ms ease;
+}
+
+.world-formation__copy button {
+  margin-top: 14px;
+  border: 1px solid rgba(206, 231, 220, 0.22);
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: rgba(210, 235, 222, 0.06);
+  color: rgba(232, 244, 238, 0.74);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.world-formation--accretion .world-formation__dust,
+.world-formation--accretion .world-formation__orbit { opacity: 1; }
+.world-formation--accretion .world-formation__planet { opacity: 0.56; transform: rotate(var(--formation-tilt)) scale(0.3); }
+.world-formation--accretion .world-formation__mantle { opacity: 0.5; }
+
+.world-formation--magma .world-formation__planet,
+.world-formation--core .world-formation__planet,
+.world-formation--crust .world-formation__planet,
+.world-formation--atmosphere .world-formation__planet,
+.world-formation--biosphere .world-formation__planet,
+.world-formation--complete .world-formation__planet {
+  opacity: 1;
+  transform: rotate(var(--formation-tilt)) scale(1);
+}
+
+.world-formation--magma .world-formation__mantle { inset: 0; opacity: 1; }
+.world-formation--magma .world-formation__core { opacity: 0.5; transform: scale(1.3); }
+.world-formation--magma .world-formation__planet { box-shadow: 0 0 70px rgba(255, 92, 30, 0.42); }
+
+.world-formation--core .world-formation__mantle { opacity: 0.95; }
+.world-formation--core .world-formation__core { opacity: 1; transform: scale(1); }
+.world-formation--core .world-formation__crust { opacity: 0.28; clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%, 50% 56%, 82% 56%, 82% 44%, 50% 44%); }
+
+.world-formation--crust .world-formation__core,
+.world-formation--atmosphere .world-formation__core,
+.world-formation--biosphere .world-formation__core,
+.world-formation--complete .world-formation__core { opacity: 0.76; }
+.world-formation--crust .world-formation__mantle,
+.world-formation--atmosphere .world-formation__mantle,
+.world-formation--biosphere .world-formation__mantle,
+.world-formation--complete .world-formation__mantle { opacity: 0.9; }
+.world-formation--crust .world-formation__crust,
+.world-formation--atmosphere .world-formation__crust,
+.world-formation--biosphere .world-formation__crust,
+.world-formation--complete .world-formation__crust { opacity: 1; clip-path: none; }
+.world-formation--crust .world-formation__ocean,
+.world-formation--atmosphere .world-formation__ocean,
+.world-formation--biosphere .world-formation__ocean,
+.world-formation--complete .world-formation__ocean { opacity: 0.88; }
+
+.world-formation--atmosphere .world-formation__atmosphere,
+.world-formation--biosphere .world-formation__atmosphere,
+.world-formation--complete .world-formation__atmosphere { opacity: 1; }
+.world-formation--atmosphere .world-formation__clouds,
+.world-formation--biosphere .world-formation__clouds,
+.world-formation--complete .world-formation__clouds { opacity: 0.78; }
+
+.world-formation--biosphere .world-formation__life,
+.world-formation--complete .world-formation__life { opacity: 0.96; }
+.world-formation--biosphere .world-formation__planet,
+.world-formation--complete .world-formation__planet { box-shadow: 0 0 52px rgba(104, 190, 222, 0.28); }
+
+@keyframes worldFormationOrbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes worldFormationCloudDrift {
+  0% { transform: translateX(-2%) rotate(0deg); }
+  50% { transform: translateX(2%) rotate(1.5deg); }
+  100% { transform: translateX(-2%) rotate(0deg); }
+}
+
+@media (max-height: 620px) {
+  .world-formation { grid-template-columns: minmax(0, 1fr) minmax(260px, 0.75fr); grid-template-rows: 1fr; }
+  .world-formation__space { width: min(58vh, 430px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .world-formation *,
+  .world-formation *::before,
+  .world-formation *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
