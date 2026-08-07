@@ -1,72 +1,91 @@
-const originalAddEventListener = HTMLCanvasElement.prototype.addEventListener;
-const originalRemoveEventListener = HTMLCanvasElement.prototype.removeEventListener;
-const canvasStates = new WeakMap();
+const DRAG_THRESHOLD_PX = 6;
+const attachedCanvases = new WeakSet();
 
-function getState(canvas) {
-  let state = canvasStates.get(canvas);
-  if (!state) {
-    state = { mouseStartY: new Map(), wrappers: new Map() };
-    canvasStates.set(canvas, state);
-  }
-  return state;
-}
+function attachDirectDrag(canvas) {
+  if (attachedCanvases.has(canvas)) return;
+  attachedCanvases.add(canvas);
 
-function getListenerMap(state, type) {
-  let listeners = state.wrappers.get(type);
-  if (!listeners) {
-    listeners = new WeakMap();
-    state.wrappers.set(type, listeners);
-  }
-  return listeners;
-}
+  let drag = null;
 
-function adjustedPointerEvent(event, clientY) {
-  return new Proxy(event, {
-    get(target, property) {
-      if (property === 'clientY') return clientY;
-      const value = Reflect.get(target, property, target);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
-}
-
-HTMLCanvasElement.prototype.addEventListener = function addNaturalDragListener(type, listener, options) {
-  if (this.id !== 'lofiLivingCanvas' || typeof listener !== 'function' || !['pointerdown', 'pointermove', 'pointerup', 'pointercancel'].includes(type)) {
-    return originalAddEventListener.call(this, type, listener, options);
+  function runtime() {
+    return window.realitySandboxUnified;
   }
 
-  const state = getState(this);
-  const listeners = getListenerMap(state, type);
-  let wrapped = listeners.get(listener);
+  function finishDrag(event, selectRegion) {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
 
-  if (!wrapped) {
-    wrapped = function naturalDragEvent(event) {
-      if (event.pointerType === 'mouse' && type === 'pointerdown') {
-        state.mouseStartY.set(event.pointerId, event.clientY);
-      }
+    const active = drag;
+    drag = null;
+    canvas.dataset.dragging = 'false';
+    try { canvas.releasePointerCapture?.(event.pointerId); } catch {}
 
-      let deliveredEvent = event;
-      if (event.pointerType === 'mouse' && type === 'pointermove' && state.mouseStartY.has(event.pointerId)) {
-        const startY = state.mouseStartY.get(event.pointerId);
-        deliveredEvent = adjustedPointerEvent(event, startY - (event.clientY - startY));
-      }
+    if (selectRegion && active.moved < DRAG_THRESHOLD_PX) {
+      runtime()?.selectAtClientPoint?.(event.clientX, event.clientY);
+    }
+  }
 
-      try {
-        return listener.call(this, deliveredEvent);
-      } finally {
-        if (event.pointerType === 'mouse' && (type === 'pointerup' || type === 'pointercancel')) {
-          state.mouseStartY.delete(event.pointerId);
-        }
-      }
+  canvas.addEventListener('pointerdown', event => {
+    // Keep the runtime's native two-finger pinch behavior on touchscreens.
+    if (event.pointerType === 'touch' || event.button !== 0) return;
+
+    const api = runtime();
+    const camera = api?.getCamera?.();
+    if (!camera || !api?.setCamera) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    canvas.focus({ preventScroll: true });
+    canvas.setPointerCapture?.(event.pointerId);
+    canvas.dataset.dragging = 'true';
+
+    drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      camera,
+      moved: 0,
     };
-    listeners.set(listener, wrapped);
-  }
+  }, { capture: true, passive: false });
 
-  return originalAddEventListener.call(this, type, wrapped, options);
-};
+  canvas.addEventListener('pointermove', event => {
+    if (!drag || drag.pointerId !== event.pointerId) return;
 
-HTMLCanvasElement.prototype.removeEventListener = function removeNaturalDragListener(type, listener, options) {
-  const state = canvasStates.get(this);
-  const wrapped = state?.wrappers.get(type)?.get(listener);
-  return originalRemoveEventListener.call(this, type, wrapped || listener, options);
-};
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    drag.moved = Math.max(drag.moved, Math.hypot(dx, dy));
+
+    // Direct manipulation: the visible surface follows the pointer on both axes.
+    runtime()?.setCamera?.({
+      zoom: drag.camera.zoom,
+      centerX: drag.camera.centerX - dx / rect.width / drag.camera.zoom,
+      centerY: drag.camera.centerY - dy / rect.height / drag.camera.zoom,
+    });
+  }, { capture: true, passive: false });
+
+  canvas.addEventListener('pointerup', event => finishDrag(event, true), { capture: true, passive: false });
+  canvas.addEventListener('pointercancel', event => finishDrag(event, false), { capture: true, passive: false });
+  canvas.addEventListener('lostpointercapture', event => {
+    if (drag?.pointerId === event.pointerId) {
+      drag = null;
+      canvas.dataset.dragging = 'false';
+    }
+  }, { capture: true });
+}
+
+function attachExistingCanvas() {
+  const canvas = document.getElementById('lofiLivingCanvas');
+  if (canvas instanceof HTMLCanvasElement) attachDirectDrag(canvas);
+}
+
+attachExistingCanvas();
+new MutationObserver(attachExistingCanvas).observe(document.documentElement, {
+  childList: true,
+  subtree: true,
+});
