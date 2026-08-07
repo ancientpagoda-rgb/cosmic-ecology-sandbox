@@ -12,7 +12,7 @@ for (const marker of ['three', 'ReboundWasmSystem', 'scientific-earth-presentati
 for (const marker of ['new Application()', 'autoStart: false', 'sharedTicker: false', 'living.sampleDynamicPlanet', 'waterCycle.sample', 'planet-inspector']) {
   if (!runtime.includes(marker)) failures.push(`root renderer missing: ${marker}`);
 }
-for (const marker of ['configurePlanetGeneration', 'planet.geodynamics', 'createLofiLivingRuntime']) {
+for (const marker of ['configurePlanetGeneration', 'planet.interior-tectonics', 'createLofiLivingRuntime']) {
   if (!app.includes(marker)) failures.push(`seeded root missing: ${marker}`);
 }
 
