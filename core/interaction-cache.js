@@ -92,6 +92,7 @@ async function installInteractionCache() {
       cacheReady = true;
       building = false;
       document.documentElement.dataset.interactionCache = 'ready';
+      window.dispatchEvent(new CustomEvent('reality-interaction-cache-ready'));
     }
 
     scheduleIdle(buildChunk);
@@ -101,6 +102,14 @@ async function installInteractionCache() {
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(rebuildCache, REFRESH_AFTER_MS);
   }
+
+  window.realitySandboxInteractionCache = {
+    width: CACHE_WIDTH,
+    height: CACHE_HEIGHT,
+    isReady: () => cacheReady,
+    sampleTerrain: cachedTerrain,
+    sampleWater: cachedWater,
+  };
 
   runtime.render = frame => {
     const interacting = document.getElementById('lofiLivingCanvas')?.dataset.dragging === 'true';
