@@ -1,6 +1,6 @@
 import { Graphics } from 'pixi.js';
 
-const COARSE_TILE = 12;
+const COARSE_TILE = 24;
 const BASE_TILE = 3;
 const originalRect = Graphics.prototype.rect;
 const originalFill = Graphics.prototype.fill;
