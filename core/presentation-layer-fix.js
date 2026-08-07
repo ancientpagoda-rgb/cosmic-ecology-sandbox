@@ -1,6 +1,7 @@
 const TAU = Math.PI * 2;
 const MAX_WEATHER = 13;
-const ANIMAL_SCALE_BOOST = 4.7;
+const REFERENCE_RENDER_LONG_EDGE = 840;
+const REFERENCE_ANIMAL_SCALE_BOOST = 4.7;
 const GLOBE_RADIUS_FACTOR = 0.43;
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -46,6 +47,10 @@ async function installPresentationLayerFix() {
     });
     host.insertBefore(weatherCanvas, sourceCanvas.nextSibling);
     const ctx = weatherCanvas.getContext('2d', { alpha: true, desynchronized: true });
+
+    function resolutionScale() {
+      return Math.max(sourceCanvas.width, sourceCanvas.height) / REFERENCE_RENDER_LONG_EDGE;
+    }
 
     function syncLayers() {
       const width = Math.max(1, sourceCanvas.width);
@@ -101,6 +106,9 @@ async function installPresentationLayerFix() {
         return 0;
       }
 
+      const animalScaleBoost = REFERENCE_ANIMAL_SCALE_BOOST * resolutionScale();
+      document.documentElement.dataset.animalScaleBoost = animalScaleBoost.toFixed(2);
+
       let visible = 0;
       for (const group of morphology.children) {
         if (String(group.tagName).toLowerCase() !== 'g') continue;
@@ -109,10 +117,10 @@ async function installPresentationLayerFix() {
         if (!transform) continue;
         const boosted = transform.replace(/scale\(([-+\d.eE]+)\)/, (_, value) => {
           const scale = Number(value);
-          return `scale(${Number.isFinite(scale) ? (scale * ANIMAL_SCALE_BOOST).toFixed(2) : value})`;
+          return `scale(${Number.isFinite(scale) ? (scale * animalScaleBoost).toFixed(2) : value})`;
         });
         group.setAttribute('transform', boosted);
-        group.setAttribute('opacity', String(Math.max(0.86, Number(group.getAttribute('opacity')) || 0)));
+        group.setAttribute('opacity', String(Math.max(0.9, Number(group.getAttribute('opacity')) || 0)));
         group.style.display = '';
         group.style.filter = 'drop-shadow(0 0 1px rgba(245,255,250,0.95))';
 
@@ -133,6 +141,14 @@ async function installPresentationLayerFix() {
       syncLayers();
       const width = weatherCanvas.width;
       const height = weatherCanvas.height;
+      const detailScale = resolutionScale();
+      const cloudBand = Math.max(3, Math.round(5 * detailScale));
+      const cloudBandThin = Math.max(2, Math.round(3 * detailScale));
+      const rainWidth = Math.max(1, Math.round(2 * detailScale));
+      const rainLength = Math.max(4, Math.round(6 * detailScale));
+      const snowSize = Math.max(2, Math.round(2 * detailScale));
+      const precipitationStep = Math.max(7, Math.round(10 * detailScale));
+
       ctx.clearRect(0, 0, width, height);
 
       if (sourceCanvas.dataset.dragging === 'true') {
@@ -152,30 +168,40 @@ async function installPresentationLayerFix() {
         if (!point.visible) continue;
 
         const strength = clamp(cell.strength ?? 0.5, 0, 1);
-        const cloudRadius = Math.max(4, Math.round((cell.radius || 10) / world.width * point.radius * 2.55));
+        const cloudRadius = Math.max(Math.round(4 * detailScale), Math.round((cell.radius || 10) / world.width * point.radius * 2.55));
         const alpha = clamp((0.34 + strength * 0.28) * point.depth, 0.12, 0.68);
         const x = Math.round(point.x);
         const y = Math.round(point.y);
+        const upperOffset = Math.round(7 * detailScale);
+        const lowerOffset = Math.round(3 * detailScale);
+        const insetWide = Math.round(5 * detailScale);
+        const insetNarrow = Math.round(8 * detailScale);
 
         ctx.globalAlpha = alpha;
         ctx.fillStyle = cell.type === 'storm' ? '#8d999f' : '#e1e9e5';
-        ctx.fillRect(x - cloudRadius, y - 2, cloudRadius * 2, 5);
-        ctx.fillRect(x - Math.max(3, cloudRadius - 5), y - 7, Math.max(6, cloudRadius * 2 - 10), 5);
-        ctx.fillRect(x - Math.max(2, cloudRadius - 8), y + 3, Math.max(4, cloudRadius * 2 - 16), 3);
+        ctx.fillRect(x - cloudRadius, y - Math.floor(cloudBand / 2), cloudRadius * 2, cloudBand);
+        ctx.fillRect(x - Math.max(3, cloudRadius - insetWide), y - upperOffset, Math.max(6, cloudRadius * 2 - insetWide * 2), cloudBand);
+        ctx.fillRect(x - Math.max(2, cloudRadius - insetNarrow), y + lowerOffset, Math.max(4, cloudRadius * 2 - insetNarrow * 2), cloudBandThin);
 
         if (cell.type === 'rain' || cell.type === 'storm' || cell.type === 'snow') {
           ctx.globalAlpha = clamp(alpha * 0.84, 0.18, 0.62);
           ctx.fillStyle = cell.type === 'snow' ? '#dce9ee' : '#78b9d5';
-          for (let offset = -cloudRadius + 3; offset <= cloudRadius - 3; offset += 10) {
-            ctx.fillRect(x + offset, y + 8 + (Math.abs(offset) % 3), 2, cell.type === 'snow' ? 2 : 6);
+          for (let offset = -cloudRadius + precipitationStep; offset <= cloudRadius - precipitationStep; offset += precipitationStep) {
+            ctx.fillRect(
+              x + offset,
+              y + Math.round(8 * detailScale) + (Math.abs(offset) % Math.max(2, Math.round(3 * detailScale))),
+              rainWidth,
+              cell.type === 'snow' ? snowSize : rainLength,
+            );
           }
         }
 
         if (cell.type === 'storm' && strength > 0.62) {
           ctx.globalAlpha = clamp(alpha * 0.9, 0.22, 0.72);
           ctx.fillStyle = '#f4f0bd';
-          ctx.fillRect(x, y + 8, 2, 5);
-          ctx.fillRect(x - 2, y + 13, 2, 4);
+          const boltWidth = Math.max(1, Math.round(2 * detailScale));
+          ctx.fillRect(x, y + Math.round(8 * detailScale), boltWidth, Math.round(5 * detailScale));
+          ctx.fillRect(x - boltWidth, y + Math.round(13 * detailScale), boltWidth, Math.round(4 * detailScale));
         }
 
         drawn += 1;
@@ -263,6 +289,8 @@ async function installPresentationLayerFix() {
       morphologyPresent: Boolean(document.getElementById('morphologyOverlay')),
       weatherCanvasPresent: Boolean(document.getElementById('weatherPresentationCanvas')),
       renderResolution: `${sourceCanvas.width}x${sourceCanvas.height}`,
+      renderQuality: document.documentElement.dataset.renderQuality || 'unknown',
+      animalScaleBoost: Number(document.documentElement.dataset.animalScaleBoost || 0),
     });
   } catch (error) {
     document.documentElement.dataset.presentationLayerFix = 'error';
