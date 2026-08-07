@@ -5,6 +5,8 @@ const startupState = {
   lastErrorSource: '',
   rejection: '',
   readyStateAtLoad: document.readyState,
+  readyOutcome: 'not-observed',
+  readyError: '',
 };
 
 window.addEventListener('error', event => {
@@ -16,10 +18,30 @@ window.addEventListener('unhandledrejection', event => {
   startupState.rejection = String(event.reason?.stack || event.reason?.message || event.reason || 'unhandled rejection');
 }, true);
 
+function observeReadyPromise() {
+  const ready = window.realitySandboxReady;
+  if (!ready || typeof ready.then !== 'function') {
+    startupState.readyOutcome = 'missing';
+    return;
+  }
+  startupState.readyOutcome = 'pending';
+  Promise.resolve(ready).then(
+    () => { startupState.readyOutcome = 'resolved'; },
+    error => {
+      startupState.readyOutcome = 'rejected';
+      startupState.readyError = String(error?.stack || error?.message || error || 'ready rejected');
+    },
+  );
+}
+
+window.addEventListener('DOMContentLoaded', () => queueMicrotask(observeReadyPromise), { once: true });
+
 function inspectReadyPromise() {
   return {
     present: Boolean(window.realitySandboxReady),
     type: typeof window.realitySandboxReady,
+    outcome: startupState.readyOutcome,
+    error: startupState.readyError,
   };
 }
 
