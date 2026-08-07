@@ -1,7 +1,7 @@
-const CACHE_WIDTH = 96;
-const CACHE_HEIGHT = 48;
-const CHUNK_SIZE = 96;
-const REFRESH_AFTER_MS = 1200;
+const CACHE_WIDTH = 64;
+const CACHE_HEIGHT = 32;
+const CHUNK_SIZE = 128;
+const REFRESH_AFTER_MS = 5000;
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -71,7 +71,7 @@ async function installInteractionCache() {
     function buildChunk(deadline) {
       if (token !== buildToken) return;
       let built = 0;
-      while (cursor < nextTerrain.length && built < CHUNK_SIZE && (deadline.timeRemaining() > 1 || built < 16)) {
+      while (cursor < nextTerrain.length && built < CHUNK_SIZE && (deadline.timeRemaining() > 1 || built < 24)) {
         const row = Math.floor(cursor / CACHE_WIDTH);
         const column = cursor - row * CACHE_WIDTH;
         const x = (column + 0.5) / CACHE_WIDTH * world.width;
