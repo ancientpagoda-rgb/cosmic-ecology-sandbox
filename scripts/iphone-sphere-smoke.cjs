@@ -31,12 +31,22 @@ fs.mkdirSync(artifactDir, { recursive: true });
       const dashboard = document.querySelector('.planet-dashboard').getBoundingClientRect();
       const inspector = document.querySelector('.planet-inspector').getBoundingClientRect();
       const masthead = document.querySelector('.planet-masthead').getBoundingClientRect();
+      const approvedPresentationCanvases = new Set(['weatherPresentationCanvas', 'surfaceDetailCanvas', 'surfaceModeCanvas']);
+      const visibleCanvases = [...document.querySelectorAll('canvas')]
+        .filter(node => {
+          const style = getComputedStyle(node);
+          const rect = node.getBoundingClientRect();
+          return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+        })
+        .map(node => node.id);
+      const visibleSimulationCanvases = visibleCanvases.filter(id => !approvedPresentationCanvases.has(id));
       return {
         canvas: { bitmapWidth: canvas.width, bitmapHeight: canvas.height, cssWidth: canvasRect.width, cssHeight: canvasRect.height },
         dashboard: { left: dashboard.left, right: dashboard.right, top: dashboard.top, bottom: dashboard.bottom },
         inspector: { left: inspector.left, right: inspector.right, top: inspector.top, bottom: inspector.bottom },
         masthead: { left: masthead.left, right: masthead.right, top: masthead.top, bottom: masthead.bottom },
-        visibleCanvasCount: [...document.querySelectorAll('canvas')].filter(node => getComputedStyle(node).display !== 'none').length,
+        visibleCanvases,
+        visibleSimulationCanvases,
         statDefinitions: document.querySelectorAll('.planet-stat[title][tabindex="0"]').length,
         snapshot: window.realitySandboxUnified.getSnapshot(),
         after: window.realitySandboxUnified.getSnapshot().selectedRegion,
@@ -47,7 +57,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     const cssAspect = metrics.canvas.cssWidth / metrics.canvas.cssHeight;
     assert(Math.abs(bitmapAspect - cssAspect) < 0.03, `Canvas aspect mismatch: ${bitmapAspect} vs ${cssAspect}.`);
     assert(metrics.canvas.bitmapWidth >= 170 && metrics.canvas.bitmapHeight >= 340, `Mobile logical resolution is too low: ${metrics.canvas.bitmapWidth}x${metrics.canvas.bitmapHeight}.`);
-    assert(metrics.visibleCanvasCount === 1 && metrics.snapshot.presentation.renderer === 'pixi-single-canvas', 'Mobile must use one integrated renderer.');
+    assert(metrics.visibleSimulationCanvases.length === 1 && metrics.visibleSimulationCanvases[0] === 'lofiLivingCanvas' && metrics.snapshot.presentation.renderer === 'pixi-single-canvas', `Mobile must use one simulation renderer plus approved presentation layers: ${JSON.stringify(metrics.visibleCanvases)}`);
     assert(metrics.dashboard.left >= 0 && metrics.dashboard.right <= viewport.width && metrics.dashboard.bottom <= viewport.height, 'Dashboard overflows the iPhone viewport.');
     assert(metrics.inspector.left >= 0 && metrics.inspector.right <= viewport.width && metrics.inspector.bottom <= viewport.height, 'Inspector overflows the iPhone viewport.');
     assert(metrics.masthead.bottom <= metrics.inspector.top, 'Inspector overlaps the iPhone masthead.');
