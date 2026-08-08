@@ -34,6 +34,7 @@ const rootEntry = 'app-seeded.js';
 requireText('index.html', 'Procedural Living Planet', 'honest fictional-planet title');
 requireText('index.html', 'fictional procedural living planet', 'fictional-world accessibility label');
 requireText('index.html', 'src="./app-seeded.js?', 'seeded project-relative root entry point');
+requireText('index.html', 'src="./core/surface-mode.js?', 'surface-mode entry point');
 forbidText('index.html', 'scientific-earth-presentation', 'retired Earth renderer');
 forbidText('index.html', 'lilac-cloud-overlay', 'retired cloud sidecar');
 forbidText('index.html', 'rain-runoff-overlay', 'retired rain sidecar');
@@ -112,12 +113,15 @@ requireMissing('.github/workflows/phase11-live.yml', 'Phase 11 live workflow fro
 forbidText('.github/workflows/browser-smoke.yml', 'node scripts/browser-smoke.cjs', 'Phase 11 browser suite');
 requireText('.github/workflows/browser-smoke.yml', 'node scripts/unified-smoke.cjs', 'living-planet experience check');
 requireText('.github/workflows/browser-smoke.yml', 'node scripts/iphone-sphere-smoke.cjs', 'iPhone visual check');
+requireText('.github/workflows/browser-smoke.yml', 'node scripts/surface-mode-smoke.cjs', 'surface-mode interaction check');
 
 requireText('scripts/unified-smoke.cjs', "seedScenario('coupling')", 'terrain-water-inspector coupling scenario');
 requireText('scripts/unified-smoke.cjs', 'statDefinitions === 8', 'defined statistic browser assertion');
 requireText('scripts/unified-smoke.cjs', '[title][tabindex="0"]', 'keyboard-inspectable statistic assertion');
 requireText('scripts/iphone-sphere-smoke.cjs', 'masthead.bottom <= metrics.inspector.top', 'mobile panel overlap assertion');
-requireText('scripts/root-renderer-smoke.cjs', 'visibleCanvases.length === 1', 'single visible canvas browser assertion');
+requireText('scripts/root-renderer-smoke.cjs', 'visibleSimulationCanvases.length === 1', 'single simulation canvas plus approved presentation layers');
+requireText('scripts/surface-mode-smoke.cjs', "document.documentElement.dataset.surfaceMode === 'active'", 'surface mode activates in browser');
+requireText('scripts/surface-mode-smoke.cjs', "page.keyboard.down('w')", 'surface mode movement browser assertion');
 
 requireText('reality-engine-v6-9.html', 'ENGINE V6.9 · HOWLER.JS SOUNDSCAPE', 'archived V6.9 compatibility page');
 requireText('README.md', 'Nysa is not Earth', 'scientific boundary documentation');
