@@ -4,11 +4,11 @@ import { biomeColor } from './planet.js';
 const MIN_ZOOM = 0.7;
 const MAX_ZOOM = 12;
 const UI_INTERVAL_MS = 300;
-const LOGICAL_SIZE_PX = 420;
-const REDRAW_INTERVAL_MS = 1000 / 7;
-const TERRAIN_TILE_PX = 10;
-const MAX_DRAWN_ORGANISMS = 420;
-const MAX_DRAWN_WEATHER = 13;
+const LOGICAL_SIZE_PX = 900;
+const REDRAW_INTERVAL_MS = 1000 / 30;
+const TERRAIN_TILE_PX = 3;
+const MAX_DRAWN_ORGANISMS = 900;
+const MAX_DRAWN_WEATHER = 24;
 const PALETTE = {
   background: 0x030806,
   atmosphere: 0x8bb8a8,
@@ -71,7 +71,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     canvas.tabIndex = 0;
     canvas.setAttribute('role', 'application');
     canvas.setAttribute('aria-label', `${planetName}, a fictional procedural planet. Drag to rotate, scroll or pinch to zoom, and click a region to inspect it.`);
-    canvas.style.imageRendering = 'pixelated';
+    canvas.style.imageRendering = 'auto';
     host.prepend(canvas);
     installInteraction();
     document.body.dataset.rootExperience = 'procedural-living-planet';
@@ -219,12 +219,13 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         width: logicalSize.width,
         height: logicalSize.height,
         background: PALETTE.background,
-        antialias: false,
+        antialias: true,
         autoStart: false,
         sharedTicker: false,
         preference: 'webgl',
-        powerPreference: mobile ? 'low-power' : 'high-performance',
-        resolution: 1,
+        powerPreference: mobile ? 'high-performance' : 'high-performance',
+        resolution: Math.min(3, Math.max(2, globalThis.devicePixelRatio || 1)),
+        autoDensity: true,
         clearBeforeRender: true,
       });
       next.stop();
@@ -425,8 +426,8 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     const { cx, cy, radius } = getSphereFrame(width, height);
     graphics.clear();
     graphics.rect(0, 0, width, height).fill(PALETTE.background);
-    graphics.circle(cx + 2, cy + 3, radius + 2).fill({ color: 0x000000, alpha: 0.55 });
-    graphics.circle(cx, cy, radius + 2).fill({ color: PALETTE.atmosphere, alpha: 0.25 });
+    graphics.circle(cx + 3, cy + 4, radius + 3).fill({ color: 0x000000, alpha: 0.5 });
+    graphics.circle(cx, cy, radius + 3).fill({ color: PALETTE.atmosphere, alpha: 0.18 });
 
     const left = Math.max(0, Math.floor((cx - radius) / tile) * tile);
     const right = Math.min(width, Math.ceil((cx + radius) / tile) * tile);
@@ -443,7 +444,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         const water = waterCycle.sample(worldX, worldY);
         const base = coupledSurfaceColor(terrain, water);
         const light = clamp(0.3 + 0.78 * (sample.normal.x * -0.35 + sample.normal.y * 0.42 + sample.normal.z * 0.82), 0.18, 1.06);
-        graphics.rect(px, py, tile, tile).fill(shadeColor(base, light));
+        graphics.rect(px, py, tile + 0.7, tile + 0.7).fill(shadeColor(base, light));
       }
     }
 
@@ -452,16 +453,21 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     for (const cell of weather.slice(0, MAX_DRAWN_WEATHER)) {
       const point = worldToSphereScreen(cell.x / world.width, cell.y / world.height, width, height);
       if (!point.visible) continue;
-      const cloudRadius = Math.max(2, Math.round((cell.radius || 10) / world.width * radius * 2.4));
+      const cloudRadius = Math.max(5, (cell.radius || 10) / world.width * radius * 2.6);
       const strength = clamp(cell.strength ?? 0.5, 0, 1);
       const color = cell.type === 'storm' ? PALETTE.storm : PALETTE.cloud;
-      const x = quantize(point.x, 2);
-      const y = quantize(point.y, 2);
-      graphics.rect(x - cloudRadius, y - 1, cloudRadius * 2, 3).fill({ color, alpha: (0.25 + strength * 0.42) * point.depth });
-      graphics.rect(x - Math.max(1, cloudRadius - 2), y - 3, Math.max(2, cloudRadius * 2 - 4), 2).fill({ color, alpha: (0.18 + strength * 0.3) * point.depth });
+      const alpha = (0.18 + strength * 0.34) * point.depth;
+      graphics.ellipse(point.x - cloudRadius * 0.35, point.y, cloudRadius * 0.85, cloudRadius * 0.42).fill({ color, alpha: alpha * 0.82 });
+      graphics.ellipse(point.x + cloudRadius * 0.25, point.y - cloudRadius * 0.12, cloudRadius, cloudRadius * 0.5).fill({ color, alpha });
+      graphics.ellipse(point.x, point.y + cloudRadius * 0.08, cloudRadius * 1.3, cloudRadius * 0.36).fill({ color, alpha: alpha * 0.72 });
       if (cell.type === 'rain' || cell.type === 'storm') {
-        graphics.rect(x - cloudRadius, y + 3, 1, 3).fill({ color: PALETTE.rain, alpha: 0.55 * point.depth });
-        graphics.rect(x + Math.max(1, cloudRadius - 2), y + 2, 1, 4).fill({ color: PALETTE.rain, alpha: 0.45 * point.depth });
+        const drops = 5;
+        for (let i = 0; i < drops; i += 1) {
+          const offset = (i / (drops - 1) - 0.5) * cloudRadius * 1.45;
+          graphics.moveTo(point.x + offset, point.y + cloudRadius * 0.35)
+            .lineTo(point.x + offset - 1.5, point.y + cloudRadius * 0.72)
+            .stroke({ color: PALETTE.rain, width: 1.2, alpha: 0.42 * point.depth });
+        }
       }
       lastDrawnWeather += 1;
     }
@@ -472,7 +478,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     for (const [id, position] of components.position.entries()) {
       if (lastDrawnEntities >= maximum) break;
       let color = null;
-      let baseSize = 1;
+      let baseSize = 1.5;
       let alpha = 1;
       if (components.resource.has(id)) {
         const plant = components.resource.get(id);
@@ -480,22 +486,22 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         color = PALETTE.plant;
         alpha = 0.35 + clamp(plant.amount || 0, 0, 1) * 0.65;
       } else if (components.agent.has(id)) color = biosphere.getSpeciesForEntity(id)?.color || PALETTE.grazer;
-      else if (components.predator.has(id)) { color = biosphere.getSpeciesForEntity(id)?.color || PALETTE.predator; baseSize = 2; }
-      else if (components.apex.has(id)) { color = biosphere.getSpeciesForEntity(id)?.color || PALETTE.apex; baseSize = 2; }
+      else if (components.predator.has(id)) { color = biosphere.getSpeciesForEntity(id)?.color || PALETTE.predator; baseSize = 2.3; }
+      else if (components.apex.has(id)) { color = biosphere.getSpeciesForEntity(id)?.color || PALETTE.apex; baseSize = 2.7; }
       if (color === null) continue;
       const point = worldToSphereScreen(position.x / world.width, position.y / world.height, width, height);
       if (!point.visible) continue;
-      const size = clamp(Math.round(baseSize * Math.sqrt(camera.zoom)), baseSize, baseSize * 3);
-      graphics.rect(Math.floor(point.x), Math.floor(point.y), size, size).fill({ color: shadeColor(color, 0.58 + point.depth * 0.42), alpha });
+      const size = clamp(baseSize * Math.sqrt(camera.zoom), baseSize, baseSize * 3.5);
+      graphics.circle(point.x, point.y, size).fill({ color: shadeColor(color, 0.58 + point.depth * 0.42), alpha });
       lastDrawnEntities += 1;
     }
 
     const selected = worldToSphereScreen(selectedPoint.x / world.width, selectedPoint.y / world.height, width, height);
     if (selected.visible) {
-      graphics.circle(selected.x, selected.y, clamp(3 + camera.zoom, 4, 9)).stroke({ color: PALETTE.selection, width: 1, alpha: 0.92 });
-      graphics.circle(selected.x, selected.y, 1).fill(PALETTE.selection);
+      graphics.circle(selected.x, selected.y, clamp(4 + camera.zoom * 1.2, 5, 13)).stroke({ color: PALETTE.selection, width: 2, alpha: 0.92 });
+      graphics.circle(selected.x, selected.y, 2).fill(PALETTE.selection);
     }
-    graphics.circle(cx, cy, radius).stroke({ color: PALETTE.atmosphere, width: 1, alpha: 0.76 });
+    graphics.circle(cx, cy, radius).stroke({ color: PALETTE.atmosphere, width: 2, alpha: 0.76 });
   }
 
   function updateInterface(force = false, timestamp = performance.now()) {
@@ -647,7 +653,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         spherical: true,
         logicalWidth: logicalSize.width,
         logicalHeight: logicalSize.height,
-        redrawFps: 7,
+        redrawFps: 30,
         terrainTilePx: TERRAIN_TILE_PX,
         maxDrawnOrganisms: MAX_DRAWN_ORGANISMS,
         maxDrawnWeather: MAX_DRAWN_WEATHER,
@@ -718,7 +724,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   const api = {
     id: 'runtime.procedural-living-planet',
     name: 'Procedural Living Planet Runtime',
-    version: '2.0.0',
+    version: '2.1.0',
     execution: 'browser-single-master-clock',
     source: 'One PixiJS renderer reading the same terrain, water, climate, ecology, and evolution state used by the simulation',
     license: 'Project license plus dependency licenses in THIRD_PARTY_NOTICES.md',
@@ -758,10 +764,10 @@ function chooseLogicalSize() {
   const aspect = clamp(innerWidth / Math.max(1, innerHeight), 0.45, 2.4);
   if (aspect < 1) {
     const height = LOGICAL_SIZE_PX;
-    return { width: Math.max(176, Math.round(height * aspect)), height };
+    return { width: Math.max(420, Math.round(height * aspect)), height };
   }
   const width = LOGICAL_SIZE_PX;
-  return { width, height: Math.max(200, Math.round(width / aspect)) };
+  return { width, height: Math.max(420, Math.round(width / aspect)) };
 }
 
 function coupledSurfaceColor(terrain, water) {
@@ -812,5 +818,5 @@ function shadeColor(color, brightness) {
   return (red << 16) | (green << 8) | blue;
 }
 function formatCoordinate(value, positive, negative) { return `${Math.abs(value).toFixed(1)}°${value >= 0 ? positive : negative}`; }
-function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]); }
+function escapeHtml(value) { return String(value).replace(/[&<>'\"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '\"': '&quot;' })[character]); }
 function clamp(value, minimum, maximum) { return Math.min(maximum, Math.max(minimum, value)); }
