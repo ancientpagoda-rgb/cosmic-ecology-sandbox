@@ -7,7 +7,6 @@ const UI_INTERVAL_MS = 300;
 const LOGICAL_SIZE_PX = 900;
 const REDRAW_INTERVAL_MS = 1000 / 30;
 const TERRAIN_TILE_PX = 3;
-const MAX_DRAWN_ORGANISMS = 900;
 const MAX_DRAWN_WEATHER = 24;
 const PALETTE = {
   background: 0x030806,
@@ -474,9 +473,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
 
     lastDrawnEntities = 0;
     const components = world.ecs.components;
-    const maximum = MAX_DRAWN_ORGANISMS;
     for (const [id, position] of components.position.entries()) {
-      if (lastDrawnEntities >= maximum) break;
       let color = null;
       let baseSize = 1.5;
       let alpha = 1;
@@ -655,7 +652,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         logicalHeight: logicalSize.height,
         redrawFps: 30,
         terrainTilePx: TERRAIN_TILE_PX,
-        maxDrawnOrganisms: MAX_DRAWN_ORGANISMS,
+        maxDrawnOrganisms: null,
         maxDrawnWeather: MAX_DRAWN_WEATHER,
         drawnEntities: lastDrawnEntities,
         drawnWeather: lastDrawnWeather,
@@ -724,7 +721,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   const api = {
     id: 'runtime.procedural-living-planet',
     name: 'Procedural Living Planet Runtime',
-    version: '2.1.0',
+    version: '2.2.0',
     execution: 'browser-single-master-clock',
     source: 'One PixiJS renderer reading the same terrain, water, climate, ecology, and evolution state used by the simulation',
     license: 'Project license plus dependency licenses in THIRD_PARTY_NOTICES.md',
