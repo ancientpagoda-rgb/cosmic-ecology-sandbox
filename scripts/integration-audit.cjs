@@ -34,7 +34,7 @@ const rootEntry = 'app-seeded.js';
 requireText('index.html', 'Procedural Living Planet', 'honest fictional-planet title');
 requireText('index.html', 'fictional procedural living planet', 'fictional-world accessibility label');
 requireText('index.html', 'src="./app-seeded.js?', 'seeded project-relative root entry point');
-requireText('index.html', 'src="./core/surface-mode.js?', 'surface-mode entry point');
+requireText('index.html', 'src="./core/surface-mode-entry.js?', 'bundled surface-mode entry point');
 forbidText('index.html', 'scientific-earth-presentation', 'retired Earth renderer');
 forbidText('index.html', 'lilac-cloud-overlay', 'retired cloud sidecar');
 forbidText('index.html', 'rain-runoff-overlay', 'retired rain sidecar');
