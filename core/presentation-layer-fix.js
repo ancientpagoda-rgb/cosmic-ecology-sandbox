@@ -1,5 +1,5 @@
 const TAU = Math.PI * 2;
-const MAX_WEATHER = 13;
+const MAX_WEATHER = 64;
 const REFERENCE_RENDER_LONG_EDGE = 840;
 const REFERENCE_ANIMAL_SCALE_BOOST = 4.7;
 const GLOBE_RADIUS_FACTOR = 0.43;
@@ -32,6 +32,7 @@ async function installPresentationLayerFix() {
 
     let webglLost = false;
     let lastRenderError = '';
+    const nativeGetWeather = typeof dynamics.getWeather === 'function' ? dynamics.getWeather.bind(dynamics) : () => [];
 
     const weatherCanvas = document.createElement('canvas');
     weatherCanvas.id = 'weatherPresentationCanvas';
@@ -136,19 +137,49 @@ async function installPresentationLayerFix() {
       return visible;
     }
 
+    function radarColor(cell, strength) {
+      if (cell.type === 'snow') return strength > 0.72 ? '#d8efff' : '#8fc9ff';
+      if (cell.type === 'storm') {
+        if (strength > 0.82) return '#ff355d';
+        if (strength > 0.62) return '#ff8a34';
+        return '#ffd34d';
+      }
+      if (cell.type === 'rain') {
+        if (strength > 0.78) return '#ffb632';
+        if (strength > 0.52) return '#d7e83f';
+        return '#59d87a';
+      }
+      return '#72cfe8';
+    }
+
+    function drawRadarBlob(x, y, radius, color, strength, depth) {
+      const edgeAlpha = clamp((0.15 + strength * 0.20) * depth, 0.06, 0.34);
+      const coreAlpha = clamp((0.23 + strength * 0.34) * depth, 0.10, 0.58);
+      const gradient = ctx.createRadialGradient(x, y, radius * 0.08, x, y, radius);
+      gradient.addColorStop(0, colorWithAlpha(color, coreAlpha));
+      gradient.addColorStop(0.52, colorWithAlpha(color, coreAlpha * 0.74));
+      gradient.addColorStop(0.82, colorWithAlpha(color, edgeAlpha));
+      gradient.addColorStop(1, colorWithAlpha(color, 0));
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.ellipse(x, y, radius * 1.35, radius * 0.82, 0, 0, TAU);
+      ctx.fill();
+    }
+
+    function colorWithAlpha(hex, alpha) {
+      const value = Number.parseInt(hex.slice(1), 16);
+      const r = (value >> 16) & 255;
+      const g = (value >> 8) & 255;
+      const b = value & 255;
+      return `rgba(${r},${g},${b},${clamp(alpha, 0, 1)})`;
+    }
+
     function drawWeather() {
       if (!ctx) return 0;
       syncLayers();
       const width = weatherCanvas.width;
       const height = weatherCanvas.height;
       const detailScale = resolutionScale();
-      const cloudBand = Math.max(3, Math.round(5 * detailScale));
-      const cloudBandThin = Math.max(2, Math.round(3 * detailScale));
-      const rainWidth = Math.max(1, Math.round(2 * detailScale));
-      const rainLength = Math.max(4, Math.round(6 * detailScale));
-      const snowSize = Math.max(2, Math.round(2 * detailScale));
-      const precipitationStep = Math.max(7, Math.round(10 * detailScale));
-
       ctx.clearRect(0, 0, width, height);
 
       if (sourceCanvas.dataset.dragging === 'true') {
@@ -158,57 +189,42 @@ async function installPresentationLayerFix() {
       weatherCanvas.style.display = 'block';
 
       const camera = runtime.getCamera();
-      const cells = dynamics.getWeather?.() || [];
+      const cells = nativeGetWeather() || [];
       document.documentElement.dataset.totalWeatherCells = String(cells.length);
       let drawn = 0;
 
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
       for (const cell of cells) {
         if (drawn >= MAX_WEATHER) break;
         const point = project(cell.x, cell.y, camera, width, height);
         if (!point.visible) continue;
 
         const strength = clamp(cell.strength ?? 0.5, 0, 1);
-        const cloudRadius = Math.max(Math.round(4 * detailScale), Math.round((cell.radius || 10) / world.width * point.radius * 2.55));
-        const alpha = clamp((0.34 + strength * 0.28) * point.depth, 0.12, 0.68);
-        const x = Math.round(point.x);
-        const y = Math.round(point.y);
-        const upperOffset = Math.round(7 * detailScale);
-        const lowerOffset = Math.round(3 * detailScale);
-        const insetWide = Math.round(5 * detailScale);
-        const insetNarrow = Math.round(8 * detailScale);
+        const radarRadius = Math.max(
+          Math.round(7 * detailScale),
+          Math.round((cell.radius || 10) / world.width * point.radius * 3.5),
+        );
+        const color = radarColor(cell, strength);
+        drawRadarBlob(point.x, point.y, radarRadius, color, strength, point.depth);
 
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = cell.type === 'storm' ? '#8d999f' : '#e1e9e5';
-        ctx.fillRect(x - cloudRadius, y - Math.floor(cloudBand / 2), cloudRadius * 2, cloudBand);
-        ctx.fillRect(x - Math.max(3, cloudRadius - insetWide), y - upperOffset, Math.max(6, cloudRadius * 2 - insetWide * 2), cloudBand);
-        ctx.fillRect(x - Math.max(2, cloudRadius - insetNarrow), y + lowerOffset, Math.max(4, cloudRadius * 2 - insetNarrow * 2), cloudBandThin);
-
-        if (cell.type === 'rain' || cell.type === 'storm' || cell.type === 'snow') {
-          ctx.globalAlpha = clamp(alpha * 0.84, 0.18, 0.62);
-          ctx.fillStyle = cell.type === 'snow' ? '#dce9ee' : '#78b9d5';
-          for (let offset = -cloudRadius + precipitationStep; offset <= cloudRadius - precipitationStep; offset += precipitationStep) {
-            ctx.fillRect(
-              x + offset,
-              y + Math.round(8 * detailScale) + (Math.abs(offset) % Math.max(2, Math.round(3 * detailScale))),
-              rainWidth,
-              cell.type === 'snow' ? snowSize : rainLength,
-            );
-          }
+        if ((cell.type === 'storm' || cell.type === 'rain') && strength > 0.58) {
+          const innerRadius = radarRadius * (0.30 + strength * 0.18);
+          drawRadarBlob(
+            point.x + radarRadius * 0.10,
+            point.y - radarRadius * 0.06,
+            innerRadius,
+            cell.type === 'storm' ? (strength > 0.82 ? '#ff2d55' : '#ff9f32') : '#e9e83d',
+            strength,
+            point.depth,
+          );
         }
-
-        if (cell.type === 'storm' && strength > 0.62) {
-          ctx.globalAlpha = clamp(alpha * 0.9, 0.22, 0.72);
-          ctx.fillStyle = '#f4f0bd';
-          const boltWidth = Math.max(1, Math.round(2 * detailScale));
-          ctx.fillRect(x, y + Math.round(8 * detailScale), boltWidth, Math.round(5 * detailScale));
-          ctx.fillRect(x - boltWidth, y + Math.round(13 * detailScale), boltWidth, Math.round(4 * detailScale));
-        }
-
         drawn += 1;
       }
+      ctx.restore();
 
-      ctx.globalAlpha = 1;
       document.documentElement.dataset.visibleWeatherCells = String(drawn);
+      document.documentElement.dataset.weatherPresentation = 'radar';
       return drawn;
     }
 
@@ -247,8 +263,14 @@ async function installPresentationLayerFix() {
       let rendered = false;
       if (!webglLost) {
         try {
-          result = originalRender(frame);
-          rendered = true;
+          const currentGetWeather = dynamics.getWeather;
+          dynamics.getWeather = () => [];
+          try {
+            result = originalRender(frame);
+            rendered = true;
+          } finally {
+            dynamics.getWeather = currentGetWeather;
+          }
           lastRenderError = '';
         } catch (error) {
           const message = String(error?.message || error);
@@ -276,6 +298,7 @@ async function installPresentationLayerFix() {
     document.documentElement.dataset.presentationLayerFix = 'active';
     document.documentElement.dataset.presentationLayerError = '';
     document.documentElement.dataset.webglContext = 'ok';
+    document.documentElement.dataset.weatherPresentation = 'radar';
 
     const previousDiagnostics = window.realitySandboxPresentationDiagnostics;
     window.realitySandboxPresentationDiagnostics = () => ({
@@ -288,6 +311,7 @@ async function installPresentationLayerFix() {
       visibleAnimalMorphology: Number(document.documentElement.dataset.visibleAnimalMorphology || 0),
       morphologyPresent: Boolean(document.getElementById('morphologyOverlay')),
       weatherCanvasPresent: Boolean(document.getElementById('weatherPresentationCanvas')),
+      weatherPresentation: document.documentElement.dataset.weatherPresentation || 'unknown',
       renderResolution: `${sourceCanvas.width}x${sourceCanvas.height}`,
       renderQuality: document.documentElement.dataset.renderQuality || 'unknown',
       animalScaleBoost: Number(document.documentElement.dataset.animalScaleBoost || 0),
