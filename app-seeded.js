@@ -16,13 +16,15 @@ import { createLivingSystems } from './core/living-systems.js';
 import { createPlanetDynamics } from './core/planet-dynamics.js';
 import { createBiosphere } from './core/biosphere.js';
 import { createWaterCycle } from './core/water-cycle.js';
+import { readOriginScenario } from './core/origin-scenario.js';
 
 const FIXED_DT = 0.06;
 const MAX_STEPS_PER_FRAME = 3;
 const STORAGE_PREFIX = 'reality-sandbox-living-planet-v2';
 const PLANET_NAME = 'Nysa';
 const DEFAULT_PLANET_SEED = 'nysa-living-planet-734221';
-const PLANET_SEED = readSeedFromUrl();
+const ORIGIN_SCENARIO = readOriginScenario();
+const PLANET_SEED = ORIGIN_SCENARIO?.planetSeed || readSeedFromUrl();
 const NUMERIC_SEED = hashSeed(PLANET_SEED);
 const STORAGE_KEY = `${STORAGE_PREFIX}:${PLANET_SEED}`;
 
@@ -61,6 +63,19 @@ function hashSeed(value) {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0 || 734221;
+}
+
+function applyOriginConditions(target, scenario) {
+  if (!scenario) return;
+  // These are sandbox initial conditions, not a physical derivation of biology
+  // from cosmology. The normal ecological feedback loop takes over after boot.
+  target.originScenario = scenario;
+  target.globals.fertility = Math.max(0.2, Math.min(1.2,
+    target.globals.fertility * (0.72 + scenario.energyThroughput * 0.28 + scenario.star.metallicity * 0.12),
+  ));
+  target.globals.reproductionThreshold = Math.max(1.2, Math.min(2.2,
+    target.globals.reproductionThreshold * (0.72 + scenario.selectionPressure * 0.28),
+  ));
 }
 
 function readSavedState() {
@@ -215,6 +230,7 @@ function installDebugApi() {
         model: 'procedural',
         seed: PLANET_SEED,
         numericSeed: NUMERIC_SEED,
+        originScenario: ORIGIN_SCENARIO,
         tick: world.tick,
         paused,
         timeScale,
@@ -255,12 +271,13 @@ async function init() {
     world.planetName = PLANET_NAME;
     world.model = 'procedural';
     world.seed = PLANET_SEED;
+    applyOriginConditions(world, ORIGIN_SCENARIO);
     if (Number.isFinite(saved.timeScale)) timeScale = Math.max(0.25, Math.min(20, saved.timeScale));
     paused = Boolean(saved.paused);
 
     orbitalSystem = createOrbitalSystem(world, {
       seed: NUMERIC_SEED,
-      star: {
+      star: ORIGIN_SCENARIO?.star || {
         id: 'nysa-star',
         name: 'Nysa Star',
         mass: 0.94,
@@ -332,6 +349,7 @@ async function init() {
       defaultSeed: DEFAULT_PLANET_SEED,
       numericSeed: NUMERIC_SEED,
       storageKey: STORAGE_KEY,
+      originScenario: ORIGIN_SCENARIO,
     };
     window.dispatchEvent(new CustomEvent('reality-sandbox-seed-ready', { detail: window.realitySandboxSeed }));
     window.realitySandboxModules = moduleHost;

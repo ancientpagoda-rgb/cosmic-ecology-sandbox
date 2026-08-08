@@ -39,6 +39,14 @@ forbidText('index.html', 'scientific-earth-presentation', 'retired Earth rendere
 forbidText('index.html', 'lilac-cloud-overlay', 'retired cloud sidecar');
 forbidText('index.html', 'rain-runoff-overlay', 'retired rain sidecar');
 forbidText('index.html', 'iphone-performance-mode', 'retired mobile sidecar');
+requireText('origins.html', 'id="originForm"', 'separate Origins scenario form');
+requireText('origins.html', 'From a universe to one living world', 'Origins narrative handoff');
+requireText('origins.html', 'id="cosmosCanvas"', 'interactive Origins cosmic canvas');
+requireText('origins.html', 'id="cosmicTimeline"', 'interactive Origins time control');
+requireText('origins.js', 'originScenarioParams', 'Origins route emits a portable scenario URL');
+requireText('origins.js', 'function drawCosmos', 'Origins route renders a seed-driven cosmic timeline');
+requireText('core/origin-scenario.js', "origin: 'epic'", 'explicit Origins handoff contract');
+requireText('app-seeded.js', 'readOriginScenario', 'planet root consumes Origins scenario');
 
 for (const marker of [
   'createOrbitalSystem',

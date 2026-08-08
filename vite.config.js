@@ -13,6 +13,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(process.cwd(), 'index.html'),
+        origins: resolve(process.cwd(), 'origins.html'),
         cohesionLab: resolve(process.cwd(), 'cohesion-lab.html'),
         emergenceLab: resolve(process.cwd(), 'emergence-lab.html'),
         worldCoreLab: resolve(process.cwd(), 'world-core-lab.html'),

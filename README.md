@@ -25,11 +25,17 @@ The public root provides:
 - defined global statistics, with normalized model indices labeled as indices;
 - pause, single-step, speed, camera, touch, and keyboard controls.
 
+`origins.html` is a separate seeded prologue. It translates a fictional
+universe seed and three conceptual parameters into a reproducible stellar and
+planetary starting scenario, then hands that scenario to the living-planet
+sandbox. It is deliberately a separate route: it does not add a second render
+loop or a cosmological solver to the planetary simulation.
+
 The globe renderer reads `core/planet.js`, `core/living-systems.js`, `core/water-cycle.js`, `core/world.js`, and `core/biosphere.js` directly. It does not replace the canvas, monkey-patch a second renderer, or draw an unrelated Earth surface over the simulated planet.
 
 ## Scope freeze
 
-Civilizations, spaceflight, relativistic missions, galaxies, cosmology, and Phase 12 are frozen. Their source and legacy experiments remain in repository history and compatibility pages, but the public root does not import, initialize, test, or advertise them.
+Civilizations, spaceflight, relativistic missions, galaxies, cosmology, and Phase 12 remain frozen in the public root. The new Origins route is a reduced-order explanatory prologue, not a reactivation of those retired runtimes; the public root still does not import or initialize them.
 
 The standalone V6.9 compatibility page remains available at:
 

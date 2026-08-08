@@ -97,6 +97,7 @@ function installSeedControls() {
       <button type="submit">Load</button>
       <button type="button" data-new-world>New World</button>
       <button type="button" data-copy-world>Copy Link</button>
+      <a class="planet-origin-link" href="./origins.html">Trace origins</a>
     </div>
     <output class="planet-seed-status" data-seed-status aria-live="polite"></output>`;
 

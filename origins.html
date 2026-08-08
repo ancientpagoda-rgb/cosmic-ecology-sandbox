@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#070914" />
+  <meta name="description" content="A seeded prologue from cosmic conditions to a procedural living planet." />
+  <title>Origins · Reality Sandbox</title>
+  <link rel="stylesheet" href="./origins.css" />
+</head>
+<body>
+  <main class="origins-shell">
+    <header class="origins-header">
+      <a class="back-link" href="./index.html">← Living planet</a>
+      <p class="eyebrow">Reality Sandbox · seeded prologue</p>
+      <h1>From a universe to one living world.</h1>
+      <p class="lede">This is a reduced-order narrative model. It creates a deterministic fictional starting scenario for Nysa; it does not claim to derive real biological history from cosmology.</p>
+    </header>
+
+    <section class="origins-layout">
+      <section class="cosmic-stage" aria-label="Cosmic evolution timeline">
+        <canvas id="cosmosCanvas" aria-label="Animated reduced-order cosmic evolution scene"></canvas>
+        <div class="cosmos-hud">
+          <p class="eyebrow">Current epoch</p>
+          <h2 id="epochTitle">Particle epoch</h2>
+          <p id="epochDetail"></p>
+          <p id="ageReadout" class="age-readout"></p>
+        </div>
+        <div class="cosmos-transport">
+          <button type="button" id="playOrigin" aria-pressed="false">Play</button>
+          <input id="cosmicTimeline" type="range" min="0" max="1000" value="0" step="1" aria-label="Arrow of cosmic time" />
+          <output id="timelinePercent">0.0%</output>
+        </div>
+        <dl class="cosmic-metrics" aria-label="Conceptual cosmic metrics">
+          <div><dt>Energy-rate density</dt><dd id="metricErd"></dd></div>
+          <div><dt>Local complexity</dt><dd id="metricComplexity"></dd></div>
+          <div><dt>Global entropy</dt><dd id="metricEntropy"></dd></div>
+          <div><dt>Usable gradient</dt><dd id="metricGradient"></dd></div>
+        </dl>
+        <ol class="epoch-list" id="epochList"></ol>
+      </section>
+
+      <aside class="scenario-panel">
+        <form id="originForm">
+          <h2>Shape an origin</h2>
+          <label>Universe seed<input name="universe" maxlength="96" spellcheck="false" /></label>
+          <label>Density fluctuations <output data-output="density"></output><input name="density" type="range" min="0.45" max="1.65" value="1" step="0.01" /></label>
+          <label>Energy throughput <output data-output="energy"></output><input name="energy" type="range" min="0.45" max="1.65" value="1" step="0.01" /></label>
+          <label>Selection pressure <output data-output="selection"></output><input name="selection" type="range" min="0.45" max="1.65" value="1" step="0.01" /></label>
+          <button class="primary" type="submit">Form this world →</button>
+          <button class="secondary" type="button" id="newUniverse">New universe</button>
+        </form>
+        <section class="scenario-readout" aria-live="polite">
+          <p class="eyebrow">Planet handoff</p>
+          <h2 id="starName">Origin Star</h2>
+          <dl>
+            <div><dt>Stellar class</dt><dd id="starClass"></dd></div>
+            <div><dt>Mass</dt><dd id="starMass"></dd></div>
+            <div><dt>Metallicity</dt><dd id="starMetallicity"></dd></div>
+            <div><dt>Age</dt><dd id="starAge"></dd></div>
+          </dl>
+          <p id="planetSeed" class="seed-readout"></p>
+        </section>
+      </aside>
+    </section>
+  </main>
+  <script type="module" src="./origins.js"></script>
+</body>
+</html>
