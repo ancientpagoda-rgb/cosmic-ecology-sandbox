@@ -38,20 +38,26 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import json
           import os
+
+          sha = os.environ['GITHUB_SHA']
           path = Path('dist/index.html')
           text = path.read_text()
-          stamp = f'<meta name="reality-sandbox-deploy-sha" content="{os.environ["GITHUB_SHA"]}" />'
+          stamp = f'<meta name="reality-sandbox-deploy-sha" content="{sha}" />'
           text = text.replace('</head>', f'  {stamp}\n</head>', 1)
           path.write_text(text)
+          Path('dist/version.json').write_text(json.dumps({'sha': sha}) + '\n')
           PY
 
       - name: Verify public artifact identity
         run: |
           test -f dist/index.html
+          test -f dist/version.json
           grep -q "Reality Sandbox · Procedural Living Planet" dist/index.html
           grep -q "Nysa, a fictional procedural living planet" dist/index.html
           grep -q "${GITHUB_SHA}" dist/index.html
+          grep -q "${GITHUB_SHA}" dist/version.json
           grep -R -q "procedural-living-planet" dist/assets
 
       - name: Configure Pages
@@ -88,15 +94,21 @@ jobs:
           set -euo pipefail
           test -n "${PAGE_URL}"
           ROOT_URL="${PAGE_URL%/}/?verify=${GITHUB_SHA}"
+          VERSION_URL="${PAGE_URL%/}/version.json?verify=${GITHUB_SHA}"
 
           for attempt in $(seq 1 60); do
             if curl --fail --silent --show-error --location \
               --header 'Cache-Control: no-cache' \
               --header 'Pragma: no-cache' \
               "${ROOT_URL}" --output /tmp/nysa-index.html \
+              && curl --fail --silent --show-error --location \
+              --header 'Cache-Control: no-cache' \
+              --header 'Pragma: no-cache' \
+              "${VERSION_URL}" --output /tmp/nysa-version.json \
               && grep -q "Reality Sandbox · Procedural Living Planet" /tmp/nysa-index.html \
               && grep -q "Nysa, a fictional procedural living planet" /tmp/nysa-index.html \
-              && grep -q "${GITHUB_SHA}" /tmp/nysa-index.html; then
+              && grep -q "${GITHUB_SHA}" /tmp/nysa-index.html \
+              && grep -q "${GITHUB_SHA}" /tmp/nysa-version.json; then
               exit 0
             fi
             sleep 10
