@@ -61,11 +61,16 @@ export function createPlanetDynamics(world, living, waterCycle, rng = Math.rando
 
   function getWeather() {
     if (!waterCycle) return [];
-    return waterCycle.getCloudCells(28).map(cell => ({
+    // Keep cloud cover independent from precipitation. The presentation layer can
+    // therefore render a continuous satellite/radar field even when rainSystems=0.
+    return waterCycle.getCloudCells(240).map(cell => ({
       x: cell.x,
       y: cell.y,
       strength: clamp(cell.cloud, 0, 1),
-      radius: 18 + cell.cloud * 55,
+      cloud: clamp(cell.cloud, 0, 1),
+      rain: Math.max(0, cell.rain || 0),
+      snow: Math.max(0, cell.snow || 0),
+      radius: 14 + cell.cloud * 42,
       type: cell.snow > cell.rain && cell.snow > 0.001
         ? 'snow'
         : cell.rain > 0.006 || cell.flood > 0.6
