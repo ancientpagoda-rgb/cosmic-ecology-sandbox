@@ -135,7 +135,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         </div>
       </section>
       <aside class="planet-legend" aria-label="Map legend">
-        <span><i style="background:#9bd36d"></i>plants</span>
+        <span><i style="background:#9bd36d"></i>plants (terrain)</span>
         <span><i style="background:#f0ddb0"></i>grazers</span>
         <span><i style="background:#e46f55"></i>predators</span>
         <span><i style="background:#b493d4"></i>apex</span>
@@ -474,22 +474,17 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     lastDrawnEntities = 0;
     const components = world.ecs.components;
     for (const [id, position] of components.position.entries()) {
+      if (components.resource.has(id)) continue;
       let color = null;
       let baseSize = 1.5;
-      let alpha = 1;
-      if (components.resource.has(id)) {
-        const plant = components.resource.get(id);
-        if ((plant.amount || 0) <= 0.02) continue;
-        color = PALETTE.plant;
-        alpha = 0.35 + clamp(plant.amount || 0, 0, 1) * 0.65;
-      } else if (components.agent.has(id)) color = biosphere.getSpeciesForEntity(id)?.color || PALETTE.grazer;
+      if (components.agent.has(id)) color = biosphere.getSpeciesForEntity(id)?.color || PALETTE.grazer;
       else if (components.predator.has(id)) { color = biosphere.getSpeciesForEntity(id)?.color || PALETTE.predator; baseSize = 2.3; }
       else if (components.apex.has(id)) { color = biosphere.getSpeciesForEntity(id)?.color || PALETTE.apex; baseSize = 2.7; }
       if (color === null) continue;
       const point = worldToSphereScreen(position.x / world.width, position.y / world.height, width, height);
       if (!point.visible) continue;
       const size = clamp(baseSize * Math.sqrt(camera.zoom), baseSize, baseSize * 3.5);
-      graphics.circle(point.x, point.y, size).fill({ color: shadeColor(color, 0.58 + point.depth * 0.42), alpha });
+      graphics.circle(point.x, point.y, size).fill({ color: shadeColor(color, 0.58 + point.depth * 0.42), alpha: 1 });
       lastDrawnEntities += 1;
     }
 
@@ -721,7 +716,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   const api = {
     id: 'runtime.procedural-living-planet',
     name: 'Procedural Living Planet Runtime',
-    version: '2.2.0',
+    version: '2.3.0',
     execution: 'browser-single-master-clock',
     source: 'One PixiJS renderer reading the same terrain, water, climate, ecology, and evolution state used by the simulation',
     license: 'Project license plus dependency licenses in THIRD_PARTY_NOTICES.md',
