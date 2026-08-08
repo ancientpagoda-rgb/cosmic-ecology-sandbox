@@ -35,13 +35,18 @@ fs.mkdirSync(artifactDir, { recursive: true });
         const rect = element.getBoundingClientRect();
         return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0 && rect.width > 0 && rect.height > 0;
       };
+      const approvedPresentationCanvases = new Set(['weatherPresentationCanvas', 'surfaceDetailCanvas', 'surfaceModeCanvas']);
       const canvas = document.getElementById('lofiLivingCanvas');
+      const visibleCanvasElements = [...document.querySelectorAll('canvas')].filter(visible);
+      const visibleCanvases = visibleCanvasElements.map(element => ({ id: element.id, width: element.width, height: element.height }));
+      const visibleSimulationCanvases = visibleCanvases.filter(item => !approvedPresentationCanvases.has(item.id));
       return {
         title: document.title,
         diagnostics: window.realitySandboxDebug.diagnostics(),
         snapshot: window.realitySandboxUnified.getSnapshot(),
         modules: window.realitySandboxModules.list().map(module => module.id),
-        visibleCanvases: [...document.querySelectorAll('canvas')].filter(visible).length,
+        visibleCanvases,
+        visibleSimulationCanvases,
         visibleControls: [...document.querySelectorAll('.planet-dashboard button, .planet-dashboard select')].filter(visible).length,
         statDefinitions: document.querySelectorAll('.planet-stat[title][tabindex="0"]').length,
         statValues: [...document.querySelectorAll('[data-stat]')].map(node => node.textContent.trim()),
@@ -57,7 +62,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(initial.modules.join('|') === 'planet.orbit-seasons|planet.water-cycle|planet.living-ecology|planet.climate-terrain-feedbacks|runtime.procedural-living-planet', `Unexpected root modules: ${initial.modules.join(', ')}`);
     assert(initial.snapshot.mode === 'procedural-living-planet' && initial.snapshot.planet.fictional && !initial.snapshot.planet.earthData, 'The root is not honestly labeled as a fictional procedural planet.');
     assert(initial.snapshot.presentation.renderer === 'pixi-single-canvas' && !initial.snapshot.presentation.tickerStarted, 'The single-renderer contract failed.');
-    assert(initial.visibleCanvases === 1 && initial.canvas, 'The root must have exactly one visible canvas.');
+    assert(initial.visibleSimulationCanvases.length === 1 && initial.visibleSimulationCanvases[0].id === 'lofiLivingCanvas' && initial.canvas, `The root must have one visible simulation canvas plus approved presentation layers: ${JSON.stringify(initial.visibleCanvases)}`);
     assert(initial.visibleControls === 3 && initial.inspector, 'The integrated controls or inspector are missing.');
     assert(initial.statDefinitions === 8, 'All eight global statistics must expose definitions.');
     assert(initial.statValues.every(value => value && value !== '—'), `A statistic did not initialize: ${initial.statValues.join(', ')}`);
