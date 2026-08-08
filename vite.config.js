@@ -2,7 +2,9 @@ import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  base: '/reality-sandbox/',
+  // Keep built asset URLs relative so the app works from any GitHub Pages
+  // repository path (and in local static previews).
+  base: './',
   define: {
     'THREE.REVISION': JSON.stringify('184'),
   },

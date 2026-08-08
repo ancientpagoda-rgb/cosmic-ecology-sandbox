@@ -10,7 +10,7 @@ Nysa is not Earth and does not use measured Earth data. Every quantity labeled `
 
 ## Public experience
 
-https://ancientpagoda-rgb.github.io/reality-sandbox/
+https://ancientpagoda-rgb.github.io/cosmic-ecology-sandbox/
 
 The public root provides:
 
@@ -39,7 +39,7 @@ Civilizations, spaceflight, relativistic missions, galaxies, cosmology, and Phas
 
 The standalone V6.9 compatibility page remains available at:
 
-https://ancientpagoda-rgb.github.io/reality-sandbox/reality-engine-v6-9.html
+https://ancientpagoda-rgb.github.io/cosmic-ecology-sandbox/reality-engine-v6-9.html
 
 It is preserved as an archived experimental surface and is not the product direction of the public root.
 
