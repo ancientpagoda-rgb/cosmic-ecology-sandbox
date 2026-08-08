@@ -64,12 +64,19 @@ jobs:
           REALITY_REQUIRE_REBOUND: "0"
         run: node scripts/unified-smoke.cjs
 
-      - name: Verify Pixi-only root
+      - name: Verify Pixi simulation root
         id: root_renderer_test
         env:
           REALITY_BASE_URL: http://127.0.0.1:4173/
           REALITY_ROOT_RENDERER_ARTIFACT_DIR: artifacts/root-renderer-smoke
         run: node scripts/root-renderer-smoke.cjs
+
+      - name: Enter, move through, and exit surface mode
+        id: surface_mode_test
+        env:
+          REALITY_BASE_URL: http://127.0.0.1:4173/
+          REALITY_SURFACE_MODE_ARTIFACT_DIR: artifacts/surface-mode-smoke
+        run: node scripts/surface-mode-smoke.cjs
 
       - name: Upload browser diagnostics
         if: always()
@@ -80,6 +87,7 @@ jobs:
             artifacts/unified-smoke
             artifacts/root-renderer-smoke
             artifacts/iphone-sphere-smoke
+            artifacts/surface-mode-smoke
             /tmp/reality-preview.log
           if-no-files-found: warn
           retention-days: 30
@@ -92,13 +100,14 @@ jobs:
             const unifiedOk = '${{ steps.unified_test.outcome }}' === 'success';
             const rootRendererOk = '${{ steps.root_renderer_test.outcome }}' === 'success';
             const iphoneSphereOk = '${{ steps.iphone_sphere_test.outcome }}' === 'success';
-            const ok = unifiedOk && rootRendererOk && iphoneSphereOk;
+            const surfaceModeOk = '${{ steps.surface_mode_test.outcome }}' === 'success';
+            const ok = unifiedOk && rootRendererOk && iphoneSphereOk && surfaceModeOk;
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
               state: ok ? 'success' : 'failure',
               context: 'browser/unified-runtime',
-              description: ok ? 'Living planet, single renderer, inspector, and iPhone checks passed' : 'A living-planet browser or visual check failed',
+              description: ok ? 'Living planet, presentation layers, surface mode, and iPhone checks passed' : 'A living-planet browser or visual check failed',
               target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions`,
             });
