@@ -1,10 +1,16 @@
-const PANEL_STORAGE_KEY = 'reality-sandbox-panel-state-v1';
+const PANEL_STORAGE_KEY = 'reality-sandbox-panel-state-v2';
 const PANEL_DEFINITIONS = [
   ['.planet-masthead', 'intro', 'intro panel'],
   ['.planet-dashboard', 'overview', 'overview panel'],
   ['.planet-inspector', 'inspector', 'region inspector'],
   ['.planet-legend', 'legend', 'map legend'],
 ];
+const DEFAULT_PANEL_STATE = {
+  intro: true,
+  overview: true,
+  inspector: true,
+  legend: true,
+};
 
 let panelState = readPanelState();
 let fittedCanvas = null;
@@ -14,9 +20,11 @@ let resizeFrame = 0;
 function readPanelState() {
   try {
     const stored = JSON.parse(localStorage.getItem(PANEL_STORAGE_KEY) || '{}');
-    return stored && typeof stored === 'object' ? stored : {};
+    return stored && typeof stored === 'object'
+      ? { ...DEFAULT_PANEL_STATE, ...stored }
+      : { ...DEFAULT_PANEL_STATE };
   } catch {
-    return {};
+    return { ...DEFAULT_PANEL_STATE };
   }
 }
 
