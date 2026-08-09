@@ -49,6 +49,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
   let dragX = 0;
   let dragY = 0;
   let shellDisplay = '';
+  let terrainRendererRequested = false;
 
   const layer = document.createElement('div');
   layer.id = 'surfaceModeLayer';
@@ -206,6 +207,15 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     keys.clear();
     lastHudUpdate = -Infinity;
     document.documentElement.dataset.surfaceMode = 'active';
+    // Keep the heavy Three.js terrain scene out of the overview page. It is
+    // requested only after the explorer intentionally enters Surface Mode.
+    if (!terrainRendererRequested) {
+      terrainRendererRequested = true;
+      import('./surface-terrain-water-sphere-gpu-v37.js').catch(error => {
+        console.warn('[Surface Mode] GPU terrain scene could not start.', error);
+        document.documentElement.dataset.surfaceGpu = 'load-failed';
+      });
+    }
     layer.style.pointerEvents = 'auto';
     layer.style.opacity = '1';
     enterButton.style.display = 'none';
