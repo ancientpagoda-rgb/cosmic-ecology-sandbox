@@ -104,6 +104,12 @@ select { font: inherit; }
 .planet-pulse h1 { margin: 0; font: 650 20px/1.08 Georgia, 'Times New Roman', serif; letter-spacing: -.02em; }
 .planet-pulse [data-pulse-description] { margin: 10px 0 0; color: #c6d1c9; font-size: 13px; line-height: 1.45; }
 .planet-pulse__region { margin-top: 12px; color: var(--muted); font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; }
+.planet-pulse__memory { margin-top: 11px; color: var(--muted); font-size: 11px; }
+.planet-pulse__memory summary { cursor: pointer; color: #cbd8cf; font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .05em; text-transform: uppercase; }
+.planet-pulse__memory ol { display: grid; gap: 6px; margin: 9px 0 0; padding: 0; list-style: none; }
+.planet-pulse__memory li { display: grid; grid-template-columns: 58px 1fr; gap: 7px; line-height: 1.3; }
+.planet-pulse__memory li b { color: var(--amber); font: 700 9px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-transform: uppercase; }
+.planet-pulse__memory li span { color: #c2cdc5; }
 .planet-pulse__actions { display: grid; grid-template-columns: 1fr; gap: 7px; margin-top: 14px; }
 .planet-pulse button { min-height: 34px; border: 1px solid rgb(var(--jade-rgb) / .5); border-radius: 9px; background: rgb(var(--jade-rgb) / .14); color: var(--text); cursor: pointer; font: 700 11px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .planet-pulse button:hover { background: rgb(var(--jade-rgb) / .28); }

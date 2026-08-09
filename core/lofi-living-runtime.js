@@ -198,6 +198,10 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       <h1 data-pulse-title>Eidolon has changed while you were away.</h1>
       <p data-pulse-description></p>
       <div class="planet-pulse__region" data-pulse-region>Saltglass Delta</div>
+      <details class="planet-pulse__memory">
+        <summary>Planet memory</summary>
+        <ol data-pulse-history></ol>
+      </details>
       <div class="planet-pulse__actions">
         <button type="button" data-pulse-observe>Observe Saltglass</button>
         <button type="button" data-pulse-release>Release drought lineage</button>
@@ -226,6 +230,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         title: seasonPulse.querySelector('[data-pulse-title]'),
         description: seasonPulse.querySelector('[data-pulse-description]'),
         region: seasonPulse.querySelector('[data-pulse-region]'),
+        history: seasonPulse.querySelector('[data-pulse-history]'),
         observe: seasonPulse.querySelector('[data-pulse-observe]'),
         release: seasonPulse.querySelector('[data-pulse-release]'),
         advance: seasonPulse.querySelector('[data-pulse-advance]'),
@@ -887,6 +892,10 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     nodes.title.textContent = pulse.title;
     nodes.description.textContent = pulse.description;
     nodes.region.textContent = `${pulse.region.name} · ${pulse.region.biome}`;
+    nodes.history.innerHTML = pulse.region.history
+      .slice(0, 4)
+      .map(item => `<li><b>Season ${item.season}</b><span>${escapeHtml(item.title)}</span></li>`)
+      .join('');
     nodes.release.textContent = pulse.releaseLabel;
     nodes.release.disabled = !pulse.releaseAvailable;
   }
