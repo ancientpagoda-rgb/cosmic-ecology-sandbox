@@ -64,6 +64,35 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(metrics.statDefinitions === 8, 'Mobile statistics lost their definitions.');
     assert(Math.abs(metrics.after.longitude - before.longitude) > 0.5 || Math.abs(metrics.after.latitude - before.latitude) > 0.5, 'Touch inspection did not select a region.');
     assert(metrics.snapshot.presentation.drawnEntities > 0 && pageErrors.length === 0, `Mobile scene is empty or errored: ${pageErrors.join(' | ')}`);
+
+    await page.locator('#enterSurfaceMode').tap();
+    await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'active' &&
+      window.realitySandboxPresentationDiagnostics?.().surfaceGpu?.active === true &&
+      document.documentElement.dataset.surfaceMobileControls === 'active', null, { timeout: 20000 });
+    const surfaceBefore = await page.evaluate(() => window.realitySandboxSurfaceMode.getPlayer());
+    await page.evaluate(() => {
+      const stick = document.querySelector('#surfaceMobileControls [aria-label="Movement joystick"]');
+      const rect = stick.getBoundingClientRect();
+      // Playwright-created touch events are synthetic and cannot own browser
+      // pointer capture. The production control handles real touch capture;
+      // bypass it here so this test exercises the joystick's movement logic.
+      stick.setPointerCapture = () => {};
+      const event = (type, x, y) => stick.dispatchEvent(new PointerEvent(type, {
+        pointerId: 44, pointerType: 'touch', clientX: x, clientY: y, bubbles: true, cancelable: true,
+      }));
+      event('pointerdown', rect.left + rect.width / 2, rect.top + rect.height / 2 - rect.height * 0.28);
+      window.setTimeout(() => event('pointerup', rect.left + rect.width / 2, rect.top + rect.height / 2 - rect.height * 0.28), 460);
+    });
+    await page.waitForTimeout(620);
+    const surfaceAfter = await page.evaluate(() => ({
+      player: window.realitySandboxSurfaceMode.getPlayer(),
+      controlsVisible: getComputedStyle(document.getElementById('surfaceMobileControls')).display !== 'none',
+    }));
+    assert(surfaceAfter.controlsVisible, 'Surface Mode did not show touch controls on iPhone.');
+    assert(Math.hypot(surfaceAfter.player.x - surfaceBefore.x, surfaceAfter.player.y - surfaceBefore.y) > 0.5, 'The iPhone Surface joystick did not move the player.');
+    await page.evaluate(() => window.realitySandboxSurfaceMode.exit());
+    await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'inactive', null, { timeout: 10000 });
+
     fs.writeFileSync(path.join(artifactDir, 'iphone-living-planet.json'), JSON.stringify({ ok: true, viewport, metrics, pageErrors }, null, 2));
     await page.screenshot({ path: path.join(artifactDir, 'iphone-living-planet.png'), fullPage: true });
   } finally {
