@@ -127,6 +127,7 @@ forbidText('.github/workflows/browser-smoke.yml', 'node scripts/browser-smoke.cj
 requireText('.github/workflows/browser-smoke.yml', 'node scripts/unified-smoke.cjs', 'living-planet experience check');
 requireText('.github/workflows/browser-smoke.yml', 'node scripts/iphone-sphere-smoke.cjs', 'iPhone visual check');
 requireText('.github/workflows/browser-smoke.yml', 'node scripts/surface-mode-smoke.cjs', 'surface-mode interaction check');
+requireText('.github/workflows/browser-smoke.yml', 'node scripts/performance-smoke.cjs', 'startup and Surface Mode performance check');
 
 requireText('scripts/unified-smoke.cjs', "seedScenario('coupling')", 'terrain-water-inspector coupling scenario');
 requireText('scripts/unified-smoke.cjs', 'statDefinitions === 8', 'defined statistic browser assertion');
@@ -136,6 +137,8 @@ requireText('scripts/iphone-sphere-smoke.cjs', 'Mobile dashboard overlaps the in
 requireText('scripts/root-renderer-smoke.cjs', 'visibleSimulationCanvases.length === 1', 'single simulation canvas plus approved presentation layers');
 requireText('scripts/surface-mode-smoke.cjs', "document.documentElement.dataset.surfaceMode === 'active'", 'surface mode activates in browser');
 requireText('scripts/surface-mode-smoke.cjs', "page.keyboard.down('w')", 'surface mode movement browser assertion');
+requireText('scripts/performance-smoke.cjs', 'webglcontextlost', 'surface context-loss fallback assertion');
+requireText('scripts/performance-smoke.cjs', 'STARTUP_PIXEL_BUDGET', 'startup canvas performance budget');
 requireText('core/surface-mode.js', 'DISTANT_CACHE_START', 'surface mode distant terrain cache');
 requireText('core/surface-mode.js', 'MAX_RENDER_LONG_EDGE = 960', 'surface mode render budget');
 

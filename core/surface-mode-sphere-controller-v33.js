@@ -265,6 +265,8 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     document.documentElement.dataset.surfaceMode = 'active';
     canvas.style.opacity = '1';
     paintSurfaceFallback();
+    document.documentElement.dataset.surfaceModeFallbackReady = 'true';
+    document.documentElement.dataset.surfaceModeFallbackPaintedAt = performance.now().toFixed(2);
     // Keep the heavy Three.js terrain scene out of the overview page. It is
     // requested only after the explorer intentionally enters Surface Mode.
     if (!terrainRendererRequested) {
@@ -408,6 +410,8 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
       if (!active) return;
       canvas.style.opacity = '1';
       paintSurfaceFallback();
+      document.documentElement.dataset.surfaceModeFallbackReady = 'true';
+      document.documentElement.dataset.surfaceModeFallbackPaintedAt = performance.now().toFixed(2);
     },
     isActive: () => active,
     getPlayer: () => ({ ...player }),

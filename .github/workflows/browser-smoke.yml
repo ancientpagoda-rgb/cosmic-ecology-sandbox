@@ -71,6 +71,13 @@ jobs:
           REALITY_ROOT_RENDERER_ARTIFACT_DIR: artifacts/root-renderer-smoke
         run: node scripts/root-renderer-smoke.cjs
 
+      - name: Enforce startup and Surface Mode budgets
+        id: performance_test
+        env:
+          REALITY_BASE_URL: http://127.0.0.1:4173/
+          REALITY_PERFORMANCE_ARTIFACT_DIR: artifacts/performance-smoke
+        run: node scripts/performance-smoke.cjs
+
       - name: Enter, move through, and exit surface mode
         id: surface_mode_test
         env:
@@ -88,6 +95,7 @@ jobs:
             artifacts/root-renderer-smoke
             artifacts/iphone-sphere-smoke
             artifacts/surface-mode-smoke
+            artifacts/performance-smoke
             /tmp/reality-preview.log
           if-no-files-found: warn
           retention-days: 30
@@ -101,7 +109,8 @@ jobs:
             const rootRendererOk = '${{ steps.root_renderer_test.outcome }}' === 'success';
             const iphoneSphereOk = '${{ steps.iphone_sphere_test.outcome }}' === 'success';
             const surfaceModeOk = '${{ steps.surface_mode_test.outcome }}' === 'success';
-            const ok = unifiedOk && rootRendererOk && iphoneSphereOk && surfaceModeOk;
+            const performanceOk = '${{ steps.performance_test.outcome }}' === 'success';
+            const ok = unifiedOk && rootRendererOk && iphoneSphereOk && surfaceModeOk && performanceOk;
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
