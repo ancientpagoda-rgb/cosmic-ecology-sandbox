@@ -15,9 +15,9 @@
   width: 28px;
   height: 28px;
   padding: 0;
-  border: 1px solid rgba(179, 222, 197, 0.28);
+  border: 1px solid rgb(var(--jade-rgb) / 0.4);
   border-radius: 8px;
-  background: rgba(139, 188, 156, 0.12);
+  background: rgb(var(--jade-rgb) / 0.16);
   color: var(--text);
   font: 700 18px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   cursor: pointer;
@@ -25,7 +25,7 @@
 }
 
 .planet-panel-toggle:hover {
-  background: rgba(139, 188, 156, 0.24);
+  background: rgb(var(--jade-rgb) / 0.3);
 }
 
 .planet-panel-toggle:focus-visible {

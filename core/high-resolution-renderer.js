@@ -1,15 +1,19 @@
 import { Application } from 'pixi.js';
 
-const UHD_LONG_EDGE = 3840;
-const UHD_PIXEL_BUDGET = 3840 * 2160;
+// The overview is drawn before a visitor has interacted with the planet. Keep
+// that first frame inside a modest pixel budget; a forced 4K backing canvas
+// made otherwise capable machines stutter while the world was still opening.
+const STARTUP_LONG_EDGE = 2560;
+const STARTUP_PIXEL_BUDGET = 1920 * 1080;
+const MAX_STARTUP_RESOLUTION = 1.25;
 
 function chooseUltraHdResolution(width, height) {
   const logicalWidth = Math.max(1, Number(width) || 1);
   const logicalHeight = Math.max(1, Number(height) || 1);
   const longEdge = Math.max(logicalWidth, logicalHeight);
-  const longEdgeScale = UHD_LONG_EDGE / longEdge;
-  const pixelBudgetScale = Math.sqrt(UHD_PIXEL_BUDGET / (logicalWidth * logicalHeight));
-  const resolution = Math.max(1, Math.min(longEdgeScale, pixelBudgetScale));
+  const longEdgeScale = STARTUP_LONG_EDGE / longEdge;
+  const pixelBudgetScale = Math.sqrt(STARTUP_PIXEL_BUDGET / (logicalWidth * logicalHeight));
+  const resolution = Math.max(1, Math.min(MAX_STARTUP_RESOLUTION, longEdgeScale, pixelBudgetScale));
 
   return {
     logicalWidth,
@@ -23,13 +27,13 @@ function chooseUltraHdResolution(width, height) {
 if (!Application.prototype.__realityHighResolutionPatched) {
   const originalInit = Application.prototype.init;
 
-  Application.prototype.init = function realityUltraHdInit(options = {}) {
+  Application.prototype.init = function realityAdaptiveStartupInit(options = {}) {
     const target = chooseUltraHdResolution(options.width, options.height);
     const upgraded = {
       ...options,
       width: target.logicalWidth,
       height: target.logicalHeight,
-      antialias: true,
+      antialias: false,
       resolution: target.resolution,
       autoDensity: false,
       preference: 'webgl',
@@ -37,7 +41,7 @@ if (!Application.prototype.__realityHighResolutionPatched) {
 
     document.documentElement.dataset.requestedRenderResolution = `${target.physicalWidth}x${target.physicalHeight}`;
     document.documentElement.dataset.internalResolutionScale = target.resolution.toFixed(3);
-    document.documentElement.dataset.renderQuality = 'ultra-hd-4k-supersampled';
+    document.documentElement.dataset.renderQuality = 'adaptive-startup';
 
     return originalInit.call(this, upgraded);
   };
@@ -55,7 +59,7 @@ async function finishHighResolutionPresentation() {
   const canvas = document.getElementById('lofiLivingCanvas');
   if (canvas) {
     canvas.style.imageRendering = 'auto';
-    canvas.dataset.ultraHd = 'true';
+    canvas.dataset.adaptiveResolution = 'true';
   }
 
   document.documentElement.dataset.renderResolution = canvas ? `${canvas.width}x${canvas.height}` : 'unknown';

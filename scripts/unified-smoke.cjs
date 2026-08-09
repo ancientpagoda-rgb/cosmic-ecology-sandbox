@@ -42,6 +42,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
       const visibleSimulationCanvases = visibleCanvases.filter(item => !approvedPresentationCanvases.has(item.id));
       return {
         title: document.title,
+        renderQuality: document.documentElement.dataset.renderQuality,
         diagnostics: window.realitySandboxDebug.diagnostics(),
         snapshot: window.realitySandboxUnified.getSnapshot(),
         modules: window.realitySandboxModules.list().map(module => module.id),
@@ -80,6 +81,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(initial.snapshot.mode === 'procedural-living-planet' && initial.snapshot.planet.fictional && !initial.snapshot.planet.earthData, 'The root is not honestly labeled as a fictional procedural planet.');
     assert(initial.snapshot.presentation.renderer === 'pixi-single-canvas' && !initial.snapshot.presentation.tickerStarted, 'The single-renderer contract failed.');
     assert(initial.visibleSimulationCanvases.length === 1 && initial.visibleSimulationCanvases[0].id === 'lofiLivingCanvas' && initial.canvas, `The root must have one visible simulation canvas plus approved presentation layers: ${JSON.stringify(initial.visibleCanvases)}`);
+    assert(initial.renderQuality === 'adaptive-startup' && initial.canvas.width * initial.canvas.height <= 1920 * 1080 + 8192, `Startup canvas exceeds the interaction-ready budget: ${initial.canvas.width}x${initial.canvas.height} (${initial.renderQuality || 'unknown'}).`);
     assert(initial.desktopPanelsExpanded, 'Desktop should reveal the planet introduction and overview by default.');
     assert(initial.observatory.panel && initial.observatory.traits > 0 && initial.observatory.journal > 0, 'The evolution observatory did not render trait cards and field-journal entries.');
     assert(initial.foundry.panel && initial.foundry.api, 'The local Lineage Foundry did not initialize.');

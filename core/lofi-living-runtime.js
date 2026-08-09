@@ -5,8 +5,11 @@ const MIN_ZOOM = 0.7;
 const MAX_ZOOM = 12;
 const UI_INTERVAL_MS = 300;
 const LOGICAL_SIZE_PX = 900;
-const REDRAW_INTERVAL_MS = 1000 / 30;
-const TERRAIN_TILE_PX = 3;
+// Rebuilding Pixi paths for every terrain cell is CPU-bound. The overview is
+// a strategic globe, so an interaction-ready 12 fps with 8 px terrain cells
+// reads cleanly while avoiding hundreds of thousands of paths per frame.
+const REDRAW_INTERVAL_MS = 1000 / 12;
+const TERRAIN_TILE_PX = 8;
 const MAX_DRAWN_WEATHER = 24;
 const PALETTE = {
   background: 0x030806,
@@ -388,7 +391,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         width: logicalSize.width,
         height: logicalSize.height,
         background: PALETTE.background,
-        antialias: true,
+        antialias: false,
         autoStart: false,
         sharedTicker: false,
         preference: 'webgl',
@@ -876,7 +879,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         spherical: true,
         logicalWidth: logicalSize.width,
         logicalHeight: logicalSize.height,
-        redrawFps: 30,
+        redrawFps: 12,
         terrainTilePx: TERRAIN_TILE_PX,
         maxDrawnOrganisms: null,
         maxDrawnWeather: MAX_DRAWN_WEATHER,
