@@ -22,6 +22,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     await page.waitForFunction(() => Boolean(window.realitySandboxSurfaceMode && document.getElementById('enterSurfaceMode')), null, { timeout: 120000 });
     await page.click('#enterSurfaceMode');
     await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'active', null, { timeout: 30000 });
+    await page.waitForFunction(() => ['webgpu', 'webgl2', 'canvas2d-fallback'].includes(window.realitySandboxPresentationDiagnostics()?.surfaceModeRenderer), null, { timeout: 30000 });
     await page.waitForTimeout(220);
 
     const before = await page.evaluate(() => ({
@@ -54,6 +55,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(before.diagnostics.surfaceModeReady === true, 'Surface mode diagnostics never became ready.');
     assert(after.active && after.canvasVisible, 'Surface mode did not remain active with a visible surface canvas.');
     assert(after.diagnostics.surfaceMode === 'active' && after.diagnostics.surfaceModeCanvasPresent, 'Surface mode diagnostics do not report an active presentation.');
+    assert(['webgpu', 'webgl2'].includes(after.diagnostics.surfaceModeRenderer), `Surface mode did not select a GPU renderer (${after.diagnostics.surfaceModeRenderer}).`);
     assert(moved > 0.5, `WASD movement did not move the player enough (${moved}).`);
     assert(pageErrors.length === 0, `Surface mode produced browser errors: ${pageErrors.join(' | ')}`);
 

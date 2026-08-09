@@ -100,8 +100,10 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     cursor: 'crosshair',
     touchAction: 'none',
   });
-  const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
-  if (!ctx) return;
+  let ctx = null;
+  let gpuSurface = null;
+  let gpuStarting = false;
+  let gpuBackend = 'starting';
 
   const hud = document.createElement('div');
   hud.id = 'surfaceModeHud';
@@ -199,11 +201,62 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
   layer.append(canvas, hud);
   host.append(layer, enterButton);
 
+  function collectCreatures() {
+    const { position, agent, predator, apex } = world.ecs.components;
+    const entries = [];
+    const groups = [
+      { collection: agent, color: '#d8c890', size: 0.72 },
+      { collection: predator, color: '#d29173', size: 0.92 },
+      { collection: apex, color: '#c06960', size: 1.18 },
+    ];
+    for (const group of groups) {
+      for (const [id] of group.collection.entries()) {
+        const pos = position.get(id);
+        if (pos) entries.push({ x: pos.x, y: pos.y, color: group.color, size: group.size });
+      }
+    }
+    return entries;
+  }
+
+  function startGpuRenderer() {
+    if (gpuStarting || gpuSurface) return;
+    gpuStarting = true;
+    import('./surface-mode-gpu.js').then(({ createGpuSurfaceRenderer }) => createGpuSurfaceRenderer({
+      canvas,
+      world,
+      terrainAt,
+      waterAt,
+      colorAt: localSurfaceColor,
+      biomassAt: window.realitySandboxVegetationPresentation?.sampleBiomass,
+      getCreatures: collectCreatures,
+      seed,
+      seaLevel: SEA_LEVEL,
+      zScale: Z_SCALE,
+    })).then(renderer => {
+      gpuSurface = renderer;
+      gpuBackend = 'webgl2';
+      syncCanvas();
+      if (active) renderSurface(true);
+    }).catch(error => {
+      // Pixi already proves WebGL is normally present, but retain the former
+      // Canvas2D renderer for unusually constrained devices.
+      console.warn('[Surface Mode] GPU renderer unavailable; using CPU fallback.', error);
+      ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+      gpuBackend = ctx ? 'canvas2d-fallback' : 'unavailable';
+      if (active) renderSurface(true);
+    });
+  }
+
   function syncCanvas() {
     const rect = layer.getBoundingClientRect();
     const cssWidth = Math.max(1, rect.width || innerWidth || 1);
     const cssHeight = Math.max(1, rect.height || innerHeight || 1);
     const dpr = Math.min(2, devicePixelRatio || 1);
+    if (gpuSurface) {
+      gpuSurface.resize(cssWidth, cssHeight, dpr);
+      document.documentElement.dataset.surfaceModeResolution = `${canvas.width}x${canvas.height}`;
+      return;
+    }
     let width = Math.round(cssWidth * dpr);
     let height = Math.round(cssHeight * dpr);
     const scale = Math.min(1, MAX_RENDER_LONG_EDGE / Math.max(width, height));
@@ -477,7 +530,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
   function renderSurface(force = false) {
     if (!active) return;
     const now = performance.now();
-    if (!force && now - lastTerrainRender < TARGET_RENDER_INTERVAL) return;
+    if (!force && !gpuSurface && now - lastTerrainRender < TARGET_RENDER_INTERVAL) return;
     lastTerrainRender = now;
     surfaceFrame++;
     const startedAt = performance.now();
@@ -486,6 +539,19 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     const height = canvas.height;
     const terrain = terrainAt(player.x, player.y);
     const localWater = waterAt(player.x, player.y);
+    if (gpuSurface) {
+      const render = gpuSurface.render(player, localWater || {});
+      visibleCreatures = render.visibleCreatures;
+      gpuBackend = render.backend;
+      updateHud(terrain, localWater);
+      document.documentElement.dataset.surfaceModeRenderMs = (performance.now() - startedAt).toFixed(1);
+      document.documentElement.dataset.surfaceModeRenderer = gpuBackend;
+      return;
+    }
+    if (!ctx) {
+      // Do not create a 2D context while WebGPURenderer is negotiating a GPU context.
+      return;
+    }
     const groundZ = groundZAt(player.x, player.y);
     const eyeZ = groundZ + player.altitude;
     const horizon = height * clamp(0.49 + player.pitch * 0.46, 0.18, 0.80);
@@ -496,6 +562,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     drawCreatures(width, height, horizon, eyeZ, focal);
     updateHud(terrain, localWater);
     document.documentElement.dataset.surfaceModeRenderMs = (performance.now() - startedAt).toFixed(1);
+    document.documentElement.dataset.surfaceModeRenderer = gpuBackend;
   }
 
   function updateMovement(dt) {
@@ -665,6 +732,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     surfaceModeCoordinates: document.documentElement.dataset.surfaceModeCoordinates || 'unknown',
     surfaceModeVisibleCreatures: Number(document.documentElement.dataset.surfaceModeVisibleCreatures || 0),
     surfaceModeRenderMs: Number(document.documentElement.dataset.surfaceModeRenderMs || 0),
+    surfaceModeRenderer: document.documentElement.dataset.surfaceModeRenderer || gpuBackend,
   });
 
   window.realitySandboxSurfaceMode = {
@@ -677,6 +745,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
   document.documentElement.dataset.surfaceMode = 'inactive';
   document.documentElement.dataset.surfaceModeReady = 'true';
   syncCanvas();
+  startGpuRenderer();
 }
 
 async function boot() {
