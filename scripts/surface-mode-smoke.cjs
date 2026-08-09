@@ -22,12 +22,27 @@ fs.mkdirSync(artifactDir, { recursive: true });
     await page.waitForFunction(() => Boolean(window.realitySandboxSurfaceMode && document.getElementById('enterSurfaceMode')), null, { timeout: 120000 });
     await page.click('#enterSurfaceMode');
     await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'active', null, { timeout: 30000 });
+    await page.evaluate(() => {
+      const { position, agent } = window.realitySandboxPlanet.world.ecs.components;
+      const firstId = agent.keys().next().value;
+      const target = position.get(firstId);
+      const world = window.realitySandboxPlanet.world;
+      if (target) window.realitySandboxSurfaceMode.enterAt((target.x - 28 + world.width) % world.width, target.y);
+    });
     await page.waitForFunction(() => {
       const diagnostics = window.realitySandboxPresentationDiagnostics?.();
       return diagnostics?.surfaceModeRenderer === 'gpu-controller-spherical-topology' &&
         diagnostics?.surfaceGpu?.renderer === 'WebGLRenderer' &&
-        diagnostics?.surfaceGpu?.active === true;
+        diagnostics?.surfaceGpu?.active === true &&
+        diagnostics?.surfaceGpu?.fauna?.capacity > 0 &&
+        typeof window.realitySandboxSurfaceExpedition?.scan === 'function';
     }, null, { timeout: 30000 });
+    await page.waitForFunction(
+      () => window.realitySandboxSurfaceSphereV37?.getStats?.().nearBuildsCompleted >= 1,
+      null,
+      { timeout: 30000 },
+    );
+    await page.waitForFunction(() => window.realitySandboxSurfaceExpedition?.getVisibleFauna?.() >= 1, null, { timeout: 30000 });
     await page.waitForTimeout(220);
 
     const before = await page.evaluate(() => ({
@@ -39,6 +54,8 @@ fs.mkdirSync(artifactDir, { recursive: true });
     await page.waitForTimeout(420);
     await page.keyboard.up('w');
     await page.waitForTimeout(120);
+    await page.keyboard.press('e');
+    await page.waitForFunction(() => document.getElementById('surfaceFieldNote')?.style.opacity === '1', null, { timeout: 5000 });
 
     const after = await page.evaluate(() => ({
       player: window.realitySandboxSurfaceMode.getPlayer(),
@@ -62,6 +79,8 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(after.diagnostics.surfaceMode === 'active' && after.diagnostics.surfaceModeCanvasPresent, 'Surface mode diagnostics do not report an active presentation.');
     assert(after.diagnostics.surfaceModeRenderer === 'gpu-controller-spherical-topology', `Unexpected Surface controller (${after.diagnostics.surfaceModeRenderer}).`);
     assert(after.diagnostics.surfaceGpu?.renderer === 'WebGLRenderer' && after.diagnostics.surfaceGpu?.gpuPrimary === true, 'Surface mode did not select the cached WebGL GPU renderer.');
+    assert(after.diagnostics.surfaceGpu?.fauna?.renderLoopProceduralSamples === 0, 'Surface fauna performs procedural sampling in the render loop.');
+    assert(after.diagnostics.surfaceGpu?.fauna?.visible >= 1, 'Surface expedition did not present nearby fauna.');
     assert(moved > 0.5, `WASD movement did not move the player enough (${moved}).`);
     assert(pageErrors.length === 0, `Surface mode produced browser errors: ${pageErrors.join(' | ')}`);
 

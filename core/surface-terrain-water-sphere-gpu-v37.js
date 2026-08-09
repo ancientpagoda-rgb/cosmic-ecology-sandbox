@@ -20,6 +20,8 @@ const TILE_OVERLAP = 1.003;
 const CURVATURE_RADIUS_FACTOR = 22.0;
 const NEAR_CACHE_LIMIT = 3;
 const REAR_VIEW_DOT_THRESHOLD = -0.22;
+const FAUNA_CAPACITY = 96;
+const FAUNA_REFRESH_MS = 180;
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const wrap = (value, max) => ((value % max) + max) % max;
@@ -90,6 +92,9 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
     nearCacheHits: 0,
     nearCacheMisses: 0,
     nearCacheEvictions: 0,
+    faunaRefreshes: 0,
+    visibleFauna: 0,
+    fieldScans: 0,
   };
 
   const surfaceActive = () => Boolean(mode.isActive?.() && document.documentElement.dataset.surfaceMode === 'active');
@@ -243,6 +248,45 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
     new THREE.MeshStandardMaterial({ color: 0x527a55, roughness: 1 }),
   );
   scene.add(fallback);
+
+  // Life is an instanced presentation layer. It reads existing ECS positions
+  // only a few times per second, then the GPU animates a tiny mesh per animal.
+  // No terrain or water sampling happens in the display frame.
+  const faunaGeometry = new THREE.IcosahedronGeometry(1, 1);
+  faunaGeometry.scale(1.15, 0.58, 1.8);
+  const faunaMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    roughness: 0.42,
+    metalness: 0.14,
+    emissive: 0x12202a,
+    emissiveIntensity: 0.55,
+    flatShading: true,
+  });
+  const fauna = new THREE.InstancedMesh(faunaGeometry, faunaMaterial, FAUNA_CAPACITY);
+  fauna.count = 0;
+  fauna.frustumCulled = false;
+  fauna.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(FAUNA_CAPACITY * 3), 3);
+  scene.add(fauna);
+  const faunaMatrix = new THREE.Matrix4();
+  const faunaPosition = new THREE.Vector3();
+  const faunaScale = new THREE.Vector3();
+  const faunaEuler = new THREE.Euler();
+  const faunaQuaternion = new THREE.Quaternion();
+  const faunaColor = new THREE.Color();
+  const faunaVisuals = new Map();
+  let lastFaunaRefresh = -Infinity;
+
+  const fieldNote = document.createElement('div');
+  fieldNote.id = 'surfaceFieldNote';
+  Object.assign(fieldNote.style, {
+    position: 'absolute', left: '50%', bottom: '58px', transform: 'translateX(-50%)', zIndex: '3',
+    maxWidth: 'min(420px, calc(100vw - 30px))', padding: '8px 11px', borderRadius: '9px',
+    color: '#e9fffb', background: 'rgba(4, 13, 20, .68)', border: '1px solid rgba(113, 255, 226, .26)',
+    font: '11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', textAlign: 'center',
+    pointerEvents: 'none', opacity: '0', transition: 'opacity 180ms ease', textShadow: '0 1px 3px #000',
+  });
+  document.getElementById('surfaceModeHud')?.append(fieldNote);
 
   let nearTerrainMesh = null;
   let nearWaterMesh = null;
@@ -622,9 +666,13 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
   }
 
   function cachedGroundHeight(player) {
+    return cachedGroundHeightAt(player.x, player.y);
+  }
+
+  function cachedGroundHeightAt(worldX, worldY) {
     if (!nearTerrainData) return SEA_LEVEL * Z_SCALE;
-    const localX = shortestWrappedDelta(player.x, nearTerrainData.anchorX, world.width);
-    const localZ = player.y - nearTerrainData.anchorY;
+    const localX = shortestWrappedDelta(worldX, nearTerrainData.anchorX, world.width);
+    const localZ = worldY - nearTerrainData.anchorY;
     const segments = nearTerrainData.segments;
     const u = clamp((localX + TILE_HALF) / TILE_SIZE, 0, 1) * segments;
     const v = clamp((localZ + TILE_HALF) / TILE_SIZE, 0, 1) * segments;
@@ -639,6 +687,111 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
     const b = at(x0, z1) * (1 - tx) + at(x1, z1) * tx;
     return a * (1 - tz) + b * tz;
   }
+
+  function collectFauna(player) {
+    if (!nearTerrainData) return;
+    const components = world.ecs.components;
+    const groups = [
+      { collection: components.agent, guild: 'grazer', size: 1.0, fallback: 0x69d8ff },
+      { collection: components.predator, guild: 'predator', size: 1.35, fallback: 0xff705e },
+      { collection: components.apex, guild: 'apex', size: 1.7, fallback: 0xcf8dff },
+    ];
+    const seen = new Set();
+    for (const group of groups) {
+      for (const [id, organism] of group.collection) {
+        if (seen.size >= FAUNA_CAPACITY) break;
+        const position = components.position.get(id);
+        if (!position) continue;
+        const dx = shortestWrappedDelta(position.x, player.x, world.width);
+        const dz = position.y - player.y;
+        if (dx * dx + dz * dz > 185 * 185) continue;
+        const species = planet.biosphere?.getSpeciesForEntity?.(id);
+        const targetX = shortestWrappedDelta(position.x, anchorX, world.width);
+        const targetZ = position.y - anchorY;
+        const visual = faunaVisuals.get(id) || {
+          id, x: targetX, z: targetZ, targetX, targetZ, y: SEA_LEVEL * Z_SCALE, targetY: SEA_LEVEL * Z_SCALE,
+          phase: ((id * 0.61803398875) % 1) * Math.PI * 2,
+        };
+        visual.targetX = targetX;
+        visual.targetZ = targetZ;
+        visual.targetY = cachedGroundHeightAt(position.x, position.y) + group.size * 0.58;
+        visual.size = group.size;
+        visual.color = species?.color ?? group.fallback;
+        visual.guild = group.guild;
+        visual.organism = organism;
+        visual.species = species;
+        faunaVisuals.set(id, visual);
+        seen.add(id);
+      }
+    }
+    for (const id of faunaVisuals.keys()) {
+      if (!seen.has(id)) faunaVisuals.delete(id);
+    }
+    stats.faunaRefreshes++;
+  }
+
+  function drawFauna(now) {
+    const player = mode.getPlayer();
+    if (now - lastFaunaRefresh >= FAUNA_REFRESH_MS) {
+      collectFauna(player);
+      lastFaunaRefresh = now;
+    }
+    let count = 0;
+    for (const visual of faunaVisuals.values()) {
+      if (count >= FAUNA_CAPACITY) break;
+      visual.x += (visual.targetX - visual.x) * 0.16;
+      visual.z += (visual.targetZ - visual.z) * 0.16;
+      visual.y += (visual.targetY - visual.y) * 0.18;
+      const bob = Math.sin(now * 0.004 + visual.phase) * 0.13;
+      faunaPosition.set(visual.x, visual.y + bob, visual.z);
+      faunaEuler.set(0, Math.atan2(visual.targetX - visual.x, visual.targetZ - visual.z), 0);
+      faunaQuaternion.setFromEuler(faunaEuler);
+      faunaScale.setScalar(visual.size);
+      faunaMatrix.compose(faunaPosition, faunaQuaternion, faunaScale);
+      fauna.setMatrixAt(count, faunaMatrix);
+      faunaColor.setHex(visual.color);
+      fauna.setColorAt(count, faunaColor);
+      count++;
+    }
+    fauna.count = count;
+    fauna.instanceMatrix.needsUpdate = true;
+    if (fauna.instanceColor) fauna.instanceColor.needsUpdate = true;
+    stats.visibleFauna = count;
+    document.documentElement.dataset.surfaceModeVisibleCreatures = String(count);
+  }
+
+  function scanNearestFauna() {
+    if (!surfaceActive()) return null;
+    const player = mode.getPlayer();
+    let nearest = null;
+    let nearestDistance = Infinity;
+    for (const visual of faunaVisuals.values()) {
+      const distance = Math.hypot(shortestWrappedDelta(visual.targetX + anchorX, player.x, world.width), visual.targetZ + anchorY - player.y);
+      if (distance < nearestDistance) {
+        nearest = visual;
+        nearestDistance = distance;
+      }
+    }
+    if (!nearest || nearestDistance > 48) {
+      fieldNote.textContent = 'FIELD SCAN · no organism in range — follow the bright motion.';
+      fieldNote.style.opacity = '1';
+      return null;
+    }
+    const dna = nearest.organism?.dna || {};
+    const name = nearest.species?.name || `${nearest.guild} organism`;
+    const generation = nearest.species?.generation ?? 0;
+    fieldNote.textContent = `FIELD SCAN · ${name} · generation ${generation} · speed ${(dna.speed ?? 1).toFixed(2)} · sense ${(dna.sense ?? 1).toFixed(2)}`;
+    fieldNote.style.opacity = '1';
+    planet.ecologyJournal?.record('Field encounter', `${name} observed on the surface at ${nearestDistance.toFixed(0)} units; its lineage is adapting in place.`, 'encounter');
+    stats.fieldScans++;
+    return { name, generation, distance: nearestDistance, traits: { speed: dna.speed, sense: dna.sense, metabolism: dna.metabolism } };
+  }
+
+  window.addEventListener('keydown', event => {
+    if (event.code !== 'KeyE' || !surfaceActive()) return;
+    event.preventDefault();
+    scanNearestFauna();
+  }, { passive: false });
 
   function resize() {
     const rect = layer.getBoundingClientRect();
@@ -719,11 +872,11 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
     const player = mode.getPlayer();
     requestNearBuild(player);
     updateCamera(player);
+    drawFauna(now);
 
     waterMaterial.uniforms.time.value = now * 0.001;
     renderer.render(scene, camera);
     document.documentElement.dataset.surfaceGpu = 'active';
-    document.documentElement.dataset.surfaceModeVisibleCreatures = '0';
   }
   requestAnimationFrame(loop);
 
@@ -743,6 +896,7 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
         points: renderer.info.render.points,
         lines: renderer.info.render.lines,
       },
+      fauna: { visible: stats.visibleFauna, refreshes: stats.faunaRefreshes, capacity: FAUNA_CAPACITY, renderLoopProceduralSamples: 0 },
     }),
   };
   window.realitySandboxSurfaceGpu = gpuApi;
@@ -758,7 +912,8 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
       waterOpaque: true,
       vegetationEnabled: false,
       weatherEnabled: false,
-      creaturesEnabled: false,
+      creaturesEnabled: true,
+      fieldExpeditionEnabled: true,
       proceduralSamplingInRenderLoop: false,
       sphereCurvatureEnabled: true,
       sphericalPoleSampling: true,
@@ -782,6 +937,7 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
   };
 
   window.realitySandboxSurfaceSphereV37 = api;
+  window.realitySandboxSurfaceExpedition = { scan: scanNearestFauna, getVisibleFauna: () => stats.visibleFauna };
   document.documentElement.dataset.surfaceSphereV37 = 'view-priority-best-available';
   document.documentElement.dataset.surfacePresentationScale = '10x';
 
@@ -803,4 +959,3 @@ async function boot() {
 }
 
 boot();
-

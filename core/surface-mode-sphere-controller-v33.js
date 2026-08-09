@@ -93,7 +93,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
   });
 
   const help = document.createElement('div');
-  help.textContent = 'WASD move · mouse look · Shift sprint · Space/Ctrl altitude · poles wrap naturally · Esc exit';
+  help.textContent = 'WASD move · mouse look · Shift sprint · Space/Ctrl altitude · E scan life · poles wrap naturally · Esc exit';
   Object.assign(help.style, {
     position: 'absolute', left: '50%', bottom: 'max(16px, env(safe-area-inset-bottom))', transform: 'translateX(-50%)',
     maxWidth: 'calc(100vw - 30px)', padding: '7px 10px', borderRadius: '9px', background: 'rgba(4,12,10,.54)',
@@ -356,4 +356,3 @@ async function boot() {
 }
 
 boot();
-
