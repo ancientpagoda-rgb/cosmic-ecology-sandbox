@@ -30,6 +30,13 @@ export function createWaterCycle(world, orbitalSystem = null) {
   const tide = new Float32Array(count);
   const nextVapor = new Float32Array(count);
   const nextCloud = new Float32Array(count);
+  // Planet generation is deterministic for a running world. Cache the static
+  // values hydrology needs instead of re-running procedural terrain sampling
+  // for every cell in every weather solve.
+  const terrainLand = new Uint8Array(count);
+  const terrainTemperature = new Float32Array(count);
+  const terrainElevation = new Float32Array(count);
+  const terrainPlateBoundary = new Float32Array(count);
 
   let time = 0;
   let eventClock = 0;
@@ -48,6 +55,10 @@ export function createWaterCycle(world, orbitalSystem = null) {
       for (let x = 0; x < width; x++) {
         const i = y * width + x;
         const p = samplePlanet(x + 0.5, y + 0.5, width, height);
+        terrainLand[i] = p.land ? 1 : 0;
+        terrainTemperature[i] = p.temperature;
+        terrainElevation[i] = p.elevation;
+        terrainPlateBoundary[i] = p.plateBoundary;
         vapor[i] = p.land ? p.rainfall * 0.22 : 0.58 + p.temperature * 0.18;
         cloud[i] = Math.max(0, p.rainfall - 0.48) * 0.7;
         soil[i] = p.land ? p.rainfall * 0.48 : 0;
@@ -87,10 +98,10 @@ export function createWaterCycle(world, orbitalSystem = null) {
     }
   }
 
-  function seasonalTemperature(p, y) {
+  function seasonalTemperature(index, y) {
     const latitude = 1 - (y / Math.max(1, height - 1)) * 2;
     const season = orbitalSystem?.getSeasonState(latitude);
-    return clamp(p.temperature + (season?.temperatureOffset || 0), 0, 1);
+    return clamp(terrainTemperature[index] + (season?.temperatureOffset || 0), 0, 1);
   }
 
   function updateTides() {
@@ -122,10 +133,10 @@ export function createWaterCycle(world, orbitalSystem = null) {
         const sx = wrap(Math.round(x - wind), width);
         const sy = clamp(Math.round(y - vertical), 0, height - 1);
         const si = sy * width + sx;
-        const p = samplePlanet(x + 0.5, y + 0.5, width, height);
-        const temperature = seasonalTemperature(p, y);
-        const coastalTide = !p.land ? 0.25 + tide[i] * 0.35 : hydro.delta[i] * tide[i] * 0.2;
-        const waterSource = !p.land ? 1 + coastalTide : hydro.lake[i] + surface[i] * 0.5;
+        const temperature = seasonalTemperature(i, y);
+        const isLand = terrainLand[i] === 1;
+        const coastalTide = !isLand ? 0.25 + tide[i] * 0.35 : hydro.delta[i] * tide[i] * 0.2;
+        const waterSource = !isLand ? 1 + coastalTide : hydro.lake[i] + surface[i] * 0.5;
         const evaporation = waterSource * (0.004 + temperature * 0.01) * dt;
         nextVapor[i] = clamp(vapor[si] * 0.994 + evaporation + soil[i] * temperature * 0.0008 * dt, 0, 1.5);
         nextCloud[i] = clamp(cloud[si] * 0.996, 0, 1.4);
@@ -141,10 +152,9 @@ export function createWaterCycle(world, orbitalSystem = null) {
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const i = y * width + x;
-        const p = samplePlanet(x + 0.5, y + 0.5, width, height);
-        const temperature = seasonalTemperature(p, y);
+        const temperature = seasonalTemperature(i, y);
         const saturation = 0.28 + temperature * 0.54;
-        const uplift = p.plateBoundary * 0.08 + Math.max(0, p.elevation - 0.62) * 0.6;
+        const uplift = terrainPlateBoundary[i] * 0.08 + Math.max(0, terrainElevation[i] - 0.62) * 0.6;
         const excess = Math.max(0, vapor[i] - saturation + uplift);
         const condensed = excess * 0.2 * dt;
         vapor[i] = Math.max(0, vapor[i] - condensed);
@@ -165,7 +175,7 @@ export function createWaterCycle(world, orbitalSystem = null) {
         snowpack[i] = Math.max(0, snowpack[i] - melt);
         rain[i] += melt;
 
-        if (p.land) {
+        if (terrainLand[i] === 1) {
           soil[i] = clamp(soil[i] + rain[i] * 0.7 - (0.0015 + temperature * 0.0025) * dt, 0, 1.2);
           const tidalBackwater = hydro.delta[i] * Math.max(0, tide[i] - 0.5) * 0.01 * dt;
           surface[i] = clamp(surface[i] + rain[i] * 0.3 + tidalBackwater, 0, 2);
