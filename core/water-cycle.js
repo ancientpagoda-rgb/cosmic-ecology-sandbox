@@ -3,6 +3,11 @@ import { getHydrology } from './hydrology.js';
 
 // Lightweight browser model using standard D8 runoff routing and
 // semi-Lagrangian-style moisture transport concepts.
+// The rest of the simulation advances in small fixed steps for responsive
+// controls. Recomputing this 16,200-cell fluid grid at that same cadence was
+// needlessly expensive: weather does not need a new global solve every 60 ms.
+const HYDROLOGY_STEP_SECONDS = 0.24;
+const TIDE_REFRESH_SECONDS = 1.2;
 
 export function createWaterCycle(world, orbitalSystem = null) {
   const hydro = getHydrology();
@@ -28,6 +33,10 @@ export function createWaterCycle(world, orbitalSystem = null) {
 
   let time = 0;
   let eventClock = 0;
+  let hydrologyClock = 0;
+  let tideClock = TIDE_REFRESH_SECONDS;
+  let hydrologySteps = 0;
+  let tideRefreshes = 0;
 
   initialize();
 
@@ -47,11 +56,27 @@ export function createWaterCycle(world, orbitalSystem = null) {
   function step(dt) {
     time += dt;
     eventClock += dt;
-    updateTides();
-    advectAndEvaporate(dt);
-    condenseAndPrecipitate(dt);
-    routeWater(dt);
-    updateExtremes(dt);
+    hydrologyClock += dt;
+    tideClock += dt;
+
+    if (tideClock >= TIDE_REFRESH_SECONDS) {
+      updateTides();
+      tideClock %= TIDE_REFRESH_SECONDS;
+      tideRefreshes += 1;
+    }
+
+    if (hydrologyClock >= HYDROLOGY_STEP_SECONDS) {
+      // Preserve elapsed simulation time in the solve. The cap prevents an
+      // inactive tab from returning with a giant one-frame weather jump.
+      const solveDt = Math.min(hydrologyClock, HYDROLOGY_STEP_SECONDS * 2);
+      hydrologyClock = 0;
+      advectAndEvaporate(solveDt);
+      condenseAndPrecipitate(solveDt);
+      routeWater(solveDt);
+      updateExtremes(solveDt);
+      hydrologySteps += 1;
+    }
+
     if (eventClock >= 12) {
       eventClock = 0;
       emitMajorEvent();
@@ -222,7 +247,19 @@ export function createWaterCycle(world, orbitalSystem = null) {
     return cells.slice(0, limit);
   }
 
-  return { step, sample, getCloudCells, getTime: () => time };
+  return {
+    step,
+    sample,
+    getCloudCells,
+    getTime: () => time,
+    getStats: () => ({
+      grid: { width, height, cells: count },
+      hydrologyStepSeconds: HYDROLOGY_STEP_SECONDS,
+      tideRefreshSeconds: TIDE_REFRESH_SECONDS,
+      hydrologySteps,
+      tideRefreshes,
+    }),
+  };
 }
 
 const wrap = (value, max) => ((value % max) + max) % max;
