@@ -6,6 +6,7 @@
   "description": "A deterministic procedural living-planet simulation.",
   "scripts": {
     "dev": "vite",
+    "dev:review": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "build": "vite build",
     "preview": "vite preview",
     "audit:integration": "node scripts/integration-audit.cjs && node scripts/root-renderer-audit.cjs",
