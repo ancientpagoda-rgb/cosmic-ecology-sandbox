@@ -212,7 +212,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     for (const group of groups) {
       for (const [id] of group.collection.entries()) {
         const pos = position.get(id);
-        if (pos) entries.push({ x: pos.x, y: pos.y, color: group.color, size: group.size });
+        if (pos) entries.push({ id, x: pos.x, y: pos.y, color: group.color, size: group.size });
       }
     }
     return entries;

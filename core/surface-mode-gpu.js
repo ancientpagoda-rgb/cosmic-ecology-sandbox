@@ -100,6 +100,8 @@ export async function createGpuSurfaceRenderer({
   let treeInstances = 0;
   let lastCreatureUpdate = -Infinity;
   let visibleCreatures = 0;
+  let lastCreatureFrame = performance.now();
+  const visualCreatures = new Map();
 
   function seededNoise(x, y, salt = 0) {
     const value = Math.sin((x * 127.1 + y * 311.7 + seed * 0.017 + salt * 71.3)) * 43758.5453123;
@@ -160,24 +162,64 @@ export async function createGpuSurfaceRenderer({
     if (trees.instanceColor) trees.instanceColor.needsUpdate = true;
     lastBuildX = center.x;
     lastBuildY = center.y;
+    visualCreatures.clear();
     ready = true;
   }
 
-  function updateCreatures() {
+  function updateCreatureTargets() {
     const entries = getCreatures?.() || [];
-    let count = 0;
+    const activeIds = new Set();
     for (const entry of entries) {
-      if (count >= creatureCapacity) break;
+      if (activeIds.size >= creatureCapacity) break;
       const dx = shortestWrappedDelta(entry.x, origin.x, world.width);
       const dz = -(entry.y - origin.y);
       if (dx * dx + dz * dz > 165 * 165) continue;
       const terrain = terrainAt(entry.x, entry.y);
       if (!terrain?.land) continue;
-      position.set(dx, terrain.elevation * zScale + entry.size * 0.55, dz);
-      scale.setScalar(entry.size);
+      const key = entry.id ?? `${entry.x.toFixed(1)}:${entry.y.toFixed(1)}`;
+      activeIds.add(key);
+      const targetY = terrain.elevation * zScale + entry.size * 0.55;
+      const visual = visualCreatures.get(key);
+      if (visual) {
+        visual.targetX = dx;
+        visual.targetY = targetY;
+        visual.targetZ = dz;
+        visual.color = entry.color;
+        visual.size = entry.size;
+      } else {
+        visualCreatures.set(key, {
+          x: dx, y: targetY, z: dz,
+          targetX: dx, targetY, targetZ: dz,
+          color: entry.color, size: entry.size,
+        });
+      }
+    }
+    for (const key of visualCreatures.keys()) {
+      if (!activeIds.has(key)) visualCreatures.delete(key);
+    }
+  }
+
+  function drawCreatures(now) {
+    const dt = Math.min(0.05, Math.max(0, (now - lastCreatureFrame) / 1000));
+    lastCreatureFrame = now;
+    const maxStep = 3.2 * dt;
+    let count = 0;
+    for (const visual of visualCreatures.values()) {
+      if (count >= creatureCapacity) break;
+      const dx = visual.targetX - visual.x;
+      const dz = visual.targetZ - visual.z;
+      const horizontal = Math.hypot(dx, dz);
+      if (horizontal > 0.0001) {
+        const step = Math.min(maxStep, horizontal);
+        visual.x += (dx / horizontal) * step;
+        visual.z += (dz / horizontal) * step;
+      }
+      visual.y += (visual.targetY - visual.y) * Math.min(1, dt * 3);
+      position.set(visual.x, visual.y, visual.z);
+      scale.setScalar(visual.size);
       matrix.compose(position, quaternion, scale);
       creatures.setMatrixAt(count, matrix);
-      color.set(entry.color);
+      color.set(visual.color);
       creatures.setColorAt(count, color);
       count++;
     }
@@ -217,9 +259,10 @@ export async function createGpuSurfaceRenderer({
     sun.intensity = 2.7 - weather * 1.25;
     const now = performance.now();
     if (now - lastCreatureUpdate > 180) {
-      visibleCreatures = updateCreatures();
+      updateCreatureTargets();
       lastCreatureUpdate = now;
     }
+    visibleCreatures = drawCreatures(now);
     renderer.render(scene, camera);
     return { visibleCreatures, backend: renderer.backend?.isWebGPUBackend ? 'webgpu' : 'webgl2' };
   }
