@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { biomeColor } from './planet.js';
 
 const SEA_LEVEL = 0.53;
@@ -36,6 +37,40 @@ function shortestWrappedDelta(value, origin, size) {
 function scheduleIdle(fn, timeout = 100) {
   if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout });
   else setTimeout(() => fn({ timeRemaining: () => 4, didTimeout: true }), 0);
+}
+
+// A single merged mesh keeps the surface renderer at one draw call for all
+// fauna, but gives nearby organisms a legible animal silhouette: torso, head,
+// muzzle, legs, hooves, tail, ears, and grazing horns.
+function createFaunaGeometry() {
+  const parts = [];
+  const add = (geometry, position, rotation = [0, 0, 0], scale = [1, 1, 1]) => {
+    const transform = new THREE.Matrix4().compose(
+      new THREE.Vector3(...position),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(...rotation)),
+      new THREE.Vector3(...scale),
+    );
+    geometry.applyMatrix4(transform);
+    parts.push(geometry);
+  };
+
+  add(new THREE.CapsuleGeometry(0.36, 1.02, 4, 7), [0, 0.78, 0], [Math.PI / 2, 0, 0], [0.9, 1, 1]);
+  add(new THREE.CylinderGeometry(0.15, 0.19, 0.52, 6), [0, 1.03, 0.63], [Math.PI / 2, 0, 0]);
+  add(new THREE.IcosahedronGeometry(0.34, 1), [0, 1.16, 0.98], [0, 0, 0], [0.9, 0.86, 1.08]);
+  add(new THREE.ConeGeometry(0.18, 0.42, 5), [0, 1.1, 1.35], [Math.PI / 2, 0, 0], [0.92, 1, 1]);
+
+  for (const side of [-1, 1]) {
+    add(new THREE.ConeGeometry(0.085, 0.31, 4), [side * 0.22, 1.48, 0.97], [0, 0, side * 0.38]);
+    add(new THREE.ConeGeometry(0.075, 0.25, 4), [side * 0.22, 1.39, 0.94], [0, 0, side * 0.78]);
+  }
+  for (const x of [-0.28, 0.28]) {
+    for (const z of [-0.45, 0.44]) {
+      add(new THREE.CylinderGeometry(0.07, 0.09, 0.58, 5), [x, 0.34, z], [0, 0, 0]);
+      add(new THREE.BoxGeometry(0.16, 0.09, 0.27), [x, 0.06, z + 0.055], [0, 0, 0]);
+    }
+  }
+  add(new THREE.ConeGeometry(0.14, 0.65, 5), [0, 0.88, -1.08], [-Math.PI / 2, 0, 0], [0.82, 1, 1]);
+  return mergeGeometries(parts, false) || new THREE.IcosahedronGeometry(1, 1);
 }
 
 async function waitForRuntime() {
@@ -252,8 +287,7 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
   // Life is an instanced presentation layer. It reads existing ECS positions
   // only a few times per second, then the GPU animates a tiny mesh per animal.
   // No terrain or water sampling happens in the display frame.
-  const faunaGeometry = new THREE.IcosahedronGeometry(1, 1);
-  faunaGeometry.scale(1.15, 0.58, 1.8);
+  const faunaGeometry = createFaunaGeometry();
   const faunaMaterial = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
@@ -742,11 +776,12 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
       visual.x += (visual.targetX - visual.x) * 0.16;
       visual.z += (visual.targetZ - visual.z) * 0.16;
       visual.y += (visual.targetY - visual.y) * 0.18;
-      const bob = Math.sin(now * 0.004 + visual.phase) * 0.13;
+      const gait = Math.sin(now * 0.007 + visual.phase);
+      const bob = gait * 0.1;
       faunaPosition.set(visual.x, visual.y + bob, visual.z);
-      faunaEuler.set(0, Math.atan2(visual.targetX - visual.x, visual.targetZ - visual.z), 0);
+      faunaEuler.set(gait * 0.045, Math.atan2(visual.targetX - visual.x, visual.targetZ - visual.z), gait * 0.025);
       faunaQuaternion.setFromEuler(faunaEuler);
-      faunaScale.setScalar(visual.size);
+      faunaScale.set(visual.size, visual.size * (1 + gait * 0.035), visual.size);
       faunaMatrix.compose(faunaPosition, faunaQuaternion, faunaScale);
       fauna.setMatrixAt(count, faunaMatrix);
       faunaColor.setHex(visual.color);

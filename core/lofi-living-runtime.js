@@ -646,15 +646,26 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     for (const [id, position] of components.position.entries()) {
       if (components.resource.has(id)) continue;
       let color = null;
-      let baseSize = 1.5;
+      let baseSize = 2.45;
+      let role = 'grazer';
       if (components.agent.has(id)) color = biosphere.getSpeciesForEntity(id)?.color || PALETTE.grazer;
-      else if (components.predator.has(id)) { color = biosphere.getSpeciesForEntity(id)?.color || PALETTE.predator; baseSize = 2.3; }
-      else if (components.apex.has(id)) { color = biosphere.getSpeciesForEntity(id)?.color || PALETTE.apex; baseSize = 2.7; }
+      else if (components.predator.has(id)) { color = biosphere.getSpeciesForEntity(id)?.color || PALETTE.predator; baseSize = 3.45; role = 'predator'; }
+      else if (components.apex.has(id)) { color = biosphere.getSpeciesForEntity(id)?.color || PALETTE.apex; baseSize = 4.2; role = 'apex'; }
       if (color === null) continue;
       const point = worldToSphereScreen(position.x / world.width, position.y / world.height, width, height);
       if (!point.visible) continue;
       const size = clamp(baseSize * Math.sqrt(camera.zoom), baseSize, baseSize * 3.5);
-      graphics.circle(point.x, point.y, size).fill({ color: shadeColor(color, 0.58 + point.depth * 0.42), alpha: 1 });
+      const velocity = components.velocity.get(id);
+      const ahead = velocity && Math.hypot(velocity.vx, velocity.vy) > 0.01
+        ? worldToSphereScreen(
+          wrap01((position.x + velocity.vx * 0.8) / world.width),
+          clamp((position.y + velocity.vy * 0.8) / world.height, 0, 1),
+          width,
+          height,
+        )
+        : null;
+      const heading = ahead?.visible ? Math.atan2(ahead.y - point.y, ahead.x - point.x) : 0;
+      drawCreatureGlyph(graphics, point, size, heading, role, shadeColor(color, 0.58 + point.depth * 0.42));
       lastDrawnEntities += 1;
     }
 
@@ -1020,6 +1031,43 @@ function shadeColor(color, brightness) {
   const green = clamp(Math.round(((color >> 8) & 0xff) * amount), 0, 255);
   const blue = clamp(Math.round((color & 0xff) * amount), 0, 255);
   return (red << 16) | (green << 8) | blue;
+}
+
+function drawCreatureGlyph(graphics, point, size, heading, role, color) {
+  const forward = { x: Math.cos(heading), y: Math.sin(heading) };
+  const side = { x: -forward.y, y: forward.x };
+  const at = (ahead, across) => ({
+    x: point.x + forward.x * ahead * size + side.x * across * size,
+    y: point.y + forward.y * ahead * size + side.y * across * size,
+  });
+  const body = [at(0.74, 0), at(0.24, 0.56), at(-0.62, 0.45), at(-0.9, 0), at(-0.62, -0.45), at(0.24, -0.56)];
+  graphics.poly(body.flatMap(vertex => [vertex.x, vertex.y])).fill({ color, alpha: 0.98 });
+
+  const head = at(0.88, 0);
+  const headSize = size * (role === 'apex' ? 0.46 : 0.38);
+  graphics.circle(head.x, head.y, headSize).fill({ color: shadeColor(color, 1.24), alpha: 1 });
+
+  for (const across of [-0.31, 0.31]) {
+    const hip = at(-0.28, across);
+    const foot = at(-0.72, across * 1.38);
+    graphics.moveTo(hip.x, hip.y).lineTo(foot.x, foot.y).stroke({ color: 0x16221c, width: Math.max(0.75, size * 0.17), alpha: 0.9 });
+  }
+
+  if (role === 'grazer') {
+    for (const across of [-0.24, 0.24]) {
+      const hornBase = at(1.02, across);
+      const hornTip = at(1.26, across * 1.9);
+      graphics.moveTo(hornBase.x, hornBase.y).lineTo(hornTip.x, hornTip.y).stroke({ color: 0xe9f5dc, width: Math.max(0.6, size * 0.13), alpha: 0.94 });
+    }
+  } else {
+    const tailBase = at(-0.84, 0);
+    const tailTip = at(-1.35, role === 'apex' ? 0.32 : 0.2);
+    graphics.moveTo(tailBase.x, tailBase.y).lineTo(tailTip.x, tailTip.y).stroke({ color: shadeColor(color, 0.58), width: Math.max(0.7, size * 0.2), alpha: 0.94 });
+    if (role === 'apex') {
+      const crest = at(0.58, 0);
+      graphics.circle(crest.x, crest.y, size * 0.24).fill({ color: 0xf0ddff, alpha: 0.88 });
+    }
+  }
 }
 function formatCoordinate(value, positive, negative) { return `${Math.abs(value).toFixed(1)}°${value >= 0 ? positive : negative}`; }
 function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]); }
