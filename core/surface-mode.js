@@ -609,6 +609,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     player.pitch = 0;
     active = true;
     keys.clear();
+    runtime.setPresentationSuspended?.(true);
     document.documentElement.dataset.surfaceMode = 'active';
     layer.style.pointerEvents = 'auto';
     layer.style.opacity = '1';
@@ -627,6 +628,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     if (!active) return;
     active = false;
     keys.clear();
+    runtime.setPresentationSuspended?.(false);
     document.documentElement.dataset.surfaceMode = 'inactive';
     if (document.pointerLockElement === canvas) document.exitPointerLock?.();
     layer.style.opacity = '0';

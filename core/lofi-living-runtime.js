@@ -38,6 +38,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   let lastDrawnEntities = 0;
   let lastDrawnWeather = 0;
   let destroyed = false;
+  let presentationSuspended = false;
   let selectedPoint = { x: world.width * 0.5, y: world.height * 0.5 };
   let latestEvent = 'Terrain, water, weather, vegetation, and animals are now sharing one world state.';
 
@@ -375,6 +376,11 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   function resetCamera() { return setCamera({ zoom: 1, centerX: 0.5, centerY: 0.5 }); }
   function getCamera() { return { ...camera, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM }; }
   function invalidateRender() { lastRender = -Infinity; }
+  function setPresentationSuspended(value) {
+    presentationSuspended = Boolean(value);
+    document.documentElement.dataset.globePresentation = presentationSuspended ? 'suspended' : 'active';
+    if (!presentationSuspended) invalidateRender();
+  }
 
   function step(dt) {
     if (!Number.isFinite(dt) || dt <= 0 || destroyed) return;
@@ -387,6 +393,10 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   function render(frame = {}) {
     if (!app || !graphics || destroyed) return;
     const timestamp = frame.timestamp ?? performance.now();
+    if (presentationSuspended) {
+      updateInterface(false, timestamp);
+      return;
+    }
     const minimumInterval = REDRAW_INTERVAL_MS;
     if (timestamp - lastRender >= minimumInterval) {
       lastRender = timestamp;
@@ -648,6 +658,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         controls: 3,
         drawnEntities: lastDrawnEntities,
         drawnWeather: lastDrawnWeather,
+        suspended: presentationSuspended,
       };
     }
     return { ok: true, kind };
@@ -775,6 +786,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     setCamera,
     resetCamera,
     getCamera,
+    setPresentationSuspended,
     selectAtClientPoint,
     inspectSelected,
     updateInterface,
@@ -854,5 +866,5 @@ function shadeColor(color, brightness) {
   return (red << 16) | (green << 8) | blue;
 }
 function formatCoordinate(value, positive, negative) { return `${Math.abs(value).toFixed(1)}°${value >= 0 ? positive : negative}`; }
-function escapeHtml(value) { return String(value).replace(/[&<>'\"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '\"': '&quot;' })[character]); }
+function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]); }
 function clamp(value, minimum, maximum) { return Math.min(maximum, Math.max(minimum, value)); }
