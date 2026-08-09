@@ -64,7 +64,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     writeJson('initial.json', initial);
     assert(initial.title.includes('Procedural Living Planet'), 'The public title does not identify the procedural living planet.');
     assert(initial.diagnostics.ok, `Initial diagnostics failed: ${initial.diagnostics.failures.join(', ')}`);
-    assert(initial.modules.join('|') === 'planet.orbit-seasons|planet.water-cycle|planet.living-ecology|ecology.seasonal-resource-fields|planet.climate-terrain-feedbacks|runtime.procedural-living-planet', `Unexpected root modules: ${initial.modules.join(', ')}`);
+    assert(initial.modules.join('|') === 'planet.orbit-seasons|planet.interior-tectonics|planet.water-cycle|planet.living-ecology|ecology.seasonal-resource-fields|planet.climate-terrain-feedbacks|runtime.procedural-living-planet', `Unexpected root modules: ${initial.modules.join(', ')}`);
     assert(initial.snapshot.mode === 'procedural-living-planet' && initial.snapshot.planet.fictional && !initial.snapshot.planet.earthData, 'The root is not honestly labeled as a fictional procedural planet.');
     assert(initial.snapshot.presentation.renderer === 'pixi-single-canvas' && !initial.snapshot.presentation.tickerStarted, 'The single-renderer contract failed.');
     assert(initial.visibleSimulationCanvases.length === 1 && initial.visibleSimulationCanvases[0].id === 'lofiLivingCanvas' && initial.canvas, `The root must have one visible simulation canvas plus approved presentation layers: ${JSON.stringify(initial.visibleCanvases)}`);
