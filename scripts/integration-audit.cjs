@@ -137,6 +137,7 @@ requireText('scripts/iphone-sphere-smoke.cjs', 'Mobile dashboard overlaps the in
 requireText('scripts/root-renderer-smoke.cjs', 'visibleSimulationCanvases.length === 1', 'single simulation canvas plus approved presentation layers');
 requireText('scripts/surface-mode-smoke.cjs', "document.documentElement.dataset.surfaceMode === 'active'", 'surface mode activates in browser');
 requireText('scripts/surface-mode-smoke.cjs', "page.keyboard.down('w')", 'surface mode movement browser assertion');
+requireText('scripts/surface-mode-smoke.cjs', "page.locator('#enterSurfaceMode').click()", 'surface mode re-entry browser assertion');
 requireText('scripts/performance-smoke.cjs', 'webglcontextlost', 'surface context-loss fallback assertion');
 requireText('scripts/performance-smoke.cjs', 'STARTUP_PIXEL_BUDGET', 'startup canvas performance budget');
 requireText('core/surface-mode.js', 'DISTANT_CACHE_START', 'surface mode distant terrain cache');

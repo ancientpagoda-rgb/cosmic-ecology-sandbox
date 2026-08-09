@@ -87,6 +87,14 @@ fs.mkdirSync(artifactDir, { recursive: true });
 
     await page.evaluate(() => window.realitySandboxSurfaceMode.exit());
     await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'inactive', null, { timeout: 10000 });
+    await page.locator('#enterSurfaceMode').click();
+    await page.waitForFunction(() => {
+      const diagnostics = window.realitySandboxPresentationDiagnostics?.();
+      return document.documentElement.dataset.surfaceMode === 'active' &&
+        diagnostics?.surfaceGpu?.active === true;
+    }, null, { timeout: 15000 });
+    await page.evaluate(() => window.realitySandboxSurfaceMode.exit());
+    await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'inactive', null, { timeout: 10000 });
   } finally {
     await browser.close();
   }
