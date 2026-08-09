@@ -6,10 +6,10 @@ const MAX_ZOOM = 12;
 const UI_INTERVAL_MS = 300;
 const LOGICAL_SIZE_PX = 900;
 // Rebuilding Pixi paths for every terrain cell is CPU-bound. The overview is
-// a strategic globe, so an interaction-ready 12 fps with 8 px terrain cells
+// a strategic globe, so an interaction-ready 12 fps with 10 px terrain cells
 // reads cleanly while avoiding hundreds of thousands of paths per frame.
 const REDRAW_INTERVAL_MS = 1000 / 12;
-const TERRAIN_TILE_PX = 8;
+const TERRAIN_TILE_PX = 10;
 // Terrain is a large collection of Pixi paths. Keep that geometry on the GPU
 // between world/camera updates instead of rebuilding it for every presentation
 // frame. The short cadence keeps rainfall and vegetation legible without
@@ -20,6 +20,7 @@ const COSMIC_ZOOM_THRESHOLD = 0.68;
 const COSMIC_REBUILD_MIN_INTERVAL_MS = 160;
 const COSMIC_REFERENCE_SPAN = 320;
 const MAX_DRAWN_WEATHER = 24;
+const MAX_DRAWN_ORGANISMS = 96;
 const PALETTE = {
   background: 0x030806,
   atmosphere: 0x8bb8a8,
@@ -408,7 +409,10 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         sharedTicker: false,
         preference: 'webgl',
         powerPreference: mobile ? 'high-performance' : 'high-performance',
-        resolution: Math.min(3, Math.max(2, globalThis.devicePixelRatio || 1)),
+        // Rendering at 2–3× the logical canvas turned each terrain rebuild
+        // into tens of thousands of CPU-side path operations. Keep the
+        // strategic view crisp enough while preserving prompt first paint.
+        resolution: mobile ? 1 : Math.min(1.25, Math.max(1, globalThis.devicePixelRatio || 1)),
         autoDensity: true,
         clearBeforeRender: true,
       });
@@ -700,6 +704,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     lastDrawnEntities = 0;
     const components = world.ecs.components;
     for (const [id, position] of components.position.entries()) {
+      if (lastDrawnEntities >= MAX_DRAWN_ORGANISMS) break;
       if (components.resource.has(id)) continue;
       let color = null;
       let baseSize = 2.45;
@@ -1054,7 +1059,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
           rebuilds: cosmicRebuilds,
           generator: 'seeded-infinite-coordinate-field',
         },
-        maxDrawnOrganisms: null,
+        maxDrawnOrganisms: MAX_DRAWN_ORGANISMS,
         maxDrawnWeather: MAX_DRAWN_WEATHER,
         drawnEntities: lastDrawnEntities,
         drawnWeather: lastDrawnWeather,
