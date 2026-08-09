@@ -10,6 +10,12 @@ const LOGICAL_SIZE_PX = 900;
 // reads cleanly while avoiding hundreds of thousands of paths per frame.
 const REDRAW_INTERVAL_MS = 1000 / 12;
 const TERRAIN_TILE_PX = 8;
+// Terrain is a large collection of Pixi paths. Keep that geometry on the GPU
+// between world/camera updates instead of rebuilding it for every presentation
+// frame. The short cadence keeps rainfall and vegetation legible without
+// turning an otherwise idle tab into a CPU benchmark.
+const TERRAIN_REBUILD_MIN_INTERVAL_MS = 720;
+const TERRAIN_WORLD_REFRESH_TICKS = 90;
 const MAX_DRAWN_WEATHER = 24;
 const PALETTE = {
   background: 0x030806,
@@ -40,6 +46,9 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   let lastUiUpdate = -Infinity;
   let lastDrawnEntities = 0;
   let lastDrawnWeather = 0;
+  let lastTerrainBuild = -Infinity;
+  let terrainSignature = '';
+  let terrainRebuilds = 0;
   let atlasLatticeSignature = '';
   let destroyed = false;
   let presentationSuspended = false;
@@ -52,6 +61,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   let pinch = null;
   let canvas = null;
   let app = null;
+  let terrainGraphics = null;
   let graphics = null;
   let shell = null;
   let evolutionPanel = null;
@@ -78,7 +88,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     canvas.id = 'lofiLivingCanvas';
     canvas.tabIndex = 0;
     canvas.setAttribute('role', 'application');
-    canvas.setAttribute('aria-label', `${planetName}, a fictional procedural planet. Drag to rotate, scroll or pinch to zoom, and click a region to inspect it.`);
+    canvas.setAttribute('aria-label', 'A fictional procedural planet. Drag to rotate, scroll or pinch to zoom, and click a region to inspect it.');
     canvas.style.imageRendering = 'auto';
     host.prepend(canvas);
     installInteraction();
@@ -91,12 +101,6 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     shell = document.createElement('div');
     shell.className = 'planet-shell';
     shell.innerHTML = `
-      <section class="planet-masthead" aria-labelledby="planetTitle">
-        <p class="planet-eyebrow">Procedural living planet · fictional world</p>
-        <h1 class="planet-title" id="planetTitle">${escapeHtml(planetName)}</h1>
-        <p class="planet-subtitle">One coupled simulation: terrain shapes water, water shapes plants, and food and climate shape animal survival and evolution.</p>
-        <p class="planet-subtitle" data-planet-event aria-live="polite"></p>
-      </section>
       <section class="planet-dashboard" aria-label="Living planet overview">
         <dl class="planet-stats">
           ${statMarkup('season', 'Season', 'Season is derived from Eidolon’s procedural orbit and axial tilt.')}
@@ -401,8 +405,9 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         clearBeforeRender: true,
       });
       next.stop();
+      terrainGraphics = new Graphics();
       graphics = new Graphics();
-      next.stage.addChild(graphics);
+      next.stage.addChild(terrainGraphics, graphics);
       app = next;
       return app;
     })().finally(() => { pixiLoadPromise = null; });
@@ -555,7 +560,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     const minimumInterval = REDRAW_INTERVAL_MS;
     if (timestamp - lastRender >= minimumInterval) {
       lastRender = timestamp;
-      drawLivingWorld();
+      drawLivingWorld(timestamp);
       if (typeof app.render === 'function') app.render();
       else app.renderer.render({ container: app.stage });
     }
@@ -600,34 +605,19 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     return { x: cx + x * radius, y: cy - y * radius, depth: z, visible: z > 0 };
   }
 
-  function drawLivingWorld() {
+  function drawLivingWorld(timestamp) {
     const width = app.renderer.width;
     const height = app.renderer.height;
-    const tile = TERRAIN_TILE_PX;
+    const nextTerrainSignature = getTerrainSignature(width, height);
+    if (nextTerrainSignature !== terrainSignature && (terrainRebuilds === 0 || timestamp - lastTerrainBuild >= TERRAIN_REBUILD_MIN_INTERVAL_MS)) {
+      drawTerrain(width, height);
+      terrainSignature = nextTerrainSignature;
+      lastTerrainBuild = timestamp;
+      terrainRebuilds += 1;
+    }
+
     const { cx, cy, radius } = getSphereFrame(width, height);
     graphics.clear();
-    graphics.rect(0, 0, width, height).fill(PALETTE.background);
-    graphics.circle(cx + 3, cy + 4, radius + 3).fill({ color: 0x000000, alpha: 0.5 });
-    graphics.circle(cx, cy, radius + 3).fill({ color: PALETTE.atmosphere, alpha: 0.18 });
-
-    const left = Math.max(0, Math.floor((cx - radius) / tile) * tile);
-    const right = Math.min(width, Math.ceil((cx + radius) / tile) * tile);
-    const top = Math.max(0, Math.floor((cy - radius) / tile) * tile);
-    const bottom = Math.min(height, Math.ceil((cy + radius) / tile) * tile);
-
-    for (let py = top; py < bottom; py += tile) {
-      for (let px = left; px < right; px += tile) {
-        const sample = sphereScreenToWorld(px + tile * 0.5, py + tile * 0.5, width, height);
-        if (!sample) continue;
-        const worldX = sample.x * world.width;
-        const worldY = sample.y * world.height;
-        const terrain = living.sampleDynamicPlanet(worldX, worldY);
-        const water = waterCycle.sample(worldX, worldY);
-        const base = coupledSurfaceColor(terrain, water);
-        const light = clamp(0.3 + 0.78 * (sample.normal.x * -0.35 + sample.normal.y * 0.42 + sample.normal.z * 0.82), 0.18, 1.06);
-        graphics.rect(px, py, tile + 0.7, tile + 0.7).fill(shadeColor(base, light));
-      }
-    }
 
     const weather = dynamics.getWeather?.() || [];
     lastDrawnWeather = 0;
@@ -686,7 +676,47 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       graphics.circle(selected.x, selected.y, clamp(4 + camera.zoom * 1.2, 5, 13)).stroke({ color: PALETTE.selection, width: 2, alpha: 0.92 });
       graphics.circle(selected.x, selected.y, 2).fill(PALETTE.selection);
     }
-    graphics.circle(cx, cy, radius).stroke({ color: PALETTE.atmosphere, width: 2, alpha: 0.76 });
+  }
+
+  function getTerrainSignature(width, height) {
+    const worldRevision = Math.floor(world.tick / TERRAIN_WORLD_REFRESH_TICKS);
+    return [
+      width,
+      height,
+      camera.zoom.toFixed(3),
+      camera.centerX.toFixed(3),
+      camera.centerY.toFixed(3),
+      worldRevision,
+    ].join('|');
+  }
+
+  function drawTerrain(width, height) {
+    const tile = TERRAIN_TILE_PX;
+    const { cx, cy, radius } = getSphereFrame(width, height);
+    terrainGraphics.clear();
+    terrainGraphics.rect(0, 0, width, height).fill(PALETTE.background);
+    terrainGraphics.circle(cx + 3, cy + 4, radius + 3).fill({ color: 0x000000, alpha: 0.5 });
+    terrainGraphics.circle(cx, cy, radius + 3).fill({ color: PALETTE.atmosphere, alpha: 0.18 });
+
+    const left = Math.max(0, Math.floor((cx - radius) / tile) * tile);
+    const right = Math.min(width, Math.ceil((cx + radius) / tile) * tile);
+    const top = Math.max(0, Math.floor((cy - radius) / tile) * tile);
+    const bottom = Math.min(height, Math.ceil((cy + radius) / tile) * tile);
+
+    for (let py = top; py < bottom; py += tile) {
+      for (let px = left; px < right; px += tile) {
+        const sample = sphereScreenToWorld(px + tile * 0.5, py + tile * 0.5, width, height);
+        if (!sample) continue;
+        const worldX = sample.x * world.width;
+        const worldY = sample.y * world.height;
+        const terrain = living.sampleDynamicPlanet(worldX, worldY);
+        const water = waterCycle.sample(worldX, worldY);
+        const base = coupledSurfaceColor(terrain, water);
+        const light = clamp(0.3 + 0.78 * (sample.normal.x * -0.35 + sample.normal.y * 0.42 + sample.normal.z * 0.82), 0.18, 1.06);
+        terrainGraphics.rect(px, py, tile + 0.7, tile + 0.7).fill(shadeColor(base, light));
+      }
+    }
+    terrainGraphics.circle(cx, cy, radius).stroke({ color: PALETTE.atmosphere, width: 2, alpha: 0.76 });
   }
 
   function updateInterface(force = false, timestamp = performance.now()) {
@@ -836,7 +866,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     }
     if (kind === 'scene') {
       return {
-        ok: Boolean(canvas && app && graphics && shell),
+        ok: Boolean(canvas && app && terrainGraphics && graphics && shell),
         kind,
         model: 'procedural',
         renderer: 'pixi-single-canvas',
@@ -845,6 +875,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         controls: 3,
         drawnEntities: lastDrawnEntities,
         drawnWeather: lastDrawnWeather,
+        terrainRebuilds,
         suspended: presentationSuspended,
       };
     }
@@ -868,7 +899,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
 
   function getSnapshot() {
     return {
-      version: 4,
+      version: 5,
       mode: 'procedural-living-planet',
       planet: { name: planetName, fictional: true, model: 'procedural', seed, earthData: false },
       clock: { source: 'root-module-host-fixed-step', masterSteps, unifiedSeconds, duplicateClockViolations },
@@ -881,6 +912,11 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         logicalHeight: logicalSize.height,
         redrawFps: 12,
         terrainTilePx: TERRAIN_TILE_PX,
+        terrainCache: {
+          rebuildMinIntervalMs: TERRAIN_REBUILD_MIN_INTERVAL_MS,
+          worldRefreshTicks: TERRAIN_WORLD_REFRESH_TICKS,
+          rebuilds: terrainRebuilds,
+        },
         maxDrawnOrganisms: null,
         maxDrawnWeather: MAX_DRAWN_WEATHER,
         drawnEntities: lastDrawnEntities,
@@ -944,6 +980,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     pointers.clear();
     app?.destroy?.(true, { children: true });
     app = null;
+    terrainGraphics = null;
     graphics = null;
     canvas?.remove();
     shell?.remove();
