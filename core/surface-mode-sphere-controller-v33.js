@@ -53,6 +53,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
   let dragY = 0;
   let shellDisplay = '';
   let terrainRendererRequested = false;
+  let terrainRendererPromise = null;
 
   const layer = document.createElement('div');
   layer.id = 'surfaceModeLayer';
@@ -227,6 +228,22 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     }
   }
 
+  function startTerrainRenderer() {
+    if (terrainRendererPromise) return terrainRendererPromise;
+    terrainRendererPromise = import('./surface-visual-layers.js')
+      .then(() => {
+        document.documentElement.dataset.surfaceVisualLayers = 'v46e-lazy-loaded';
+        return import('./surface-terrain-water-sphere-gpu-v37.js');
+      })
+      .catch(error => {
+        console.warn('[Surface Mode] GPU terrain scene could not start.', error);
+        document.documentElement.dataset.surfaceGpu = 'load-failed';
+        document.documentElement.dataset.surfaceVisualLayers = 'load-failed';
+        paintSurfaceFallback();
+      });
+    return terrainRendererPromise;
+  }
+
   function loop(now) {
     requestAnimationFrame(loop);
     const dt = clamp((now - lastFrameTime) / 1000, 0, 0.05);
@@ -252,11 +269,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     // requested only after the explorer intentionally enters Surface Mode.
     if (!terrainRendererRequested) {
       terrainRendererRequested = true;
-      import('./surface-terrain-water-sphere-gpu-v37.js').catch(error => {
-        console.warn('[Surface Mode] GPU terrain scene could not start.', error);
-        document.documentElement.dataset.surfaceGpu = 'load-failed';
-        paintSurfaceFallback();
-      });
+      startTerrainRenderer();
     }
     layer.style.pointerEvents = 'auto';
     layer.style.opacity = '1';
