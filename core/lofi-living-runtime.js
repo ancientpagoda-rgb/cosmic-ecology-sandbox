@@ -1,7 +1,7 @@
 import { Application, Graphics } from 'pixi.js';
 import { biomeColor } from './planet.js';
 
-const MIN_ZOOM = 0.7;
+const MIN_ZOOM = 0.035;
 const MAX_ZOOM = 12;
 const UI_INTERVAL_MS = 300;
 const LOGICAL_SIZE_PX = 900;
@@ -16,6 +16,9 @@ const TERRAIN_TILE_PX = 8;
 // turning an otherwise idle tab into a CPU benchmark.
 const TERRAIN_REBUILD_MIN_INTERVAL_MS = 720;
 const TERRAIN_WORLD_REFRESH_TICKS = 90;
+const COSMIC_ZOOM_THRESHOLD = 0.68;
+const COSMIC_REBUILD_MIN_INTERVAL_MS = 160;
+const COSMIC_REFERENCE_SPAN = 320;
 const MAX_DRAWN_WEATHER = 24;
 const PALETTE = {
   background: 0x030806,
@@ -34,6 +37,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   const { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources, lineageFoundry, eidolonAtlas } = dependencies;
   const mobile = options.mobile ?? matchMedia('(max-width: 720px), (pointer: coarse)').matches;
   const seed = options.seed ?? 734221;
+  const cosmicSeed = hashText(seed);
   const planetName = options.planetName || world.planetName || 'Procedural Planet';
   const controls = options.controls || {};
   const logicalSize = chooseLogicalSize();
@@ -49,18 +53,22 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   let lastTerrainBuild = -Infinity;
   let terrainSignature = '';
   let terrainRebuilds = 0;
+  let cosmicSignature = '';
+  let cosmicRebuilds = 0;
+  let lastCosmicBuild = -Infinity;
   let atlasLatticeSignature = '';
   let destroyed = false;
   let presentationSuspended = false;
   let selectedPoint = { x: world.width * 0.5, y: world.height * 0.5 };
   let latestEvent = 'Terrain, water, weather, vegetation, and animals are now sharing one world state.';
 
-  const camera = { zoom: 1, centerX: 0.5, centerY: 0.5 };
+  const camera = { zoom: 1, centerX: 0.5, centerY: 0.5, universeX: 0, universeY: 0 };
   const pointers = new Map();
   let drag = null;
   let pinch = null;
   let canvas = null;
   let app = null;
+  let cosmicGraphics = null;
   let terrainGraphics = null;
   let graphics = null;
   let shell = null;
@@ -405,9 +413,10 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         clearBeforeRender: true,
       });
       next.stop();
+      cosmicGraphics = new Graphics();
       terrainGraphics = new Graphics();
       graphics = new Graphics();
-      next.stage.addChild(terrainGraphics, graphics);
+      next.stage.addChild(cosmicGraphics, terrainGraphics, graphics);
       app = next;
       return app;
     })().finally(() => { pixiLoadPromise = null; });
@@ -430,7 +439,16 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointers.size >= 2) beginPinch();
     else {
-      drag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, centerX: camera.centerX, centerY: camera.centerY, moved: 0 };
+      drag = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        centerX: camera.centerX,
+        centerY: camera.centerY,
+        universeX: camera.universeX,
+        universeY: camera.universeY,
+        moved: 0,
+      };
       canvas.dataset.dragging = 'true';
     }
   }
@@ -451,11 +469,20 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
     drag.moved = Math.max(drag.moved, Math.hypot(event.clientX - drag.x, event.clientY - drag.y));
-    setCamera({
-      zoom: camera.zoom,
-      centerX: drag.centerX - (event.clientX - drag.x) / rect.width / camera.zoom,
-      centerY: drag.centerY + (event.clientY - drag.y) / rect.height / camera.zoom,
-    });
+    if (isCosmicZoom()) {
+      const span = cosmicViewSpan();
+      setCamera({
+        zoom: camera.zoom,
+        universeX: drag.universeX - (event.clientX - drag.x) / rect.width * span,
+        universeY: drag.universeY + (event.clientY - drag.y) / rect.height * span,
+      });
+    } else {
+      setCamera({
+        zoom: camera.zoom,
+        centerX: drag.centerX - (event.clientX - drag.x) / rect.width / camera.zoom,
+        centerY: drag.centerY + (event.clientY - drag.y) / rect.height / camera.zoom,
+      });
+    }
   }
 
   function onPointerUp(event) {
@@ -504,6 +531,10 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
 
   function setCameraAroundAnchor(nextZoom, anchor, clientX, clientY) {
     const zoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+    if (zoom < COSMIC_ZOOM_THRESHOLD || isCosmicZoom()) {
+      setCamera({ zoom });
+      return;
+    }
     camera.zoom = zoom;
     const after = clientToWorld(clientX, clientY);
     setCamera({ zoom, centerX: camera.centerX + wrappedDelta(anchor.x - after.x), centerY: camera.centerY + anchor.y - after.y });
@@ -529,13 +560,19 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     camera.zoom = clamp(Number(next.zoom) || camera.zoom, MIN_ZOOM, MAX_ZOOM);
     camera.centerX = wrap01(Number.isFinite(next.centerX) ? next.centerX : camera.centerX);
     camera.centerY = clamp(Number.isFinite(next.centerY) ? next.centerY : camera.centerY, 0.01, 0.99);
+    camera.universeX = Number.isFinite(next.universeX) ? next.universeX : camera.universeX;
+    camera.universeY = Number.isFinite(next.universeY) ? next.universeY : camera.universeY;
     invalidateRender();
     return getCamera();
   }
 
-  function resetCamera() { return setCamera({ zoom: 1, centerX: 0.5, centerY: 0.5 }); }
+  function resetCamera() { return setCamera({ zoom: 1, centerX: 0.5, centerY: 0.5, universeX: 0, universeY: 0 }); }
   function getCamera() { return { ...camera, minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM }; }
   function invalidateRender() { lastRender = -Infinity; }
+
+  function isCosmicZoom() { return camera.zoom < COSMIC_ZOOM_THRESHOLD; }
+
+  function cosmicViewSpan() { return COSMIC_REFERENCE_SPAN / Math.max(camera.zoom, MIN_ZOOM); }
   function setPresentationSuspended(value) {
     presentationSuspended = Boolean(value);
     document.documentElement.dataset.globePresentation = presentationSuspended ? 'suspended' : 'active';
@@ -608,6 +645,23 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   function drawLivingWorld(timestamp) {
     const width = app.renderer.width;
     const height = app.renderer.height;
+    const cosmic = isCosmicZoom();
+    cosmicGraphics.visible = cosmic;
+    terrainGraphics.visible = !cosmic;
+    if (cosmic) {
+      const nextCosmicSignature = getCosmicSignature(width, height);
+      if (nextCosmicSignature !== cosmicSignature && (cosmicRebuilds === 0 || timestamp - lastCosmicBuild >= COSMIC_REBUILD_MIN_INTERVAL_MS)) {
+        drawCosmicUniverse(width, height);
+        cosmicSignature = nextCosmicSignature;
+        lastCosmicBuild = timestamp;
+        cosmicRebuilds += 1;
+      }
+      graphics.clear();
+      lastDrawnEntities = 0;
+      lastDrawnWeather = 0;
+      return;
+    }
+
     const nextTerrainSignature = getTerrainSignature(width, height);
     if (nextTerrainSignature !== terrainSignature && (terrainRebuilds === 0 || timestamp - lastTerrainBuild >= TERRAIN_REBUILD_MIN_INTERVAL_MS)) {
       drawTerrain(width, height);
@@ -676,6 +730,80 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       graphics.circle(selected.x, selected.y, clamp(4 + camera.zoom * 1.2, 5, 13)).stroke({ color: PALETTE.selection, width: 2, alpha: 0.92 });
       graphics.circle(selected.x, selected.y, 2).fill(PALETTE.selection);
     }
+  }
+
+  function getCosmicSignature(width, height) {
+    const span = cosmicViewSpan();
+    const cellSpan = cosmicCellSpan(span);
+    return [
+      width,
+      height,
+      camera.zoom.toFixed(4),
+      Math.floor(camera.universeX / Math.max(1, cellSpan / 12)),
+      Math.floor(camera.universeY / Math.max(1, cellSpan / 12)),
+      cellSpan,
+    ].join('|');
+  }
+
+  function cosmicCellSpan(span) {
+    return 28 * 2 ** Math.max(0, Math.floor(Math.log2(Math.max(1, span / COSMIC_REFERENCE_SPAN))));
+  }
+
+  function drawCosmicUniverse(width, height) {
+    const span = cosmicViewSpan();
+    const spanX = span * width / Math.max(1, height);
+    const cellSpan = cosmicCellSpan(span);
+    const left = camera.universeX - spanX * 0.5;
+    const top = camera.universeY - span * 0.5;
+    const right = camera.universeX + spanX * 0.5;
+    const bottom = camera.universeY + span * 0.5;
+    const colors = [0x8bb8a8, 0xdab065, 0x9db2da, 0xe7d6b1, 0x859a7f];
+
+    cosmicGraphics.clear();
+    cosmicGraphics.rect(0, 0, width, height).fill(0x020504);
+    const startX = Math.floor(left / cellSpan) - 1;
+    const endX = Math.ceil(right / cellSpan) + 1;
+    const startY = Math.floor(top / cellSpan) - 1;
+    const endY = Math.ceil(bottom / cellSpan) + 1;
+    for (let gridY = startY; gridY <= endY; gridY += 1) {
+      for (let gridX = startX; gridX <= endX; gridX += 1) {
+        const density = cosmicHash(gridX, gridY, 1);
+        if (density < 0.16) continue;
+        const starCount = density > 0.92 ? 4 : density > 0.68 ? 2 : 1;
+        for (let index = 0; index < starCount; index += 1) {
+          const px = gridX * cellSpan + cosmicHash(gridX, gridY, 11 + index * 3) * cellSpan;
+          const py = gridY * cellSpan + cosmicHash(gridX, gridY, 12 + index * 3) * cellSpan;
+          const screenX = (px - left) / spanX * width;
+          const screenY = (py - top) / span * height;
+          const luminosity = cosmicHash(gridX, gridY, 13 + index * 3);
+          const color = colors[Math.floor(cosmicHash(gridX, gridY, 14 + index * 3) * colors.length) % colors.length];
+          const radius = (luminosity > 0.9 ? 2.1 : luminosity > 0.6 ? 1.25 : 0.7) * clamp(1.7 - Math.log2(cellSpan / 28) * 0.22, 0.45, 1.7);
+          if (luminosity > 0.82) cosmicGraphics.circle(screenX, screenY, radius * 4.4).fill({ color, alpha: 0.055 + luminosity * 0.07 });
+          cosmicGraphics.circle(screenX, screenY, radius).fill({ color, alpha: 0.42 + luminosity * 0.56 });
+        }
+        if (density > 0.975) {
+          const centerX = (gridX * cellSpan + cellSpan * 0.5 - left) / spanX * width;
+          const centerY = (gridY * cellSpan + cellSpan * 0.5 - top) / span * height;
+          const nebula = colors[Math.floor(cosmicHash(gridX, gridY, 32) * colors.length) % colors.length];
+          cosmicGraphics.ellipse(centerX, centerY, cellSpan / spanX * width * 0.42, cellSpan / span * height * 0.13)
+            .fill({ color: nebula, alpha: 0.075 });
+        }
+      }
+    }
+
+    const { cx, cy, radius } = getSphereFrame(width, height);
+    const planetRadius = Math.max(1.5, radius);
+    cosmicGraphics.circle(cx + planetRadius * 0.06, cy + planetRadius * 0.08, planetRadius * 1.08).fill({ color: 0x000000, alpha: 0.46 });
+    cosmicGraphics.circle(cx, cy, planetRadius * 1.13).fill({ color: PALETTE.atmosphere, alpha: 0.11 });
+    cosmicGraphics.circle(cx, cy, planetRadius).fill(0x10221d);
+    cosmicGraphics.circle(cx - planetRadius * 0.23, cy - planetRadius * 0.18, planetRadius * 0.63).fill({ color: 0x315b48, alpha: 0.34 });
+    cosmicGraphics.circle(cx, cy, planetRadius).stroke({ color: PALETTE.atmosphere, width: Math.max(0.8, planetRadius * 0.025), alpha: 0.78 });
+  }
+
+  function cosmicHash(x, y, salt = 0) {
+    let value = (Math.imul(Math.floor(x), 374761393) ^ Math.imul(Math.floor(y), 668265263) ^ Math.imul(salt, 1442695041) ^ cosmicSeed) >>> 0;
+    value = Math.imul(value ^ (value >>> 13), 1274126177) >>> 0;
+    return ((value ^ (value >>> 16)) >>> 0) / 4294967295;
   }
 
   function getTerrainSignature(width, height) {
@@ -866,7 +994,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     }
     if (kind === 'scene') {
       return {
-        ok: Boolean(canvas && app && terrainGraphics && graphics && shell),
+        ok: Boolean(canvas && app && cosmicGraphics && terrainGraphics && graphics && shell),
         kind,
         model: 'procedural',
         renderer: 'pixi-single-canvas',
@@ -876,6 +1004,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         drawnEntities: lastDrawnEntities,
         drawnWeather: lastDrawnWeather,
         terrainRebuilds,
+        cosmicRebuilds,
         suspended: presentationSuspended,
       };
     }
@@ -899,7 +1028,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
 
   function getSnapshot() {
     return {
-      version: 5,
+      version: 6,
       mode: 'procedural-living-planet',
       planet: { name: planetName, fictional: true, model: 'procedural', seed, earthData: false },
       clock: { source: 'root-module-host-fixed-step', masterSteps, unifiedSeconds, duplicateClockViolations },
@@ -916,6 +1045,14 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
           rebuildMinIntervalMs: TERRAIN_REBUILD_MIN_INTERVAL_MS,
           worldRefreshTicks: TERRAIN_WORLD_REFRESH_TICKS,
           rebuilds: terrainRebuilds,
+        },
+        cosmicUniverse: {
+          active: isCosmicZoom(),
+          zoomThreshold: COSMIC_ZOOM_THRESHOLD,
+          minimumZoom: MIN_ZOOM,
+          camera: { x: camera.universeX, y: camera.universeY },
+          rebuilds: cosmicRebuilds,
+          generator: 'seeded-infinite-coordinate-field',
         },
         maxDrawnOrganisms: null,
         maxDrawnWeather: MAX_DRAWN_WEATHER,
@@ -980,6 +1117,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     pointers.clear();
     app?.destroy?.(true, { children: true });
     app = null;
+    cosmicGraphics = null;
     terrainGraphics = null;
     graphics = null;
     canvas?.remove();
@@ -1078,6 +1216,15 @@ function mean(values) { return values.length ? values.reduce((sum, value) => sum
 function pointDistance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 function pointMidpoint(a, b) { return { x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5 }; }
 function wrap01(value) { return value - Math.floor(value); }
+function hashText(value) {
+  const text = String(value);
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
 function wrappedDelta(value) { return value - Math.floor(value + 0.5); }
 function quantize(value, size) { return Math.round(value / size) * size; }
 function mixRgb(a, b, t) { const amount = clamp(t, 0, 1); return a.map((value, index) => Math.round(value + (b[index] - value) * amount)); }
