@@ -887,13 +887,14 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     const inspection = dynamics.inspect(selectedPoint.x, selectedPoint.y);
     const latitude = 90 - selectedPoint.y / world.height * 180;
     const longitude = selectedPoint.x / world.width * 360 - 180;
-    return { ...inspection, latitude, longitude };
+    return { ...inspection, latitude, longitude, geography: world.geography };
   }
 
   function updateInspector(inspection) {
     if (!interfaceNodes || !inspection) return;
     interfaceNodes.inspectTitle.textContent = inspection.title;
-    interfaceNodes.inspectCoords.textContent = `${formatCoordinate(inspection.latitude, 'N', 'S')} · ${formatCoordinate(inspection.longitude, 'E', 'W')} · procedural coordinates`;
+    const circumference = inspection.geography?.equatorialCircumferenceKm;
+    interfaceNodes.inspectCoords.textContent = `${formatCoordinate(inspection.latitude, 'N', 'S')} · ${formatCoordinate(inspection.longitude, 'E', 'W')} · ${circumference ? `${circumference.toLocaleString()} km around` : 'procedural coordinates'}`;
     const life = inspection.counts;
     const values = {
       biome: inspection.biome,
@@ -975,7 +976,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     return {
       version: 6,
       mode: 'procedural-living-planet',
-      planet: { name: planetName, fictional: true, model: 'procedural', seed, earthData: false },
+      planet: { name: planetName, fictional: true, model: 'procedural', seed, earthData: false, geography: world.geography },
       clock: { source: 'root-module-host-fixed-step', masterSteps, unifiedSeconds, duplicateClockViolations },
       presentation: {
         renderer: 'pixi-single-canvas',

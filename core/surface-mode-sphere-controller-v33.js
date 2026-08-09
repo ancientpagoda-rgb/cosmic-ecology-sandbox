@@ -195,7 +195,9 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     const longitude = (player.x / world.width - 0.5) * 360;
     const altitude = Math.max(0, player.altitude - EYE_HEIGHT);
     const nearbyLife = Number(document.documentElement.dataset.surfaceModeVisibleCreatures || 0);
-    info.innerHTML = `<b>SURFACE MODE · EIDOLON · SPHERE GPU</b><br>${terrain?.biome || 'unknown'} · ${Math.abs(latitude).toFixed(2)}° ${latitude >= 0 ? 'N' : 'S'} · ${Math.abs(longitude).toFixed(2)}° ${longitude >= 0 ? 'E' : 'W'}<br>altitude +${altitude.toFixed(1)} · rain ${(localWater?.rain || 0).toFixed(2)} · nearby life ${nearbyLife}`;
+    const circumference = world.geography?.equatorialCircumferenceKm;
+    const scaleLine = circumference ? `${circumference.toLocaleString()} km around · scale ×${world.geography.macroScale}` : 'procedural scale';
+    info.innerHTML = `<b>SURFACE MODE · EIDOLON · SPHERE GPU</b><br>${terrain?.biome || 'unknown'} · ${Math.abs(latitude).toFixed(2)}° ${latitude >= 0 ? 'N' : 'S'} · ${Math.abs(longitude).toFixed(2)}° ${longitude >= 0 ? 'E' : 'W'}<br>${scaleLine} · altitude +${altitude.toFixed(1)} · rain ${(localWater?.rain || 0).toFixed(2)} · nearby life ${nearbyLife}`;
     document.documentElement.dataset.surfaceModeBiome = terrain?.biome || 'unknown';
     document.documentElement.dataset.surfaceModeCoordinates = `${player.x.toFixed(2)},${player.y.toFixed(2)}`;
   }

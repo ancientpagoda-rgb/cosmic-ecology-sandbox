@@ -5,6 +5,14 @@ import { createEcs } from './ecs.js';
 export function createWorld(rng) {
   const width = 1200;
   const height = 720;
+  // The ecological model deliberately works on a compact coordinate lattice.
+  // Treating one of those units as a kilometre made Eidolon read like a
+  // terrarium, though: its whole equator was only 1,200 km around.  Keep the
+  // inexpensive lattice, but give it a geographic interpretation suitable for
+  // a planet.  Systems should continue to use `width`/`height` for sampling;
+  // renderers and UI can use this contract when they need physical scale.
+  const geographicScale = 100;
+  const equatorialCircumferenceKm = width * geographicScale;
 
   const ecs = createEcs();
 
@@ -12,6 +20,14 @@ export function createWorld(rng) {
     tick: 0,
     width,
     height,
+    geography: Object.freeze({
+      modelUnitsPerKilometre: 1 / geographicScale,
+      kilometresPerModelUnit: geographicScale,
+      macroScale: geographicScale,
+      equatorialCircumferenceKm,
+      nominalRadiusKm: equatorialCircumferenceKm / (Math.PI * 2),
+      description: `A ${equatorialCircumferenceKm.toLocaleString()} km procedural world represented by a ${width} × ${height} simulation lattice.`,
+    }),
     ecs,
     regime: 'calm',
     camera: {

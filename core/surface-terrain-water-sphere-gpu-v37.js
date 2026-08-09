@@ -18,6 +18,9 @@ const DISTANT_SAMPLES_PER_SLICE = 80;
 const DISTANT_START_DELAY_MS = 360;
 const FOV_DEGREES = 100;
 const TILE_OVERLAP = 1.003;
+// Eidolon is geographically vast.  The simulation remains compact, while the
+// local renderer uses this macro scale to keep the horizon from reading like a
+// tiny terrarium.  It affects only presentation curvature, not sampling cost.
 const CURVATURE_RADIUS_FACTOR = 22.0;
 const NEAR_CACHE_LIMIT = 3;
 const REAR_VIEW_DOT_THRESHOLD = -0.22;
@@ -97,7 +100,7 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
   const nearSegments = mobile ? NEAR_SEGMENTS_MOBILE : NEAR_SEGMENTS_DESKTOP;
   const midSegments = mobile ? MID_SEGMENTS_MOBILE : MID_SEGMENTS_DESKTOP;
   const farSegments = mobile ? FAR_SEGMENTS_MOBILE : FAR_SEGMENTS_DESKTOP;
-  const curvatureRadius = Math.max(world.width, world.height) * CURVATURE_RADIUS_FACTOR;
+  const curvatureRadius = Math.max(world.width, world.height) * CURVATURE_RADIUS_FACTOR * (world.geography?.macroScale || 1);
 
   const stats = {
     frames: 0,
@@ -951,6 +954,8 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
       gpuPrimary: true,
       active: isPresenting(),
       diagnosticScene: 'view-priority-best-available-spherical-terrain-water',
+      macroScale: world.geography?.macroScale || 1,
+      nominalCircumferenceKm: world.geography?.equatorialCircumferenceKm || null,
       frames: stats.frames,
       activeFrames: stats.activeFrames,
       rendererInfo: {
