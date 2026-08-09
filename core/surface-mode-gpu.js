@@ -39,12 +39,12 @@ export async function createGpuSurfaceRenderer({
 }) {
   let renderer;
   try {
-    renderer = new WebGPURenderer({ canvas, alpha: false, antialias: true, depth: true });
+    renderer = new WebGPURenderer({ canvas, alpha: false, antialias: false, depth: true });
     await renderer.init();
   } catch (error) {
     // A hardware/browser WebGPU failure should still keep Surface Mode on the GPU via WebGL2.
     renderer?.dispose?.();
-    renderer = new WebGPURenderer({ canvas, alpha: false, antialias: true, depth: true, forceWebGL: true });
+    renderer = new WebGPURenderer({ canvas, alpha: false, antialias: false, depth: true, forceWebGL: true });
     await renderer.init();
   }
 
@@ -58,8 +58,8 @@ export async function createGpuSurfaceRenderer({
   sun.position.set(-90, 120, 55);
   scene.add(hemi, sun);
 
-  const chunkSize = 232;
-  const chunkSegments = 96;
+  const chunkSize = 224;
+  const chunkSegments = 64;
   const geometry = new THREE.PlaneGeometry(chunkSize, chunkSize, chunkSegments, chunkSegments);
   geometry.rotateX(-Math.PI * 0.5);
   const positions = geometry.getAttribute('position');
@@ -69,7 +69,7 @@ export async function createGpuSurfaceRenderer({
   const terrainMesh = new THREE.Mesh(geometry, terrainMaterial);
   scene.add(terrainMesh);
 
-  const treeCount = 1200;
+  const treeCount = 560;
   const treeGeometry = new THREE.ConeGeometry(0.92, 4.9, 5);
   treeGeometry.translate(0, 2.45, 0);
   const treeMaterial = new THREE.MeshLambertMaterial({ color: '#336b3b', vertexColors: true });
@@ -98,6 +98,8 @@ export async function createGpuSurfaceRenderer({
   let lastBuildX = Infinity;
   let lastBuildY = Infinity;
   let treeInstances = 0;
+  let lastCreatureUpdate = -Infinity;
+  let visibleCreatures = 0;
 
   function seededNoise(x, y, salt = 0) {
     const value = Math.sin((x * 127.1 + y * 311.7 + seed * 0.017 + salt * 71.3)) * 43758.5453123;
@@ -129,7 +131,7 @@ export async function createGpuSurfaceRenderer({
     geometry.computeVertexNormals();
 
     treeInstances = 0;
-    const spacing = 7;
+    const spacing = 11;
     const range = Math.floor(chunkSize / (spacing * 2));
     for (let gy = -range; gy <= range && treeInstances < treeCount; gy++) {
       for (let gx = -range; gx <= range && treeInstances < treeCount; gx++) {
@@ -186,14 +188,14 @@ export async function createGpuSurfaceRenderer({
   }
 
   function resize(width, height, dpr = 1) {
-    renderer.setPixelRatio(Math.min(1.5, dpr));
+    renderer.setPixelRatio(Math.min(1.15, dpr));
     renderer.setSize(Math.max(1, width), Math.max(1, height), false);
     camera.aspect = Math.max(1, width) / Math.max(1, height);
     camera.updateProjectionMatrix();
   }
 
   function render(player, { cloud = 0, rain = 0 } = {}) {
-    if (!ready || Math.abs(shortestWrappedDelta(player.x, lastBuildX, world.width)) > 13 || Math.abs(player.y - lastBuildY) > 13) {
+    if (!ready || Math.abs(shortestWrappedDelta(player.x, lastBuildX, world.width)) > 24 || Math.abs(player.y - lastBuildY) > 24) {
       rebuildTerrain(player);
     }
     const localX = shortestWrappedDelta(player.x, origin.x, world.width);
@@ -213,9 +215,13 @@ export async function createGpuSurfaceRenderer({
     scene.fog.near = 55 - weather * 18;
     scene.fog.far = 230 - weather * 85;
     sun.intensity = 2.7 - weather * 1.25;
-    const visible = updateCreatures();
+    const now = performance.now();
+    if (now - lastCreatureUpdate > 180) {
+      visibleCreatures = updateCreatures();
+      lastCreatureUpdate = now;
+    }
     renderer.render(scene, camera);
-    return { visibleCreatures: visible, backend: renderer.backend?.isWebGPUBackend ? 'webgpu' : 'webgl2' };
+    return { visibleCreatures, backend: renderer.backend?.isWebGPUBackend ? 'webgpu' : 'webgl2' };
   }
 
   return {
