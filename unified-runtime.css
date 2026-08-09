@@ -69,6 +69,16 @@ select { font: inherit; }
 
 #lofiLivingCanvas[data-dragging="true"] { cursor: grabbing; }
 
+/* Minimal entry experience: the planet stays unobstructed until Surface Mode
+   is deliberately entered. Runtime panels remain mounted so the simulation
+   keeps its normal data flow, but they are not presented as menus. */
+.planet-shell,
+.planet-evolution,
+.planet-foundry,
+#surfaceModeHud {
+  display: none !important;
+}
+
 .planet-shell {
   position: absolute;
   inset: 0;
