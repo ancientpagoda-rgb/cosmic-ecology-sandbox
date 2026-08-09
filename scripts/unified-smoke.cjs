@@ -85,6 +85,16 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(initial.statValues.every(value => value && value !== '—'), `A statistic did not initialize: ${initial.statValues.join(', ')}`);
     assert(!initial.retiredGlobals && !initial.universeGlobals, 'A retired renderer or universe phase loaded in the public root.');
 
+    const atlasRegionBefore = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().selectedRegion);
+    const atlasCell = page.locator('[data-atlas-lattice] [data-atlas-region]:not(.is-selected)').first();
+    await atlasCell.click();
+    await page.waitForFunction(before => {
+      const after = window.realitySandboxUnified.getSnapshot().selectedRegion;
+      return Math.hypot(after.x - before.x, after.y - before.y) > 1;
+    }, atlasRegionBefore, { timeout: 5000 });
+    const atlasRegionAfter = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().selectedRegion);
+    assert(Math.hypot(atlasRegionAfter.x - atlasRegionBefore.x, atlasRegionAfter.y - atlasRegionBefore.y) > 1, 'Clicking an Atlas lattice sector did not navigate to that simulated region.');
+
     const canvasBox = await page.locator('#lofiLivingCanvas').boundingBox();
     assert(canvasBox && canvasBox.width > 0 && canvasBox.height > 0, 'The planet canvas has no interactive bounds.');
     const centerX = canvasBox.x + canvasBox.width * 0.5;

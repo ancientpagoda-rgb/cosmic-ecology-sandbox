@@ -27,6 +27,14 @@ export function createEidolonAtlas({ world, living, biosphere, journal, seed = '
     };
   }
 
+  function regionById(value) {
+    const match = /^([A-H])(0[1-9]|1[0-2])$/i.exec(String(value || ''));
+    if (!match) return null;
+    const row = match[1].toUpperCase().charCodeAt(0) - 65;
+    const column = Number(match[2]) - 1;
+    return regionAt({ x: (column + 0.5) / COLUMNS * world.width, y: (row + 0.5) / ROWS * world.height });
+  }
+
   function survey(point) {
     const region = regionAt(point);
     const terrain = living?.sampleDynamicPlanet?.(region.x, region.y) || {};
@@ -131,6 +139,7 @@ export function createEidolonAtlas({ world, living, biosphere, journal, seed = '
   return {
     format: FORMAT,
     regionAt,
+    regionById,
     survey,
     markSite,
     recordRelease,

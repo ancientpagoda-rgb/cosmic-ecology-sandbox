@@ -37,6 +37,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   let lastUiUpdate = -Infinity;
   let lastDrawnEntities = 0;
   let lastDrawnWeather = 0;
+  let atlasLatticeSignature = '';
   let destroyed = false;
   let presentationSuspended = false;
   let selectedPoint = { x: world.width * 0.5, y: world.height * 0.5 };
@@ -299,6 +300,14 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
 
   function installAtlasControls() {
     if (!eidolonAtlas || !interfaceNodes?.atlas) return;
+    interfaceNodes.atlas.lattice.addEventListener('click', event => {
+      const cell = event.target.closest('[data-atlas-region]');
+      const region = eidolonAtlas.regionById?.(cell?.dataset.atlasRegion);
+      if (!region) return;
+      selectedPoint = { x: region.x, y: region.y };
+      invalidateRender();
+      updateInterface(true);
+    });
     interfaceNodes.atlas.site.addEventListener('click', () => {
       const site = eidolonAtlas.markSite(selectedPoint);
       interfaceNodes.atlas.status.textContent = `${site.id} charted`;
@@ -703,7 +712,15 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     atlas.name.textContent = `${survey.id} · ${survey.name}`;
     atlas.status.textContent = survey.site ? `charted · tick ${survey.site.tick}` : eidolonAtlas.getRelayState?.() || 'local relay';
     atlas.detail.textContent = `${survey.biome} · ${survey.population} nearby life · ${survey.lineages.length} lineage${survey.lineages.length === 1 ? '' : 's'}`;
-    atlas.lattice.innerHTML = eidolonAtlas.getLattice(selectedPoint).map(cell => `<span class="planet-atlas__cell ${cell.selected ? 'is-selected' : ''} ${cell.charted ? 'is-charted' : ''}" title="${cell.id} · ${cell.biome}${cell.sightings ? ` · ${cell.sightings} sighting${cell.sightings === 1 ? '' : 's'}` : ''}">${cell.id}</span>`).join('');
+    const cells = eidolonAtlas.getLattice(selectedPoint);
+    const latticeSignature = cells.map(cell => `${cell.id}:${cell.selected ? 1 : 0}:${cell.charted ? 1 : 0}:${cell.sightings}:${cell.biome}`).join('|');
+    if (latticeSignature !== atlasLatticeSignature) {
+      atlasLatticeSignature = latticeSignature;
+      atlas.lattice.innerHTML = cells.map(cell => {
+        const detail = `${cell.id} · ${cell.biome}${cell.sightings ? ` · ${cell.sightings} sighting${cell.sightings === 1 ? '' : 's'}` : ''}`;
+        return `<button type="button" class="planet-atlas__cell ${cell.selected ? 'is-selected' : ''} ${cell.charted ? 'is-charted' : ''}" data-atlas-region="${cell.id}" aria-pressed="${cell.selected}" title="${detail}" aria-label="Survey ${detail}">${cell.id}</button>`;
+      }).join('');
+    }
     const sightings = eidolonAtlas.getSightings(1);
     atlas.sightings.textContent = sightings[0] ? `${sightings[0].name} · ${sightings[0].regionId}` : 'no lineage sightings';
   }
