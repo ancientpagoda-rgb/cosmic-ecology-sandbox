@@ -1,7 +1,7 @@
 import { samplePlanet, randomHabitablePoint } from './planet.js';
 import { sampleHydrology } from './hydrology.js';
 
-export function createLivingSystems(world, rng = Math.random) {
+export function createLivingSystems(world, rng = Math.random, options = {}) {
   const random = typeof rng === 'function' ? rng : rng.float.bind(rng);
   const history = [];
   let season = 0;
@@ -180,6 +180,7 @@ export function createLivingSystems(world, rng = Math.random) {
     history.unshift({ title, description, tick: world.tick, date: new Date().toISOString() });
     if (history.length > 60) history.length = 60;
     window.dispatchEvent(new CustomEvent('reality-history', { detail: history.slice(0, 12) }));
+    options.onEvent?.(title, description, 'planetary');
   }
 
   addHistory('Hydrological age begins', 'Rain now drains downhill into rivers, lakes, floodplains, and coastal deltas.');

@@ -48,7 +48,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(result.diagnostics.ok, `Root diagnostics failed: ${result.diagnostics.failures.join(', ')}`);
     assert(result.visibleSimulationCanvases.length === 1 && result.visibleSimulationCanvases[0].id === 'lofiLivingCanvas', `Expected one visible simulation canvas plus approved presentation layers: ${JSON.stringify(result.visibleCanvases)}`);
     assert(result.forbiddenResources.length === 0, `Frozen or retired root resources loaded: ${result.forbiddenResources.join(', ')}`);
-    assert(result.modules.length === 5 && result.modules.at(-1) === 'runtime.procedural-living-planet', `Unexpected root module graph: ${result.modules.join(', ')}`);
+    assert(result.modules.length === 6 && result.modules.includes('ecology.seasonal-resource-fields') && result.modules.at(-1) === 'runtime.procedural-living-planet', `Unexpected root module graph: ${result.modules.join(', ')}`);
     assert(result.snapshot.presentation.renderer === 'pixi-single-canvas' && result.snapshot.coupling.waterSource === 'core/water-cycle.js', 'The renderer is not coupled to the living-planet state.');
     assert(result.inspector && pageErrors.length === 0, `Inspector missing or browser error: ${pageErrors.join(' | ')}`);
   } finally {

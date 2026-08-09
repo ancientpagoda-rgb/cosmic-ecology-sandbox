@@ -54,11 +54,14 @@ for (const marker of [
   'createWaterCycle',
   'createLivingSystems',
   'createBiosphere',
+  'createEcologyJournal',
+  'createSeasonalResourceFields',
   'createPlanetDynamics',
   'createLofiLivingRuntime',
   'planet.interior-tectonics',
   'planet.water-cycle',
   'planet.living-ecology',
+  'ecology.seasonal-resource-fields',
   'planet.climate-terrain-feedbacks',
 ]) requireText(rootEntry, marker, `root chain ${marker}`);
 requireText(
@@ -107,6 +110,8 @@ for (const file of ['core/world.js', 'core/living-systems.js', 'core/biosphere.j
 }
 requireText('core/living-systems.js', 'createLivingSystems(world, rng', 'seeded living systems');
 requireText('core/biosphere.js', 'createBiosphere(world, rng', 'seeded evolution');
+requireText('core/seasonal-resource-fields.js', 'createSeasonalResourceFields', 'seasonal ecology resource field');
+requireText('core/ecology-journal.js', 'createEcologyJournal', 'evolution journal');
 requireText('core/planet-dynamics.js', 'createPlanetDynamics(world, living, waterCycle, rng', 'seeded planet dynamics');
 
 requireText('unified-runtime.css', '#lofiLivingCanvas', 'single canvas styling');
@@ -125,6 +130,7 @@ requireText('.github/workflows/browser-smoke.yml', 'node scripts/surface-mode-sm
 
 requireText('scripts/unified-smoke.cjs', "seedScenario('coupling')", 'terrain-water-inspector coupling scenario');
 requireText('scripts/unified-smoke.cjs', 'statDefinitions === 8', 'defined statistic browser assertion');
+requireText('scripts/unified-smoke.cjs', 'initial.observatory.traits > 0', 'evolution observatory browser assertion');
 requireText('scripts/unified-smoke.cjs', '[title][tabindex="0"]', 'keyboard-inspectable statistic assertion');
 requireText('scripts/iphone-sphere-smoke.cjs', 'masthead.bottom <= metrics.inspector.top', 'mobile panel overlap assertion');
 requireText('scripts/root-renderer-smoke.cjs', 'visibleSimulationCanvases.length === 1', 'single simulation canvas plus approved presentation layers');
@@ -136,6 +142,7 @@ requireText('README.md', 'Nysa is not Earth', 'scientific boundary documentation
 requireText('README.md', 'Scope freeze', 'universe scope freeze documentation');
 requireText('README.md', 'No new phase should be added', 'experience-gate rule');
 requireText('package.json', '"audit:integration"', 'integration audit script');
+requireText('package.json', '"check:ecology"', 'ecology observatory contract script');
 
 if (failures.length) {
   console.error('Reality Sandbox integration audit failed:\n');

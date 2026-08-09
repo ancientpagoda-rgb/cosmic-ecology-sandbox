@@ -1,0 +1,82 @@
+const GRID_COLUMNS = 18;
+const GRID_ROWS = 10;
+
+export function createSeasonalResourceFields(world, living, waterCycle, journal) {
+  const cells = Array.from({ length: GRID_COLUMNS * GRID_ROWS }, () => ({ food: 0, moisture: 0, fertility: 0, temperature: 0 }));
+  let clock = 0;
+  let meanFood = 0;
+  let previousSeason = -1;
+  const api = {
+    step,
+    sample,
+    getSummary: () => ({ ...api.summary }),
+    summary: { meanFood, fertileCells: 0, season: 'Vernal rise' },
+  };
+
+  function step(dt) {
+    clock += dt;
+    if (clock < 1.2) return;
+    clock = 0;
+    refresh();
+    applyToPlants();
+  }
+
+  function refresh() {
+    let totalFood = 0;
+    let fertileCells = 0;
+    const season = living.getSeason();
+    for (let row = 0; row < GRID_ROWS; row += 1) {
+      for (let column = 0; column < GRID_COLUMNS; column += 1) {
+        const x = (column + 0.5) / GRID_COLUMNS * world.width;
+        const y = (row + 0.5) / GRID_ROWS * world.height;
+        const terrain = living.sampleDynamicPlanet(x, y);
+        const water = waterCycle.sample(x, y);
+        const latitude = Math.abs(0.5 - y / world.height) * 2;
+        const seasonalLight = 0.56 + Math.sin(season * Math.PI * 2 + x / world.width * Math.PI * 2) * (0.22 - latitude * 0.08);
+        const thermalFit = 1 - Math.min(1, Math.abs(terrain.temperature - 0.58) * 1.45);
+        const moisture = clamp(water.soil * 0.62 + terrain.rainfall * 0.24 + water.river * 0.34 + water.delta * 0.4, 0, 1);
+        const fertility = clamp(thermalFit * 0.35 + terrain.rainfall * 0.3 + moisture * 0.45, 0, 1);
+        const food = terrain.land && terrain.biome !== 'ice'
+          ? clamp(fertility * seasonalLight * (water.lake > 0.72 ? 0.18 : 1), 0, 1)
+          : 0;
+        const cell = cells[row * GRID_COLUMNS + column];
+        Object.assign(cell, { food, moisture, fertility, temperature: terrain.temperature });
+        totalFood += food;
+        if (food > 0.64) fertileCells += 1;
+      }
+    }
+    meanFood = totalFood / cells.length;
+    const seasonIndex = Math.floor(season * 4) % 4;
+    if (previousSeason >= 0 && seasonIndex !== previousSeason) {
+      journal?.record('Seasonal resource shift', `${seasonName(seasonIndex)} redistributed plant productivity across Nysa’s watersheds and coasts.`, 'season');
+    }
+    previousSeason = seasonIndex;
+    api.summary = { meanFood, fertileCells, season: seasonName(seasonIndex) };
+  }
+
+  function applyToPlants() {
+    const { position, resource } = world.ecs.components;
+    for (const [id, plant] of resource) {
+      const pos = position.get(id);
+      if (!pos || plant.kind !== 'plant') continue;
+      const availability = sample(pos.x, pos.y);
+      plant.seasonalFood = availability.food;
+      plant.amount = clamp(plant.amount + (availability.food - 0.42) * 0.025, 0, 1);
+    }
+  }
+
+  function sample(x, y) {
+    const column = clamp(Math.floor((x / world.width) * GRID_COLUMNS), 0, GRID_COLUMNS - 1);
+    const row = clamp(Math.floor((y / world.height) * GRID_ROWS), 0, GRID_ROWS - 1);
+    return { ...cells[row * GRID_COLUMNS + column] };
+  }
+
+  refresh();
+  return api;
+}
+
+function seasonName(index) {
+  return ['Vernal rise', 'High sun', 'Harvest dusk', 'Deep rest'][index] || 'Vernal rise';
+}
+
+const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));

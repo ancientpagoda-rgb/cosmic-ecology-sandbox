@@ -22,7 +22,7 @@ const PALETTE = {
 };
 
 export function createLofiLivingRuntime(world, dependencies, options = {}) {
-  const { orbitalSystem, living, waterCycle, biosphere, dynamics } = dependencies;
+  const { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources } = dependencies;
   const mobile = options.mobile ?? matchMedia('(max-width: 720px), (pointer: coarse)').matches;
   const seed = options.seed ?? 734221;
   const planetName = options.planetName || world.planetName || 'Procedural Planet';
@@ -49,6 +49,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   let app = null;
   let graphics = null;
   let shell = null;
+  let evolutionPanel = null;
   let interfaceNodes = null;
   let pixiLoadPromise = null;
 
@@ -142,6 +143,17 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         <span><i style="background:#78b9d5"></i>rain and rivers</span>
         <span><i style="background:#c9d8d1"></i>cloud</span>
       </aside>`;
+    evolutionPanel = document.createElement('section');
+    evolutionPanel.className = 'planet-evolution';
+    evolutionPanel.setAttribute('aria-label', 'Evolution field journal');
+    evolutionPanel.innerHTML = `
+      <div class="planet-evolution__heading">
+        <div><p class="planet-eyebrow">Evolution field journal</p><h2>Lineages under pressure</h2></div>
+        <span data-resource-summary></span>
+      </div>
+      <div class="planet-trait-cards" data-trait-cards></div>
+      <ol class="planet-journal" data-evolution-journal></ol>`;
+    host.append(evolutionPanel);
     host.append(shell);
 
     interfaceNodes = {
@@ -154,6 +166,9 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       inspectTitle: shell.querySelector('[data-inspect-title]'),
       inspectCoords: shell.querySelector('[data-inspect-coords]'),
       readings: Object.fromEntries([...shell.querySelectorAll('[data-reading]')].map(node => [node.dataset.reading, node])),
+      traitCards: evolutionPanel.querySelector('[data-trait-cards]'),
+      journal: evolutionPanel.querySelector('[data-evolution-journal]'),
+      resourceSummary: evolutionPanel.querySelector('[data-resource-summary]'),
     };
 
     interfaceNodes.pause.addEventListener('click', () => {
@@ -180,10 +195,12 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     window.addEventListener('planet-event', setEvent);
     window.addEventListener('biosphere-event', setEvent);
     window.addEventListener('water-cycle-event', setEvent);
+    window.addEventListener('ecology-journal-event', setEvent);
     api._removeEventFeed = () => {
       window.removeEventListener('planet-event', setEvent);
       window.removeEventListener('biosphere-event', setEvent);
       window.removeEventListener('water-cycle-event', setEvent);
+      window.removeEventListener('ecology-journal-event', setEvent);
     };
   }
 
@@ -511,6 +528,25 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     interfaceNodes.speed.value = String(controls.getTimeScale?.() ?? 1);
     interfaceNodes.clock.textContent = `tick ${world.tick.toLocaleString()}`;
     updateInspector(inspectSelected());
+    updateEvolutionObservatory();
+  }
+
+  function updateEvolutionObservatory() {
+    if (!interfaceNodes?.traitCards || !ecologyJournal || !seasonalResources) return;
+    const summary = seasonalResources.getSummary();
+    interfaceNodes.resourceSummary.textContent = `${Math.round(summary.meanFood * 100)}% forage · ${summary.season}`;
+    const cards = biosphere.getTraitCards(3);
+    interfaceNodes.traitCards.innerHTML = cards.map(card => {
+      const traits = [
+        ['speed', card.traits.speed, 2.1],
+        ['sense', card.traits.sense, 2.1],
+        ['metabolism', card.traits.metabolism, 2.2],
+        ['thermal', card.traits.thermal, 1],
+      ].map(([label, value, ceiling]) => `<span><b>${label}</b><i style="--trait:${Math.round(clamp(value / ceiling, 0, 1) * 100)}%"></i></span>`).join('');
+      return `<article class="planet-trait-card"><h3><i style="background:#${card.color.toString(16).padStart(6, '0')}"></i>${escapeHtml(card.name)}</h3><p>${card.population} alive · generation ${card.generation}</p><div>${traits}</div></article>`;
+    }).join('') || '<p class="planet-evolution__empty">No animal lineage is currently established.</p>';
+    const entries = ecologyJournal.getEntries(3);
+    interfaceNodes.journal.innerHTML = entries.map(entry => `<li><b>${escapeHtml(entry.title)}</b><span>${escapeHtml(entry.description)}</span></li>`).join('') || '<li><span>Ecological observations will appear as Nysa changes.</span></li>';
   }
 
   function getPlanetStats() {
@@ -661,10 +697,16 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         waterSource: 'core/water-cycle.js',
         ecologySource: 'core/world.js',
         evolutionSource: 'core/biosphere.js',
+        seasonalResources: 'core/seasonal-resource-fields.js',
       },
-      interface: { controls: 3, inspector: true, statisticDefinitions: true },
+      interface: { controls: 3, inspector: true, statisticDefinitions: true, evolutionJournal: true, traitCards: true },
       statistics: getPlanetStats(),
       selectedRegion: inspectSelected(),
+      ecology: {
+        seasonalResources: seasonalResources?.getSummary?.() || null,
+        traitCards: biosphere.getTraitCards?.(3) || [],
+        journal: ecologyJournal?.getEntries?.(3) || [],
+      },
     };
   }
 
@@ -707,8 +749,10 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     graphics = null;
     canvas?.remove();
     shell?.remove();
+    evolutionPanel?.remove();
     canvas = null;
     shell = null;
+    evolutionPanel = null;
     delete document.body.dataset.rootExperience;
     delete document.body.dataset.worldGeometry;
   }

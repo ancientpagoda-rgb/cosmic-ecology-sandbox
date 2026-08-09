@@ -51,6 +51,11 @@ fs.mkdirSync(artifactDir, { recursive: true });
         statDefinitions: document.querySelectorAll('.planet-stat[title][tabindex="0"]').length,
         statValues: [...document.querySelectorAll('[data-stat]')].map(node => node.textContent.trim()),
         inspector: Boolean(document.querySelector('.planet-inspector')),
+        observatory: {
+          panel: Boolean(document.querySelector('.planet-evolution')),
+          traits: document.querySelectorAll('.planet-trait-card').length,
+          journal: document.querySelectorAll('.planet-journal li').length,
+        },
         canvas: canvas ? { width: canvas.width, height: canvas.height, imageRendering: getComputedStyle(canvas).imageRendering } : null,
         retiredGlobals: Boolean(window.realitySandboxHifi || window.realitySandboxLilacClouds || window.realitySandboxRainRunoff),
         universeGlobals: Boolean(window.realitySandboxPhase8 || window.realitySandboxPhase9 || window.realitySandboxPhase10 || window.realitySandboxPhase11),
@@ -59,11 +64,12 @@ fs.mkdirSync(artifactDir, { recursive: true });
     writeJson('initial.json', initial);
     assert(initial.title.includes('Procedural Living Planet'), 'The public title does not identify the procedural living planet.');
     assert(initial.diagnostics.ok, `Initial diagnostics failed: ${initial.diagnostics.failures.join(', ')}`);
-    assert(initial.modules.join('|') === 'planet.orbit-seasons|planet.water-cycle|planet.living-ecology|planet.climate-terrain-feedbacks|runtime.procedural-living-planet', `Unexpected root modules: ${initial.modules.join(', ')}`);
+    assert(initial.modules.join('|') === 'planet.orbit-seasons|planet.water-cycle|planet.living-ecology|ecology.seasonal-resource-fields|planet.climate-terrain-feedbacks|runtime.procedural-living-planet', `Unexpected root modules: ${initial.modules.join(', ')}`);
     assert(initial.snapshot.mode === 'procedural-living-planet' && initial.snapshot.planet.fictional && !initial.snapshot.planet.earthData, 'The root is not honestly labeled as a fictional procedural planet.');
     assert(initial.snapshot.presentation.renderer === 'pixi-single-canvas' && !initial.snapshot.presentation.tickerStarted, 'The single-renderer contract failed.');
     assert(initial.visibleSimulationCanvases.length === 1 && initial.visibleSimulationCanvases[0].id === 'lofiLivingCanvas' && initial.canvas, `The root must have one visible simulation canvas plus approved presentation layers: ${JSON.stringify(initial.visibleCanvases)}`);
     assert(initial.visibleControls === 3 && initial.inspector, 'The integrated controls or inspector are missing.');
+    assert(initial.observatory.panel && initial.observatory.traits > 0 && initial.observatory.journal > 0, 'The evolution observatory did not render trait cards and field-journal entries.');
     assert(initial.statDefinitions === 8, 'All eight global statistics must expose definitions.');
     assert(initial.statValues.every(value => value && value !== '—'), `A statistic did not initialize: ${initial.statValues.join(', ')}`);
     assert(!initial.retiredGlobals && !initial.universeGlobals, 'A retired renderer or universe phase loaded in the public root.');

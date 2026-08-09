@@ -15,6 +15,8 @@ import {
 import { createLivingSystems } from './core/living-systems.js';
 import { createPlanetDynamics } from './core/planet-dynamics.js';
 import { createBiosphere } from './core/biosphere.js';
+import { createEcologyJournal } from './core/ecology-journal.js';
+import { createSeasonalResourceFields } from './core/seasonal-resource-fields.js';
 import { createWaterCycle } from './core/water-cycle.js';
 import { readOriginScenario } from './core/origin-scenario.js';
 
@@ -34,6 +36,8 @@ let living;
 let biosphere;
 let waterCycle;
 let dynamics;
+let ecologyJournal;
+let seasonalResources;
 let livingPlanetRuntime;
 let moduleHost;
 let stepSphere;
@@ -188,6 +192,17 @@ function createRootModules() {
     },
   };
 
+  const seasonalResourcesModule = {
+    id: 'ecology.seasonal-resource-fields',
+    name: 'Seasonal Resource Fields',
+    version: '1.0.0',
+    execution: 'browser-reduced-order-ecology',
+    provides: ['ecology.resources.seasonal'],
+    requires: ['hydrology.surface', 'vegetation.dynamic', 'ecology.species'],
+    initialize({ provideCapability }) { provideCapability('ecology.resources.seasonal', seasonalResources); },
+    step(dt) { seasonalResources.step(dt); },
+  };
+
   const dynamicsModule = {
     id: 'planet.climate-terrain-feedbacks',
     name: 'Climate and Terrain Feedbacks',
@@ -202,7 +217,7 @@ function createRootModules() {
     step(dt) { dynamics.step(dt); },
   };
 
-  return [orbitModule, geodynamicsModule, waterModule, ecologyModule, dynamicsModule, livingPlanetRuntime];
+  return [orbitModule, geodynamicsModule, waterModule, ecologyModule, seasonalResourcesModule, dynamicsModule, livingPlanetRuntime];
 }
 
 function installDebugApi() {
@@ -317,9 +332,12 @@ async function init() {
 
     placeExistingEntitiesOnBiomes(world, rng);
     stepSphere = createSphericalStepper(world);
-    living = createLivingSystems(world, rng);
+    ecologyJournal = createEcologyJournal(world);
+    living = createLivingSystems(world, rng, { onEvent: ecologyJournal.record });
     waterCycle = createWaterCycle(world, orbitalSystem);
-    biosphere = createBiosphere(world, rng);
+    biosphere = createBiosphere(world, rng, { journal: ecologyJournal });
+    seasonalResources = createSeasonalResourceFields(world, living, waterCycle, ecologyJournal);
+    biosphere.setSeasonalResources(seasonalResources);
     dynamics = createPlanetDynamics(world, living, waterCycle, rng);
 
     const mobile = matchMedia('(max-width: 720px), (pointer: coarse)').matches;
@@ -332,10 +350,10 @@ async function init() {
     };
     livingPlanetRuntime = createLofiLivingRuntime(
       world,
-      { orbitalSystem, living, waterCycle, biosphere, dynamics },
+      { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources },
       { mobile, seed: PLANET_SEED, planetName: PLANET_NAME, controls },
     );
-    livingPlanetRuntime.requires = ['planet.weather', 'planet.inspection', 'ecology.species'];
+    livingPlanetRuntime.requires = ['planet.weather', 'planet.inspection', 'ecology.species', 'ecology.resources.seasonal'];
 
     moduleHost = createModuleHost({ world });
     for (const module of createRootModules()) moduleHost.register(module);
@@ -359,6 +377,8 @@ async function init() {
       living,
       waterCycle,
       biosphere,
+      ecologyJournal,
+      seasonalResources,
       dynamics,
       geodynamics: getPlanetGenerationState,
     };

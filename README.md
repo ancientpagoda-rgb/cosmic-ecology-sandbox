@@ -21,6 +21,7 @@ The public root provides:
 - vegetation whose growth and spread respond to terrain and water;
 - herbivores, predators, and apex predators whose movement, feeding, reproduction, and survival occur in the same world;
 - inherited animal traits, climate stress, disease, population change, extinction, and branching species;
+- seasonal resource fields that redistribute forage through watersheds and coasts, trait cards for living lineages, and an evolutionary field journal;
 - a regional inspector that reports the exact terrain, hydrology, weather, and nearby life state used by the simulation;
 - defined global statistics, with normalized model indices labeled as indices;
 - pause, single-step, speed, camera, touch, and keyboard controls.
@@ -32,6 +33,8 @@ sandbox. It is deliberately a separate route: it does not add a second render
 loop or a cosmological solver to the planetary simulation.
 
 The globe renderer reads `core/planet.js`, `core/living-systems.js`, `core/water-cycle.js`, `core/world.js`, and `core/biosphere.js` directly. It does not replace the canvas, monkey-patch a second renderer, or draw an unrelated Earth surface over the simulated planet.
+
+The seasonal-resource and trait-journal design is informed by [BiomeSimulator](https://github.com/andrenepomuceno/BiomeSimulator) (Apache-2.0) and [Genesis](https://github.com/bukkbeek/Genesis) (MIT). Nysa implements its own deterministic browser modules and preserves those projects’ credit separately from its code.
 
 ## Scope freeze
 

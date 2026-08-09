@@ -6,7 +6,7 @@ const ROOT_SPECIES = [
   { id: 'violet-apex', name: 'Violet Apex', guild: 'apex', color: 0xcf8dff, temp: 0.47, social: 0.22, diseaseResistance: 0.76 },
 ];
 
-export function createBiosphere(world, rng = Math.random) {
+export function createBiosphere(world, rng = Math.random, options = {}) {
   const random = typeof rng === 'function' ? rng : rng.float.bind(rng);
   const species = new Map(ROOT_SPECIES.map(s => [s.id, { ...s, parentId: null, generation: 0, population: 0 }]));
   const organismSpecies = new Map();
@@ -15,6 +15,7 @@ export function createBiosphere(world, rng = Math.random) {
   let diseaseClock = 0;
   let speciationClock = 0;
   let previousPopulation = new Map();
+  let seasonalResources = options.seasonalResources || null;
 
   assignInitialSpecies();
   recount();
@@ -131,11 +132,14 @@ export function createBiosphere(world, rng = Math.random) {
     const grazerPressure = grazers / Math.max(1, plantCount);
     const predatorPressure = predators / Math.max(1, grazers);
 
-    for (const [, organism] of c.agent) {
-      if (grazerPressure > 0.75 && 'energy' in organism) organism.energy = Math.max(0.04, organism.energy - dt * 0.0015 * grazerPressure);
+    for (const [id, organism] of c.agent) {
+      const food = localFood(id);
+      organism.resourceOpportunity = food;
+      if ('energy' in organism) organism.energy = Math.max(0.04, organism.energy + dt * (food - 0.5) * 0.003 - (grazerPressure > 0.75 ? dt * 0.0015 * grazerPressure : 0));
     }
     for (const group of [c.predator, c.apex]) {
-      for (const [, organism] of group) {
+      for (const [id, organism] of group) {
+        organism.resourceOpportunity = localFood(id);
         if (predatorPressure > 0.5 && 'energy' in organism) organism.energy = Math.max(0.04, organism.energy - dt * 0.0018 * predatorPressure);
       }
     }
@@ -241,7 +245,43 @@ export function createBiosphere(world, rng = Math.random) {
       .sort((a, b) => b.population - a.population);
   }
 
+  function localFood(id) {
+    const position = world.ecs.components.position.get(id);
+    return position && seasonalResources ? seasonalResources.sample(position.x, position.y).food : 0.5;
+  }
+
+  function getTraitCards(limit = 3) {
+    recount();
+    return [...species.values()]
+      .filter(spec => spec.population > 0)
+      .sort((a, b) => b.population - a.population)
+      .slice(0, limit)
+      .map(spec => {
+        const members = [...organismSpecies.entries()]
+          .filter(([, speciesId]) => speciesId === spec.id)
+          .map(([id]) => getOrganism(id))
+          .filter(Boolean);
+        const average = key => members.reduce((sum, organism) => sum + (organism.dna?.[key] ?? 1), 0) / Math.max(1, members.length);
+        const thermal = members.reduce((sum, organism) => sum + (organism.preferredTemperature ?? spec.temp), 0) / Math.max(1, members.length);
+        return {
+          id: spec.id,
+          name: spec.name,
+          guild: spec.guild,
+          color: spec.color,
+          population: spec.population,
+          generation: spec.generation,
+          traits: {
+            speed: average('speed'),
+            sense: average('sense'),
+            metabolism: average('metabolism'),
+            thermal,
+          },
+        };
+      });
+  }
+
   function emit(title, description) {
+    options.journal?.record(title, description, title.includes('extinction') ? 'extinction' : title.includes('species') ? 'lineage' : 'ecology');
     window.dispatchEvent(new CustomEvent('biosphere-event', { detail: { title, description } }));
   }
 
@@ -256,6 +296,8 @@ export function createBiosphere(world, rng = Math.random) {
     getNearbySpecies,
     getSpecies: () => [...species.values()].map(s => ({ ...s })),
     getAncestry: () => ancestry.slice(),
+    getTraitCards,
+    setSeasonalResources: value => { seasonalResources = value; },
   };
 }
 
