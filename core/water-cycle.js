@@ -37,6 +37,9 @@ export function createWaterCycle(world, orbitalSystem = null) {
   let tideClock = TIDE_REFRESH_SECONDS;
   let hydrologySteps = 0;
   let tideRefreshes = 0;
+  // Rendering asks for weather more often than the simulation changes it.
+  // Keep the expensive full-grid ranking until the next hydrology solve.
+  let cloudCellsCache = null;
 
   initialize();
 
@@ -74,6 +77,7 @@ export function createWaterCycle(world, orbitalSystem = null) {
       condenseAndPrecipitate(solveDt);
       routeWater(solveDt);
       updateExtremes(solveDt);
+      cloudCellsCache = null;
       hydrologySteps += 1;
     }
 
@@ -234,17 +238,20 @@ export function createWaterCycle(world, orbitalSystem = null) {
   }
 
   function getCloudCells(limit = 240) {
-    const cells = [];
-    for (let i = 0; i < count; i++) {
-      if (cloud[i] < 0.22) continue;
-      cells.push({
-        x: (i % width + 0.5) / width * world.width,
-        y: (Math.floor(i / width) + 0.5) / height * world.height,
-        cloud: cloud[i], rain: rain[i], snow: snow[i], flood: flood[i], drought: drought[i], tide: tide[i],
-      });
+    if (!cloudCellsCache) {
+      const cells = [];
+      for (let i = 0; i < count; i++) {
+        if (cloud[i] < 0.22) continue;
+        cells.push({
+          x: (i % width + 0.5) / width * world.width,
+          y: (Math.floor(i / width) + 0.5) / height * world.height,
+          cloud: cloud[i], rain: rain[i], snow: snow[i], flood: flood[i], drought: drought[i], tide: tide[i],
+        });
+      }
+      cloudCellsCache = cells.sort((a, b) => b.cloud - a.cloud);
     }
-    cells.sort((a, b) => b.cloud - a.cloud);
-    return cells.slice(0, limit);
+
+    return cloudCellsCache.slice(0, limit);
   }
 
   return {
