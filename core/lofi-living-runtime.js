@@ -57,7 +57,6 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   let cosmicSignature = '';
   let cosmicRebuilds = 0;
   let lastCosmicBuild = -Infinity;
-  let atlasLatticeSignature = '';
   let destroyed = false;
   let presentationSuspended = false;
   let selectedPoint = { x: world.width * 0.5, y: world.height * 0.5 };
@@ -75,7 +74,6 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   let shell = null;
   let evolutionPanel = null;
   let foundryPanel = null;
-  let atlasPanel = null;
   let interfaceNodes = null;
   let activeCapsule = null;
   let pixiLoadPromise = null;
@@ -191,17 +189,8 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       <div class="planet-foundry__actions"><button type="button" data-foundry-forge>Forge capsule</button><button type="button" data-foundry-release disabled>Release at selected region</button><button type="button" data-foundry-export disabled>Export</button></div>
       <label class="planet-foundry__import">Import capsule <textarea data-foundry-import rows="2" placeholder="Paste an .eidolon-lineage capsule here"></textarea></label>
       <div class="planet-foundry__actions"><button type="button" data-foundry-import-button>Import</button><select data-foundry-catalog aria-label="Saved lineages"><option value="">No saved lineages</option></select></div>`;
-    atlasPanel = document.createElement('section');
-    atlasPanel.className = 'planet-atlas';
-    atlasPanel.setAttribute('aria-label', 'Eidolon Atlas');
-    atlasPanel.innerHTML = `
-      <div class="planet-atlas__heading"><div><p class="planet-eyebrow">Eidolon Atlas · local relay</p><h2 data-atlas-name>Uncharted sector</h2></div><span data-atlas-status>offline-first</span></div>
-      <p class="planet-atlas__detail" data-atlas-detail>Select a region to survey the planetary lattice.</p>
-      <div class="planet-atlas__lattice" data-atlas-lattice aria-label="Nearby atlas sectors"></div>
-      <div class="planet-atlas__actions"><button type="button" data-atlas-site>Mark field site</button><span data-atlas-sightings>no lineage sightings</span></div>`;
     host.append(evolutionPanel);
     host.append(foundryPanel);
-    host.append(atlasPanel);
     host.append(shell);
 
     interfaceNodes = {
@@ -232,14 +221,6 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         importButton: foundryPanel.querySelector('[data-foundry-import-button]'),
         catalog: foundryPanel.querySelector('[data-foundry-catalog]'),
       },
-      atlas: {
-        name: atlasPanel.querySelector('[data-atlas-name]'),
-        status: atlasPanel.querySelector('[data-atlas-status]'),
-        detail: atlasPanel.querySelector('[data-atlas-detail]'),
-        lattice: atlasPanel.querySelector('[data-atlas-lattice]'),
-        site: atlasPanel.querySelector('[data-atlas-site]'),
-        sightings: atlasPanel.querySelector('[data-atlas-sightings]'),
-      },
     };
 
     interfaceNodes.pause.addEventListener('click', () => {
@@ -256,7 +237,6 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       updateInterface(true);
     });
     installFoundryControls();
-    installAtlasControls();
   }
 
   function installFoundryControls() {
@@ -312,25 +292,6 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     });
     updateTraitReadouts();
     refreshFoundryCatalog();
-  }
-
-  function installAtlasControls() {
-    if (!eidolonAtlas || !interfaceNodes?.atlas) return;
-    interfaceNodes.atlas.lattice.addEventListener('click', event => {
-      const cell = event.target.closest('[data-atlas-region]');
-      const region = eidolonAtlas.regionById?.(cell?.dataset.atlasRegion);
-      if (!region) return;
-      selectedPoint = { x: region.x, y: region.y };
-      invalidateRender();
-      updateInterface(true);
-    });
-    interfaceNodes.atlas.site.addEventListener('click', () => {
-      const site = eidolonAtlas.markSite(selectedPoint);
-      interfaceNodes.atlas.status.textContent = `${site.id} charted`;
-      updateAtlas();
-    });
-    updateAtlas();
-    eidolonAtlas.sync?.().then(() => updateAtlas());
   }
 
   function refreshFoundryCatalog() {
@@ -868,27 +829,6 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     interfaceNodes.clock.textContent = `tick ${world.tick.toLocaleString()}`;
     updateInspector(inspectSelected());
     updateEvolutionObservatory();
-    updateAtlas();
-  }
-
-  function updateAtlas() {
-    if (!interfaceNodes?.atlas || !eidolonAtlas) return;
-    const atlas = interfaceNodes.atlas;
-    const survey = eidolonAtlas.survey(selectedPoint);
-    atlas.name.textContent = `${survey.id} · ${survey.name}`;
-    atlas.status.textContent = survey.site ? `charted · tick ${survey.site.tick}` : eidolonAtlas.getRelayState?.() || 'local relay';
-    atlas.detail.textContent = `${survey.biome} · ${survey.population} nearby life · ${survey.lineages.length} lineage${survey.lineages.length === 1 ? '' : 's'}`;
-    const cells = eidolonAtlas.getLattice(selectedPoint);
-    const latticeSignature = cells.map(cell => `${cell.id}:${cell.selected ? 1 : 0}:${cell.charted ? 1 : 0}:${cell.sightings}:${cell.biome}`).join('|');
-    if (latticeSignature !== atlasLatticeSignature) {
-      atlasLatticeSignature = latticeSignature;
-      atlas.lattice.innerHTML = cells.map(cell => {
-        const detail = `${cell.id} · ${cell.biome}${cell.sightings ? ` · ${cell.sightings} sighting${cell.sightings === 1 ? '' : 's'}` : ''}`;
-        return `<button type="button" class="planet-atlas__cell ${cell.selected ? 'is-selected' : ''} ${cell.charted ? 'is-charted' : ''}" data-atlas-region="${cell.id}" aria-pressed="${cell.selected}" title="${detail}" aria-label="Survey ${detail}">${cell.id}</button>`;
-      }).join('');
-    }
-    const sightings = eidolonAtlas.getSightings(1);
-    atlas.sightings.textContent = sightings[0] ? `${sightings[0].name} · ${sightings[0].regionId}` : 'no lineage sightings';
   }
 
   function updateEvolutionObservatory() {
