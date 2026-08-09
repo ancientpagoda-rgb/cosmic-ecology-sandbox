@@ -16,6 +16,7 @@ import { createLivingSystems } from './core/living-systems.js';
 import { createPlanetDynamics } from './core/planet-dynamics.js';
 import { createBiosphere } from './core/biosphere.js';
 import { createEcologyJournal } from './core/ecology-journal.js';
+import { createLineageFoundry } from './core/lineage-foundry.js';
 import { createSeasonalResourceFields } from './core/seasonal-resource-fields.js';
 import { createWaterCycle } from './core/water-cycle.js';
 import { readOriginScenario } from './core/origin-scenario.js';
@@ -38,6 +39,7 @@ let waterCycle;
 let dynamics;
 let ecologyJournal;
 let seasonalResources;
+let lineageFoundry;
 let livingPlanetRuntime;
 let moduleHost;
 let stepSphere;
@@ -336,6 +338,7 @@ async function init() {
     living = createLivingSystems(world, rng, { onEvent: ecologyJournal.record });
     waterCycle = createWaterCycle(world, orbitalSystem);
     biosphere = createBiosphere(world, rng, { journal: ecologyJournal });
+    lineageFoundry = createLineageFoundry({ world, biosphere, living, ecologyJournal, seed: PLANET_SEED });
     seasonalResources = createSeasonalResourceFields(world, living, waterCycle, ecologyJournal);
     biosphere.setSeasonalResources(seasonalResources);
     dynamics = createPlanetDynamics(world, living, waterCycle, rng);
@@ -350,7 +353,7 @@ async function init() {
     };
     livingPlanetRuntime = createLofiLivingRuntime(
       world,
-      { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources },
+      { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources, lineageFoundry },
       { mobile, seed: PLANET_SEED, planetName: PLANET_NAME, controls },
     );
     livingPlanetRuntime.requires = ['planet.weather', 'planet.inspection', 'ecology.species', 'ecology.resources.seasonal'];
@@ -377,6 +380,7 @@ async function init() {
       living,
       waterCycle,
       biosphere,
+      lineageFoundry,
       ecologyJournal,
       seasonalResources,
       dynamics,

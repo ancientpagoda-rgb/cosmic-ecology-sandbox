@@ -280,9 +280,66 @@ export function createBiosphere(world, rng = Math.random, options = {}) {
       });
   }
 
+  // Capsules are declarative data, never user-provided behavior. The
+  // authoritative biosphere translates their bounded traits into ordinary ECS
+  // organisms, so released lineages obey the same food web as native life.
+  function releaseLineage(capsule, placement = {}) {
+    if (!capsule || !['grazer', 'predator', 'apex'].includes(capsule.guild)) throw new Error('Invalid lineage guild.');
+    const traits = capsule.traits || {};
+    const speed = clamp(Number(traits.speed) || 1, 0.6, 1.4);
+    const sense = clamp(Number(traits.sense) || 1, 0.6, 1.5);
+    const metabolism = clamp(Number(traits.metabolism) || 1, 0.6, 1.6);
+    const temp = clamp(Number(traits.thermal) || 0.55, 0.08, 0.92);
+    const sourceId = String(capsule.id || 'lineage').replace(/[^a-z0-9-]/gi, '').slice(0, 48) || 'lineage';
+    const id = species.has(sourceId) ? `${sourceId}-${species.size + 1}` : sourceId;
+    const colorText = String(capsule.visual?.color || '#69d8ff').replace('#', '');
+    const color = /^[0-9a-f]{6}$/i.test(colorText) ? Number.parseInt(colorText, 16) : 0x69d8ff;
+    const spec = {
+      id,
+      name: String(capsule.name || 'Unnamed Wanderer').slice(0, 32),
+      guild: capsule.guild,
+      color,
+      temp,
+      social: clamp(0.28 + sense * 0.34, 0.16, 0.88),
+      diseaseResistance: clamp(1.12 - metabolism * 0.26, 0.3, 0.9),
+      parentId: species.has(capsule.ancestry?.parentId) ? capsule.ancestry.parentId : null,
+      generation: species.get(capsule.ancestry?.parentId)?.generation + 1 || 0,
+      population: 0,
+      lineageCapsuleId: sourceId,
+      visualForm: capsule.visual?.form || 'kite',
+    };
+    species.set(id, spec);
+
+    const c = world.ecs.components;
+    const x = ((Number(placement.x) || world.width * 0.5) % world.width + world.width) % world.width;
+    const y = clamp(Number(placement.y) || world.height * 0.5, 0, world.height);
+    const count = clamp(Math.round(Number(placement.count) || 5), 3, 8);
+    for (let index = 0; index < count; index++) {
+      const entityId = world.ecs.createEntity();
+      const angle = random() * Math.PI * 2;
+      const radius = 4 + random() * 18;
+      c.position.set(entityId, { x: (x + Math.cos(angle) * radius + world.width) % world.width, y: clamp(y + Math.sin(angle) * radius, 0, world.height) });
+      const velocity = 28 * speed * (0.7 + random() * 0.5);
+      c.velocity.set(entityId, { vx: Math.cos(angle) * velocity, vy: Math.sin(angle) * velocity });
+      const organism = {
+        colorHue: hueFromColor(color), energy: capsule.guild === 'grazer' ? 1 : capsule.guild === 'predator' ? 2 : 3,
+        age: 0, dna: { speed, sense, metabolism, hueShift: 0 }, lineageCapsuleId: sourceId, foundryGrace: 12,
+      };
+      if (capsule.guild === 'grazer') c.agent.set(entityId, organism);
+      else if (capsule.guild === 'predator') c.predator.set(entityId, organism);
+      else c.apex.set(entityId, { ...organism, rest: 0 });
+      organismSpecies.set(entityId, id);
+      inheritSpeciesTraits(organism, spec);
+    }
+    if (spec.parentId) ancestry.push({ parentId: spec.parentId, childId: id, time: world.tick });
+    recount();
+    emit('Lineage released', `${spec.name} entered Nysa as a ${spec.guild} lineage.`);
+    return { ...spec };
+  }
+
   function emit(title, description) {
     options.journal?.record(title, description, title.includes('extinction') ? 'extinction' : title.includes('species') ? 'lineage' : 'ecology');
-    window.dispatchEvent(new CustomEvent('biosphere-event', { detail: { title, description } }));
+    globalThis.window?.dispatchEvent?.(new CustomEvent('biosphere-event', { detail: { title, description } }));
   }
 
   function sphericalDistance(a, b) {
@@ -297,6 +354,7 @@ export function createBiosphere(world, rng = Math.random, options = {}) {
     getSpecies: () => [...species.values()].map(s => ({ ...s })),
     getAncestry: () => ancestry.slice(),
     getTraitCards,
+    releaseLineage,
     setSeasonalResources: value => { seasonalResources = value; },
   };
 }
@@ -313,6 +371,17 @@ function mutateColor(color, random) {
   const b = color & 255;
   const shift = () => Math.round(clamp((random() - 0.5) * 70, -40, 40));
   return (clamp(r + shift(), 25, 255) << 16) | (clamp(g + shift(), 25, 255) << 8) | clamp(b + shift(), 25, 255);
+}
+
+function hueFromColor(color) {
+  const r = (color >> 16) & 255;
+  const g = (color >> 8) & 255;
+  const b = color & 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max === min) return 0;
+  const hue = max === r ? (g - b) / (max - min) : max === g ? 2 + (b - r) / (max - min) : 4 + (r - g) / (max - min);
+  return Math.round((hue * 60 + 360) % 360);
 }
 
 function wrappedDelta(a, b, width) {

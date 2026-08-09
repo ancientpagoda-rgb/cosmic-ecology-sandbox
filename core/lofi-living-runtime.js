@@ -22,7 +22,7 @@ const PALETTE = {
 };
 
 export function createLofiLivingRuntime(world, dependencies, options = {}) {
-  const { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources } = dependencies;
+  const { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources, lineageFoundry } = dependencies;
   const mobile = options.mobile ?? matchMedia('(max-width: 720px), (pointer: coarse)').matches;
   const seed = options.seed ?? 734221;
   const planetName = options.planetName || world.planetName || 'Procedural Planet';
@@ -51,7 +51,9 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   let graphics = null;
   let shell = null;
   let evolutionPanel = null;
+  let foundryPanel = null;
   let interfaceNodes = null;
+  let activeCapsule = null;
   let pixiLoadPromise = null;
 
   async function initialize({ provideCapability }) {
@@ -154,7 +156,25 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       </div>
       <div class="planet-trait-cards" data-trait-cards></div>
       <ol class="planet-journal" data-evolution-journal></ol>`;
+    foundryPanel = document.createElement('section');
+    foundryPanel.className = 'planet-foundry';
+    foundryPanel.setAttribute('aria-label', 'Lineage Foundry');
+    foundryPanel.innerHTML = `
+      <div class="planet-foundry__heading"><div><p class="planet-eyebrow">Lineage Foundry · local</p><h2>Make something that has to survive</h2></div><span data-foundry-status>drafting</span></div>
+      <label>Name <input data-foundry-name maxlength="32" value="Lumen Grazer"></label>
+      <label>Ancestor <select data-foundry-parent aria-label="Ancestor lineage"><option value="">none · new root lineage</option></select></label>
+      <div class="planet-foundry__row"><label>Guild <select data-foundry-guild><option value="grazer">grazer</option><option value="predator">predator</option><option value="apex">apex</option></select></label><label>Color <input data-foundry-color type="color" value="#69d8ff"></label></div>
+      <div class="planet-foundry__traits">
+        <label>speed <input data-foundry-trait="speed" type="range" min="0.6" max="1.4" step="0.01" value="1"><output data-foundry-value="speed">1.00</output></label>
+        <label>sense <input data-foundry-trait="sense" type="range" min="0.6" max="1.5" step="0.01" value="1"><output data-foundry-value="sense">1.00</output></label>
+        <label>metabolism <input data-foundry-trait="metabolism" type="range" min="0.6" max="1.6" step="0.01" value="1"><output data-foundry-value="metabolism">1.00</output></label>
+        <label>thermal <input data-foundry-trait="thermal" type="range" min="0.08" max="0.92" step="0.01" value="0.55"><output data-foundry-value="thermal">0.55</output></label>
+      </div>
+      <div class="planet-foundry__actions"><button type="button" data-foundry-forge>Forge capsule</button><button type="button" data-foundry-release disabled>Release at selected region</button><button type="button" data-foundry-export disabled>Export</button></div>
+      <label class="planet-foundry__import">Import capsule <textarea data-foundry-import rows="2" placeholder="Paste a .nysa-lineage capsule here"></textarea></label>
+      <div class="planet-foundry__actions"><button type="button" data-foundry-import-button>Import</button><select data-foundry-catalog aria-label="Saved lineages"><option value="">No saved lineages</option></select></div>`;
     host.append(evolutionPanel);
+    host.append(foundryPanel);
     host.append(shell);
 
     interfaceNodes = {
@@ -170,6 +190,21 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       traitCards: evolutionPanel.querySelector('[data-trait-cards]'),
       journal: evolutionPanel.querySelector('[data-evolution-journal]'),
       resourceSummary: evolutionPanel.querySelector('[data-resource-summary]'),
+      foundry: {
+        status: foundryPanel.querySelector('[data-foundry-status]'),
+        name: foundryPanel.querySelector('[data-foundry-name]'),
+        guild: foundryPanel.querySelector('[data-foundry-guild]'),
+        parent: foundryPanel.querySelector('[data-foundry-parent]'),
+        color: foundryPanel.querySelector('[data-foundry-color]'),
+        traits: Object.fromEntries([...foundryPanel.querySelectorAll('[data-foundry-trait]')].map(node => [node.dataset.foundryTrait, node])),
+        traitValues: Object.fromEntries([...foundryPanel.querySelectorAll('[data-foundry-value]')].map(node => [node.dataset.foundryValue, node])),
+        forge: foundryPanel.querySelector('[data-foundry-forge]'),
+        release: foundryPanel.querySelector('[data-foundry-release]'),
+        export: foundryPanel.querySelector('[data-foundry-export]'),
+        importText: foundryPanel.querySelector('[data-foundry-import]'),
+        importButton: foundryPanel.querySelector('[data-foundry-import-button]'),
+        catalog: foundryPanel.querySelector('[data-foundry-catalog]'),
+      },
     };
 
     interfaceNodes.pause.addEventListener('click', () => {
@@ -185,6 +220,83 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       controls.setTimeScale?.(Number(interfaceNodes.speed.value));
       updateInterface(true);
     });
+    installFoundryControls();
+  }
+
+  function installFoundryControls() {
+    if (!lineageFoundry || !interfaceNodes?.foundry) return;
+    const nodes = interfaceNodes.foundry;
+    const updateTraitReadouts = () => {
+      for (const [key, input] of Object.entries(nodes.traits)) nodes.traitValues[key].textContent = Number(input.value).toFixed(2);
+    };
+    const setStatus = text => { nodes.status.textContent = text; };
+    const setActive = capsule => {
+      activeCapsule = capsule;
+      nodes.release.disabled = !capsule;
+      nodes.export.disabled = !capsule;
+      setStatus(capsule ? `${capsule.id} ready` : 'drafting');
+      refreshFoundryCatalog();
+    };
+    for (const input of Object.values(nodes.traits)) input.addEventListener('input', updateTraitReadouts);
+    nodes.forge.addEventListener('click', () => {
+      setActive(lineageFoundry.create({
+        name: nodes.name.value,
+        guild: nodes.guild.value,
+        visual: { color: nodes.color.value },
+        ancestry: { parentId: nodes.parent.value || null },
+        traits: Object.fromEntries(Object.entries(nodes.traits).map(([key, input]) => [key, Number(input.value)])),
+      }));
+    });
+    nodes.release.addEventListener('click', () => {
+      try {
+        const result = lineageFoundry.release(activeCapsule.id, selectedPoint);
+        setStatus(`${result.species.name} released · tick ${result.release.tick}`);
+        updateInterface(true);
+      } catch (error) { setStatus(error.message || 'release failed'); }
+    });
+    nodes.export.addEventListener('click', () => {
+      if (!activeCapsule) return;
+      const blob = new Blob([lineageFoundry.export(activeCapsule.id)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${activeCapsule.id}.nysa-lineage.json`;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      setStatus('capsule exported');
+    });
+    nodes.importButton.addEventListener('click', () => {
+      try { setActive(lineageFoundry.import(nodes.importText.value)); }
+      catch (error) { setStatus(error.message || 'import failed'); }
+    });
+    nodes.catalog.addEventListener('change', () => {
+      const capsule = lineageFoundry.list().find(item => item.id === nodes.catalog.value);
+      if (capsule) setActive(capsule);
+    });
+    updateTraitReadouts();
+    refreshFoundryCatalog();
+  }
+
+  function refreshFoundryCatalog() {
+    const nodes = interfaceNodes?.foundry;
+    if (!nodes || !lineageFoundry) return;
+    const selected = activeCapsule?.id || nodes.catalog.value;
+    const entries = lineageFoundry.list();
+    nodes.catalog.replaceChildren(...entries.map(capsule => {
+      const option = document.createElement('option');
+      option.value = capsule.id;
+      option.textContent = `${capsule.name} · ${capsule.guild}`;
+      return option;
+    }));
+    if (!entries.length) nodes.catalog.append(new Option('No saved lineages', ''));
+    nodes.catalog.value = selected;
+    const parentSelected = nodes.parent.value;
+    nodes.parent.replaceChildren(new Option('none · new root lineage', ''));
+    for (const capsule of entries) {
+      if (capsule.id === selected) continue;
+      nodes.parent.append(new Option(`${capsule.name} · ${capsule.id}`, capsule.id));
+    }
+    nodes.parent.value = parentSelected;
   }
 
   function installEventFeed() {

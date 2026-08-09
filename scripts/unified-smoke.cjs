@@ -58,6 +58,10 @@ fs.mkdirSync(artifactDir, { recursive: true });
           traits: document.querySelectorAll('.planet-trait-card').length,
           journal: document.querySelectorAll('.planet-journal li').length,
         },
+        foundry: {
+          panel: Boolean(document.querySelector('.planet-foundry')),
+          api: Boolean(window.realitySandboxPlanet?.lineageFoundry?.create),
+        },
         canvas: canvas ? { width: canvas.width, height: canvas.height, imageRendering: getComputedStyle(canvas).imageRendering } : null,
         retiredGlobals: Boolean(window.realitySandboxHifi || window.realitySandboxLilacClouds || window.realitySandboxRainRunoff),
         universeGlobals: Boolean(window.realitySandboxPhase8 || window.realitySandboxPhase9 || window.realitySandboxPhase10 || window.realitySandboxPhase11),
@@ -71,6 +75,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(initial.snapshot.presentation.renderer === 'pixi-single-canvas' && !initial.snapshot.presentation.tickerStarted, 'The single-renderer contract failed.');
     assert(initial.visibleSimulationCanvases.length === 1 && initial.visibleSimulationCanvases[0].id === 'lofiLivingCanvas' && initial.canvas, `The root must have one visible simulation canvas plus approved presentation layers: ${JSON.stringify(initial.visibleCanvases)}`);
     assert(initial.observatory.panel && initial.observatory.traits > 0 && initial.observatory.journal > 0, 'The evolution observatory did not render trait cards and field-journal entries.');
+    assert(initial.foundry.panel && initial.foundry.api, 'The local Lineage Foundry did not initialize.');
     assert(initial.statDefinitions === 8, 'All eight global statistics must expose definitions.');
     assert(initial.statValues.every(value => value && value !== '—'), `A statistic did not initialize: ${initial.statValues.join(', ')}`);
     assert(!initial.retiredGlobals && !initial.universeGlobals, 'A retired renderer or universe phase loaded in the public root.');
@@ -103,6 +108,22 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(Number.isFinite(regionAfter.temperature) && Number.isFinite(regionAfter.soilMoisture), 'The selected region lacks climate or water readings.');
     assert(await page.locator('[data-reading="water"]').getAttribute('title'), 'A regional reading is not inspectable in full.');
 
+    const lineage = await page.evaluate(() => ({
+      before: window.realitySandboxPlanet.world.ecs.components.agent.size,
+      speciesBefore: window.realitySandboxPlanet.biosphere.getSpecies().length,
+    }));
+    await page.locator('[data-foundry-name]').fill('Test Comet Grazer');
+    await page.locator('[data-foundry-forge]').click();
+    await page.locator('[data-foundry-release]').click();
+    const releasedLineage = await page.evaluate(() => ({
+      after: window.realitySandboxPlanet.world.ecs.components.agent.size,
+      speciesAfter: window.realitySandboxPlanet.biosphere.getSpecies().length,
+      catalog: window.realitySandboxPlanet.lineageFoundry.list(),
+      exportText: window.realitySandboxPlanet.lineageFoundry.export(window.realitySandboxPlanet.lineageFoundry.list().at(-1).id),
+    }));
+    assert(releasedLineage.after >= lineage.before + 3 && releasedLineage.speciesAfter === lineage.speciesBefore + 1, 'Foundry release did not enter the created lineage into the ecosystem.');
+    assert(releasedLineage.catalog.some(capsule => capsule.name === 'Test Comet Grazer') && releasedLineage.exportText.includes('nysa-lineage-1'), 'Foundry export did not retain the portable capsule.');
+
     await page.evaluate(() => window.realitySandboxDebug.pause());
     const clock = await page.evaluate(() => {
       const before = window.realitySandboxUnified.getState();
@@ -128,7 +149,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
 
     const finalDiagnostics = await page.evaluate(() => window.realitySandboxDebug.diagnostics());
     writeJson('diagnostics.json', finalDiagnostics);
-    await page.screenshot({ path: path.join(artifactDir, 'procedural-living-planet.png'), fullPage: true });
+    await page.screenshot({ path: path.join(artifactDir, 'procedural-living-planet.png') });
     assert(finalDiagnostics.ok, `Final diagnostics failed: ${finalDiagnostics.failures.join(', ')}`);
     assert(pageErrors.length === 0, `Browser page errors: ${pageErrors.map(error => error.message).join(' | ')}`);
   } finally {

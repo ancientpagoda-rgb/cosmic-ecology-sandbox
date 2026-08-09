@@ -525,6 +525,7 @@ export function createWorld(rng) {
       if (pred.rest > 0) continue;
 
       for (const [aid, ag] of Array.from(agent.entries())) {
+        if ((ag.foundryGrace || 0) > 0) continue;
         const apos = position.get(aid);
         if (!apos) continue;
         const dx = apos.x - ppos.x;
@@ -709,6 +710,7 @@ export function createWorld(rng) {
     for (const [id, ag] of Array.from(agent.entries())) {
       // Age grows slowly over time
       ag.age = (ag.age || 0) + dt;
+      ag.foundryGrace = Math.max(0, (ag.foundryGrace || 0) - dt);
 
       // Clamp energy at zero but do not kill agents
       if (ag.energy <= 0) {

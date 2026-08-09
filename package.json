@@ -12,7 +12,7 @@
     "audit:integration": "node scripts/integration-audit.cjs && node scripts/root-renderer-audit.cjs",
     "check": "npm run audit:integration && npm run check:origins && npm run check:ecology && npm run build",
     "check:origins": "node scripts/origin-scenario-check.mjs",
-    "check:ecology": "node scripts/ecology-observatory-check.mjs",
+    "check:ecology": "node scripts/ecology-observatory-check.mjs && node scripts/lineage-foundry-check.mjs",
     "lint": "eslint \"core/reality-v6*/**/*.js\"",
     "lint:all": "eslint ."
   },
