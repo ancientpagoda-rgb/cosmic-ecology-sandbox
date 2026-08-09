@@ -25,6 +25,10 @@ export function createWorld(rng) {
       storminess: 0.0,
       reproductionThreshold: 1.6,
     },
+    // Installed once the living planet has generated its vegetation field.
+    // Individual plant entities remain visual/ecological specimens; this field
+    // is the actual landscape-scale food source for grazers.
+    forageField: null,
   };
 
   // Spawn some initial agents and resources
@@ -81,6 +85,14 @@ export function createWorld(rng) {
       dna,
       evolved,
       caste,
+      // Grazers keep a little individual locomotion state.  Their food choice is
+      // still ecological, but the route to it is no longer a perfectly straight
+      // line from one resource point to the next.
+      heading: Math.atan2(ecs.components.velocity.get(id).vy, ecs.components.velocity.get(id).vx),
+      wanderTurn: (rng.float() - 0.5) * 1.35,
+      wanderClock: 0.35 + rng.float() * 1.1,
+      gaitPhase: rng.float() * Math.PI * 2,
+      grazeClock: 0,
     });
     return id;
   }
@@ -323,13 +335,16 @@ export function createWorld(rng) {
     const { position, velocity, agent, predator, apex, resource } = ecs.components;
     const avoidRadius = 18;
 
-    // Build resource positions list once per tick
+    // Individual plant entities are a fallback for the bare core simulation.
+    // In the living planet, the vegetation field below is the grazer's food map.
     const resourceList = [];
-    for (const [id, res] of resource.entries()) {
-      if (res.amount <= 0) continue;
-      const pos = position.get(id);
-      if (!pos) continue;
-      resourceList.push({ id, pos });
+    if (!world.forageField) {
+      for (const [id, res] of resource.entries()) {
+        if (res.amount <= 0) continue;
+        const pos = position.get(id);
+        if (!pos) continue;
+        resourceList.push({ id, pos });
+      }
     }
 
     for (const [id, ag] of agent.entries()) {
@@ -340,32 +355,67 @@ export function createWorld(rng) {
       const dna = ag.dna || { speed: 1, sense: 1, metabolism: 1, hueShift: 0 };
       const seekRadius = 140 * dna.sense;
 
-      let target = null;
-      let targetDist2 = Infinity;
+      ag.wanderClock = (ag.wanderClock ?? 0) - dt;
+      if (ag.wanderClock <= 0) {
+        // Change course every so often rather than selecting a new point every
+        // frame. This produces recognisable browsing arcs and individual gaits.
+        ag.wanderTurn = (rng.float() - 0.5) * (0.85 + dna.sense * 0.42);
+        ag.wanderClock = 0.55 + rng.float() * (1.1 + (2 - dna.sense) * 0.25);
+      }
+      ag.grazeClock = Math.max(0, (ag.grazeClock ?? 0) - dt);
 
-      for (const r of resourceList) {
-        const dx = r.pos.x - pos.x;
-        const dy = r.pos.y - pos.y;
-        const d2 = dx * dx + dy * dy;
-        if (d2 < targetDist2 && d2 < seekRadius * seekRadius) {
-          targetDist2 = d2;
-          target = r.pos;
+      let target = null;
+      if (world.forageField) {
+        ag.forageClock = (ag.forageClock ?? 0) - dt;
+        if (ag.forageClock <= 0 || !ag.forageTarget) {
+          ag.forageTarget = chooseForagePatch(pos, ag, dna, seekRadius);
+          ag.forageClock = 0.75 + rng.float() * 1.15;
+        }
+        target = ag.forageTarget;
+      } else {
+        let targetDist2 = Infinity;
+        for (const r of resourceList) {
+          const dx = r.pos.x - pos.x;
+          const dy = r.pos.y - pos.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < targetDist2 && d2 < seekRadius * seekRadius) {
+            targetDist2 = d2;
+            target = r.pos;
+          }
         }
       }
 
-      // Seek resource
+      let desiredHeading = ag.heading ?? Math.atan2(vel.vy, vel.vx);
+      let desiredSpeed = 40 * dna.speed;
+
+      // Seek resource, but approach it on a shallow, shifting arc. The offset
+      // fades near the plant so animals can still eat, rather than orbiting it.
       if (target) {
         const dx = target.x - pos.x;
         const dy = target.y - pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const desiredSpeed = 40 * dna.speed;
-        const desiredVx = (dx / dist) * desiredSpeed;
-        const desiredVy = (dy / dist) * desiredSpeed;
-        // Blend current velocity toward desired
-        const blend = 0.8;
-        vel.vx = vel.vx * blend + desiredVx * (1 - blend);
-        vel.vy = vel.vy * blend + desiredVy * (1 - blend);
+        const approach = Math.max(0, Math.min(1, (dist - 15) / 110));
+        const weave = Math.sin(world.tick * 0.12 + (ag.gaitPhase ?? 0)) * (0.2 + dna.sense * 0.18);
+        desiredHeading = Math.atan2(dy, dx) + (ag.wanderTurn ?? 0) * approach + weave * approach;
+        if (dist < 24 && ag.grazeClock <= 0) ag.grazeClock = 0.45 + rng.float() * 1.15;
+        if (ag.grazeClock > 0) {
+          desiredSpeed *= 0.16 + rng.float() * 0.14;
+          desiredHeading += (ag.wanderTurn ?? 0) * 0.7;
+        }
+      } else {
+        // With no plant in sight, continue a gentle exploratory curve instead
+        // of coasting indefinitely in an accidental straight line.
+        desiredHeading += (ag.wanderTurn ?? 0) * 0.62;
+        desiredSpeed *= 0.46 + dna.sense * 0.12;
       }
+
+      const heading = turnToward(ag.heading ?? desiredHeading, desiredHeading, dt * (1.4 + dna.speed * 0.32));
+      ag.heading = heading;
+      const response = 1 - Math.exp(-dt * 4.2);
+      const targetVx = Math.cos(heading) * desiredSpeed;
+      const targetVy = Math.sin(heading) * desiredSpeed;
+      vel.vx += (targetVx - vel.vx) * response;
+      vel.vy += (targetVy - vel.vy) * response;
 
       // Simple separation: avoid crowding other agents
       let ax = 0;
@@ -473,6 +523,36 @@ export function createWorld(rng) {
 
   }
 
+  function turnToward(current, target, maxTurn) {
+    const delta = Math.atan2(Math.sin(target - current), Math.cos(target - current));
+    return current + Math.max(-maxTurn, Math.min(maxTurn, delta));
+  }
+
+  function chooseForagePatch(position, grazer, dna, seekRadius) {
+    const field = world.forageField;
+    if (!field?.sample) return null;
+    const currentFood = field.sample(position.x, position.y).food || 0;
+    let best = null;
+    let bestScore = currentFood * 1.05;
+    const heading = grazer.heading ?? 0;
+    const phase = grazer.gaitPhase ?? 0;
+    // Sample a small fan of places in the surrounding landscape. It follows
+    // continuous planetary vegetation, not the positions of decorative plants.
+    for (let index = 0; index < 9; index += 1) {
+      const offset = (index - 4) * 0.43 + Math.sin(phase + world.tick * 0.025) * 0.16;
+      const distance = Math.min(seekRadius * 0.82, 34 + (index % 3) * 27 + dna.sense * 22);
+      const x = (position.x + Math.cos(heading + offset) * distance + world.width) % world.width;
+      const y = Math.max(0, Math.min(world.height, position.y + Math.sin(heading + offset) * distance));
+      const food = field.sample(x, y).food || 0;
+      const score = food - distance / Math.max(1, seekRadius) * 0.16;
+      if (score > bestScore) {
+        bestScore = score;
+        best = { x, y, food };
+      }
+    }
+    return best;
+  }
+
   // Metabolism & eating: agents lose energy over time, gain by consuming resources.
   function metabolismSystem(dt) {
     const { position, agent, predator, apex, resource, burst } = ecs.components;
@@ -487,6 +567,17 @@ export function createWorld(rng) {
 
       const pos = position.get(id);
       if (!pos) continue;
+
+      // On a living planet the amount of edible matter comes from the local
+      // vegetation/forest field. A grazer has to slow down to browse; plants
+      // are no longer discrete food pellets that must be touched to eat.
+      if (world.forageField?.sample) {
+        const food = world.forageField.sample(pos.x, pos.y).food || 0;
+        if ((ag.grazeClock || 0) > 0 && food > 0.08) {
+          ag.energy = Math.min(2.0, ag.energy + food * dt * 0.052);
+        }
+        continue;
+      }
 
       for (const [rid, res] of resource.entries()) {
         if (res.amount <= 0) continue;
@@ -922,6 +1013,8 @@ export function createWorld(rng) {
 
     forceField.set(targetId, { strength, radius });
   };
+
+  world.setForageField = field => { world.forageField = field?.sample ? field : null; };
 
   world.step = step;
   return world;

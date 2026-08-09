@@ -42,8 +42,12 @@ export function createSeasonalResourceFields(world, living, waterCycle, journal)
         const lake = finite(water.lake);
         const moisture = clamp(soil * 0.62 + terrain.rainfall * 0.24 + river * 0.34 + delta * 0.4, 0, 1);
         const fertility = clamp(thermalFit * 0.35 + terrain.rainfall * 0.3 + moisture * 0.45, 0, 1);
-        const food = terrain.land && terrain.biome !== 'ice'
-          ? clamp(fertility * seasonalLight * (lake > 0.72 ? 0.18 : 1), 0, 1)
+        const vegetation = vegetationCover(terrain.biome);
+        // The forage map follows the planet's generated vegetation zones. A
+        // rainforest is a broad food landscape, while steppe and scrub provide
+        // thinner browsing; water, ice, and bare mountains provide none.
+        const food = terrain.land && vegetation > 0
+          ? clamp(fertility * seasonalLight * vegetation * (lake > 0.72 ? 0.18 : 1), 0, 1)
           : 0;
         const cell = cells[row * GRID_COLUMNS + column];
         Object.assign(cell, { food, moisture, fertility, temperature: terrain.temperature });
@@ -83,6 +87,17 @@ export function createSeasonalResourceFields(world, living, waterCycle, journal)
 
 function seasonName(index) {
   return ['Vernal rise', 'High sun', 'Harvest dusk', 'Deep rest'][index] || 'Vernal rise';
+}
+
+function vegetationCover(biome) {
+  if (biome === 'rainforest') return 1;
+  if (biome === 'forest') return 0.9;
+  if (biome === 'grassland') return 0.72;
+  if (biome === 'steppe') return 0.46;
+  if (biome === 'desert') return 0.12;
+  // Reduced-order callers may not label a biome; treat suitable land as a
+  // modest vegetated plain rather than turning the whole food map off.
+  return 0.62;
 }
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));

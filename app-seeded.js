@@ -344,6 +344,7 @@ async function init() {
     lineageFoundry = createLineageFoundry({ world, biosphere, living, journal: ecologyJournal, seed: PLANET_SEED });
     eidolonAtlas = createEidolonAtlas({ world, biosphere, living, journal: ecologyJournal, seed: PLANET_SEED, relayUrl: ATLAS_RELAY_URL });
     seasonalResources = createSeasonalResourceFields(world, living, waterCycle, ecologyJournal);
+    world.setForageField(seasonalResources);
     biosphere.setSeasonalResources(seasonalResources);
     dynamics = createPlanetDynamics(world, living, waterCycle, rng);
 
