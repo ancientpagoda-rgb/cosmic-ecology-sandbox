@@ -47,7 +47,9 @@ fs.mkdirSync(artifactDir, { recursive: true });
         modules: window.realitySandboxModules.list().map(module => module.id),
         visibleCanvases,
         visibleSimulationCanvases,
-        visibleControls: [...document.querySelectorAll('.planet-dashboard button, .planet-dashboard select')].filter(visible).length,
+        visiblePrimaryControls: ['[data-planet-pause]', '[data-planet-step]', '[data-planet-speed]']
+          .map(selector => document.querySelector(selector))
+          .filter(element => element && visible(element)).length,
         statDefinitions: document.querySelectorAll('.planet-stat[title][tabindex="0"]').length,
         statValues: [...document.querySelectorAll('[data-stat]')].map(node => node.textContent.trim()),
         inspector: Boolean(document.querySelector('.planet-inspector')),
@@ -68,7 +70,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(initial.snapshot.mode === 'procedural-living-planet' && initial.snapshot.planet.fictional && !initial.snapshot.planet.earthData, 'The root is not honestly labeled as a fictional procedural planet.');
     assert(initial.snapshot.presentation.renderer === 'pixi-single-canvas' && !initial.snapshot.presentation.tickerStarted, 'The single-renderer contract failed.');
     assert(initial.visibleSimulationCanvases.length === 1 && initial.visibleSimulationCanvases[0].id === 'lofiLivingCanvas' && initial.canvas, `The root must have one visible simulation canvas plus approved presentation layers: ${JSON.stringify(initial.visibleCanvases)}`);
-    assert(initial.visibleControls === 3 && initial.inspector, 'The integrated controls or inspector are missing.');
+    assert(initial.visiblePrimaryControls === 3 && initial.inspector, 'The integrated controls or inspector are missing.');
     assert(initial.observatory.panel && initial.observatory.traits > 0 && initial.observatory.journal > 0, 'The evolution observatory did not render trait cards and field-journal entries.');
     assert(initial.statDefinitions === 8, 'All eight global statistics must expose definitions.');
     assert(initial.statValues.every(value => value && value !== '—'), `A statistic did not initialize: ${initial.statValues.join(', ')}`);
