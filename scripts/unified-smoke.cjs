@@ -118,13 +118,14 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(Number.isFinite(regionAfter.temperature) && Number.isFinite(regionAfter.soilMoisture), 'The selected region lacks climate or water readings.');
     assert(await page.locator('[data-reading="water"]').getAttribute('title'), 'A regional reading is not inspectable in full.');
 
-    await page.locator('[data-foundry-name]').fill('Test Comet Grazer');
-    await page.locator('[data-foundry-forge]').click();
-    await page.locator('[data-foundry-release]').click();
     const releasedLineage = await page.evaluate(() => {
       const planet = window.realitySandboxPlanet;
+      // The public experience deliberately keeps the advanced Foundry panel
+      // out of the default canvas view. Exercise its supported API instead of
+      // forcing clicks on hidden controls.
+      const capsule = planet.lineageFoundry.create({ name: 'Test Comet Grazer' });
+      const released = planet.lineageFoundry.release(capsule.id, planet.world.ecs.components.position.values().next().value);
       const catalog = planet.lineageFoundry.list();
-      const capsule = catalog.find(item => item.name === 'Test Comet Grazer');
       const species = planet.biosphere.getSpecies().find(item => item.lineageCapsuleId === capsule?.id);
       const components = planet.world.ecs.components;
       const releasedPopulation = [components.agent, components.predator, components.apex]
@@ -134,6 +135,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
       return {
         capsule,
         species,
+        released,
         releasedPopulation,
         catalog,
         exportText: capsule ? planet.lineageFoundry.export(capsule.id) : '',
