@@ -79,6 +79,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(after.diagnostics.surfaceMode === 'active' && after.diagnostics.surfaceModeCanvasPresent, 'Surface mode diagnostics do not report an active presentation.');
     assert(after.diagnostics.surfaceModeRenderer === 'gpu-controller-spherical-topology', `Unexpected Surface controller (${after.diagnostics.surfaceModeRenderer}).`);
     assert(after.diagnostics.surfaceGpu?.renderer === 'WebGLRenderer' && after.diagnostics.surfaceGpu?.gpuPrimary === true, 'Surface mode did not select the cached WebGL GPU renderer.');
+    assert(before.player.pitch >= 0.18, `Surface mode should start terrain-facing, not at the empty horizon (pitch ${before.player.pitch}).`);
     assert(after.diagnostics.surfaceGpu?.fauna?.renderLoopProceduralSamples === 0, 'Surface fauna performs procedural sampling in the render loop.');
     assert(after.diagnostics.surfaceGpu?.fauna?.visible >= 1, 'Surface expedition did not present nearby fauna.');
     assert(moved > 0.5, `WASD movement did not move the player enough (${moved}).`);

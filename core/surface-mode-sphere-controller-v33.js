@@ -3,6 +3,9 @@ const EYE_HEIGHT = 3.6;
 const MAX_ALTITUDE = 52;
 const GLOBE_RADIUS_FACTOR = 0.43;
 const HUD_INTERVAL_MS = 180;
+// Positive pitch lowers the look target in the GPU renderer. Starting a little
+// below the horizon gives people terrain immediately instead of an empty sky.
+const DEFAULT_SURFACE_PITCH = 0.23;
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const wrap = (value, max) => ((value % max) + max) % max;
@@ -37,7 +40,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     x: world.width * 0.5,
     y: world.height * 0.5,
     yaw: 0,
-    pitch: 0,
+    pitch: DEFAULT_SURFACE_PITCH,
     altitude: EYE_HEIGHT,
   };
 
@@ -155,7 +158,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     const longitude = (player.x / world.width - 0.5) * 360;
     const altitude = Math.max(0, player.altitude - EYE_HEIGHT);
     const nearbyLife = Number(document.documentElement.dataset.surfaceModeVisibleCreatures || 0);
-    info.innerHTML = `<b>SURFACE MODE · NYSA · SPHERE GPU</b><br>${terrain?.biome || 'unknown'} · ${Math.abs(latitude).toFixed(2)}° ${latitude >= 0 ? 'N' : 'S'} · ${Math.abs(longitude).toFixed(2)}° ${longitude >= 0 ? 'E' : 'W'}<br>altitude +${altitude.toFixed(1)} · rain ${(localWater?.rain || 0).toFixed(2)} · nearby life ${nearbyLife}`;
+    info.innerHTML = `<b>SURFACE MODE · EIDOLON · SPHERE GPU</b><br>${terrain?.biome || 'unknown'} · ${Math.abs(latitude).toFixed(2)}° ${latitude >= 0 ? 'N' : 'S'} · ${Math.abs(longitude).toFixed(2)}° ${longitude >= 0 ? 'E' : 'W'}<br>altitude +${altitude.toFixed(1)} · rain ${(localWater?.rain || 0).toFixed(2)} · nearby life ${nearbyLife}`;
     document.documentElement.dataset.surfaceModeBiome = terrain?.biome || 'unknown';
     document.documentElement.dataset.surfaceModeCoordinates = `${player.x.toFixed(2)},${player.y.toFixed(2)}`;
   }
@@ -202,7 +205,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     player.x = wrap(x, world.width);
     player.y = clamp(y, 0, world.height);
     player.altitude = EYE_HEIGHT;
-    player.pitch = 0;
+    player.pitch = DEFAULT_SURFACE_PITCH;
     active = true;
     keys.clear();
     lastHudUpdate = -Infinity;
