@@ -30,14 +30,19 @@ fs.mkdirSync(artifactDir, { recursive: true });
 
     const startup = await page.evaluate(() => {
       const canvas = document.getElementById('lofiLivingCanvas');
+      const preEntrySurfaceResources = performance.getEntriesByType('resource')
+        .map(entry => entry.name)
+        .filter(name => /surface-terrain-water-sphere-gpu|surface-visual-layers|three\.module/i.test(name));
       return {
         renderQuality: document.documentElement.dataset.renderQuality,
         canvas: canvas ? { width: canvas.width, height: canvas.height } : null,
         deferredPresentation: document.documentElement.dataset.deferredPresentation || 'not-started',
+        preEntrySurfaceResources,
       };
     });
     assert(startup.canvas, 'Startup did not create the Pixi root canvas.');
     assert(startup.canvas.width * startup.canvas.height <= STARTUP_PIXEL_BUDGET, `Startup canvas exceeds its pixel budget: ${startup.canvas.width}x${startup.canvas.height}.`);
+    assert(startup.preEntrySurfaceResources.length === 0, `Heavy Surface resources loaded before entry: ${startup.preEntrySurfaceResources.join(', ')}.`);
 
     // The interaction smoke uses a real Playwright pointer click. Here we
     // measure the handler itself, excluding test-runner actionability waits.

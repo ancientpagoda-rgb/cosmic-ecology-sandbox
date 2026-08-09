@@ -140,6 +140,7 @@ requireText('scripts/surface-mode-smoke.cjs', "page.keyboard.down('w')", 'surfac
 requireText('scripts/surface-mode-smoke.cjs', "page.locator('#enterSurfaceMode').click()", 'surface mode re-entry browser assertion');
 requireText('scripts/performance-smoke.cjs', 'webglcontextlost', 'surface context-loss fallback assertion');
 requireText('scripts/performance-smoke.cjs', 'STARTUP_PIXEL_BUDGET', 'startup canvas performance budget');
+requireText('scripts/performance-smoke.cjs', 'preEntrySurfaceResources', 'lazy Surface resource performance budget');
 requireText('core/surface-mode.js', 'DISTANT_CACHE_START', 'surface mode distant terrain cache');
 requireText('core/surface-mode.js', 'MAX_RENDER_LONG_EDGE = 960', 'surface mode render budget');
 
