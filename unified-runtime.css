@@ -86,6 +86,30 @@ select { font: inherit; }
   pointer-events: none;
 }
 
+.planet-pulse {
+  position: absolute;
+  z-index: 8;
+  top: max(22px, env(safe-area-inset-top));
+  left: max(22px, env(safe-area-inset-left));
+  width: min(352px, calc(100vw - 44px));
+  padding: 16px;
+  border: 1px solid rgb(var(--jade-rgb) / .38);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgb(13 22 20 / .94), rgb(18 27 25 / .84));
+  box-shadow: 0 20px 64px rgb(0 0 0 / .36);
+  pointer-events: auto;
+}
+
+.planet-pulse .planet-eyebrow { margin: 0 0 7px; color: var(--amber); font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; }
+.planet-pulse h1 { margin: 0; font: 650 20px/1.08 Georgia, 'Times New Roman', serif; letter-spacing: -.02em; }
+.planet-pulse [data-pulse-description] { margin: 10px 0 0; color: #c6d1c9; font-size: 13px; line-height: 1.45; }
+.planet-pulse__region { margin-top: 12px; color: var(--muted); font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; }
+.planet-pulse__actions { display: grid; grid-template-columns: 1fr; gap: 7px; margin-top: 14px; }
+.planet-pulse button { min-height: 34px; border: 1px solid rgb(var(--jade-rgb) / .5); border-radius: 9px; background: rgb(var(--jade-rgb) / .14); color: var(--text); cursor: pointer; font: 700 11px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.planet-pulse button:hover { background: rgb(var(--jade-rgb) / .28); }
+.planet-pulse button:disabled { color: var(--muted); cursor: default; opacity: .65; }
+.planet-pulse button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
 .planet-masthead,
 .planet-dashboard,
 .planet-inspector,
@@ -401,6 +425,13 @@ select { font: inherit; }
 }
 
 @media (max-width: 480px) {
+  .planet-pulse {
+    top: max(10px, env(safe-area-inset-top));
+    left: max(10px, env(safe-area-inset-left));
+    width: calc(100vw - 20px);
+    padding: 13px;
+  }
+  .planet-pulse h1 { font-size: 18px; }
   .planet-masthead {
     top: max(8px, env(safe-area-inset-top));
     left: max(8px, env(safe-area-inset-left));

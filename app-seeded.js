@@ -18,6 +18,7 @@ import { createBiosphere } from './core/biosphere.js';
 import { createEcologyJournal } from './core/ecology-journal.js';
 import { createLineageFoundry } from './core/lineage-foundry.js';
 import { createSeasonalResourceFields } from './core/seasonal-resource-fields.js';
+import { createSeasonChronicle } from './core/season-chronicle.js';
 import { createWaterCycle } from './core/water-cycle.js';
 import { readOriginScenario } from './core/origin-scenario.js';
 
@@ -40,6 +41,7 @@ let dynamics;
 let ecologyJournal;
 let seasonalResources;
 let lineageFoundry;
+let seasonChronicle;
 let livingPlanetRuntime;
 let moduleHost;
 let stepSphere;
@@ -343,6 +345,15 @@ async function init() {
     world.setForageField(seasonalResources);
     biosphere.setSeasonalResources(seasonalResources);
     dynamics = createPlanetDynamics(world, living, waterCycle, rng);
+    seasonChronicle = createSeasonChronicle({
+      world,
+      waterCycle,
+      lineageFoundry,
+      seed: PLANET_SEED,
+      advanceSimulation(count) {
+        for (let index = 0; index < count; index += 1) stepSimulation();
+      },
+    });
 
     const mobile = matchMedia('(max-width: 720px), (pointer: coarse)').matches;
     const controls = {
@@ -354,7 +365,7 @@ async function init() {
     };
     livingPlanetRuntime = createLofiLivingRuntime(
       world,
-      { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources, lineageFoundry },
+      { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources, lineageFoundry, seasonChronicle },
       { mobile, seed: PLANET_SEED, planetName: PLANET_NAME, controls },
     );
     livingPlanetRuntime.requires = ['planet.weather', 'planet.inspection', 'ecology.species', 'ecology.resources.seasonal'];
@@ -382,6 +393,7 @@ async function init() {
       waterCycle,
       biosphere,
       lineageFoundry,
+      seasonChronicle,
       ecologyJournal,
       seasonalResources,
       dynamics,

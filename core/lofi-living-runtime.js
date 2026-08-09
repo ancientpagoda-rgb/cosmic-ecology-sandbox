@@ -35,7 +35,7 @@ const PALETTE = {
 };
 
 export function createLofiLivingRuntime(world, dependencies, options = {}) {
-  const { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources, lineageFoundry, eidolonAtlas } = dependencies;
+  const { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources, lineageFoundry, seasonChronicle, eidolonAtlas } = dependencies;
   const mobile = options.mobile ?? matchMedia('(max-width: 720px), (pointer: coarse)').matches;
   const seed = options.seed ?? 734221;
   const cosmicSeed = hashText(seed);
@@ -74,6 +74,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   let shell = null;
   let evolutionPanel = null;
   let foundryPanel = null;
+  let seasonPulse = null;
   let interfaceNodes = null;
   let activeCapsule = null;
   let pixiLoadPromise = null;
@@ -189,9 +190,23 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       <div class="planet-foundry__actions"><button type="button" data-foundry-forge>Forge capsule</button><button type="button" data-foundry-release disabled>Release at selected region</button><button type="button" data-foundry-export disabled>Export</button></div>
       <label class="planet-foundry__import">Import capsule <textarea data-foundry-import rows="2" placeholder="Paste an .eidolon-lineage capsule here"></textarea></label>
       <div class="planet-foundry__actions"><button type="button" data-foundry-import-button>Import</button><select data-foundry-catalog aria-label="Saved lineages"><option value="">No saved lineages</option></select></div>`;
+    seasonPulse = document.createElement('section');
+    seasonPulse.className = 'planet-pulse';
+    seasonPulse.setAttribute('aria-label', 'Planet pulse');
+    seasonPulse.innerHTML = `
+      <p class="planet-eyebrow">Eidolon · <span data-pulse-season>Season 14</span></p>
+      <h1 data-pulse-title>Eidolon has changed while you were away.</h1>
+      <p data-pulse-description></p>
+      <div class="planet-pulse__region" data-pulse-region>Saltglass Delta</div>
+      <div class="planet-pulse__actions">
+        <button type="button" data-pulse-observe>Observe Saltglass</button>
+        <button type="button" data-pulse-release>Release drought lineage</button>
+        <button type="button" data-pulse-advance>Advance season</button>
+      </div>`;
     host.append(evolutionPanel);
     host.append(foundryPanel);
     host.append(shell);
+    host.append(seasonPulse);
 
     interfaceNodes = {
       stats: Object.fromEntries([...shell.querySelectorAll('[data-stat]')].map(node => [node.dataset.stat, node])),
@@ -206,6 +221,15 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       traitCards: evolutionPanel.querySelector('[data-trait-cards]'),
       journal: evolutionPanel.querySelector('[data-evolution-journal]'),
       resourceSummary: evolutionPanel.querySelector('[data-resource-summary]'),
+      pulse: {
+        season: seasonPulse.querySelector('[data-pulse-season]'),
+        title: seasonPulse.querySelector('[data-pulse-title]'),
+        description: seasonPulse.querySelector('[data-pulse-description]'),
+        region: seasonPulse.querySelector('[data-pulse-region]'),
+        observe: seasonPulse.querySelector('[data-pulse-observe]'),
+        release: seasonPulse.querySelector('[data-pulse-release]'),
+        advance: seasonPulse.querySelector('[data-pulse-advance]'),
+      },
       foundry: {
         status: foundryPanel.querySelector('[data-foundry-status]'),
         name: foundryPanel.querySelector('[data-foundry-name]'),
@@ -236,7 +260,30 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       controls.setTimeScale?.(Number(interfaceNodes.speed.value));
       updateInterface(true);
     });
+    installSeasonPulseControls();
     installFoundryControls();
+  }
+
+  function installSeasonPulseControls() {
+    const nodes = interfaceNodes?.pulse;
+    if (!nodes || !seasonChronicle) return;
+    nodes.observe.addEventListener('click', () => {
+      const region = seasonChronicle.getRegion();
+      selectedPoint = { x: region.x, y: region.y };
+      setCamera({ centerX: region.x / world.width, centerY: region.y / world.height, zoom: 2.2 });
+      latestEvent = `${region.name} is under observation.`;
+      updateInterface(true);
+    });
+    nodes.release.addEventListener('click', () => {
+      const result = seasonChronicle.releaseDroughtLineage();
+      if (!result.existing) latestEvent = 'Saltglass Reedrunners were released into the delta.';
+      updateInterface(true);
+    });
+    nodes.advance.addEventListener('click', () => {
+      const pulse = seasonChronicle.advanceSeason();
+      latestEvent = pulse.title;
+      updateInterface(true);
+    });
   }
 
   function installFoundryControls() {
@@ -828,7 +875,20 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     interfaceNodes.speed.value = String(controls.getTimeScale?.() ?? 1);
     interfaceNodes.clock.textContent = `tick ${world.tick.toLocaleString()}`;
     updateInspector(inspectSelected());
+    updateSeasonPulse();
     updateEvolutionObservatory();
+  }
+
+  function updateSeasonPulse() {
+    const nodes = interfaceNodes?.pulse;
+    if (!nodes || !seasonChronicle) return;
+    const pulse = seasonChronicle.getPulse();
+    nodes.season.textContent = `Season ${pulse.season}`;
+    nodes.title.textContent = pulse.title;
+    nodes.description.textContent = pulse.description;
+    nodes.region.textContent = `${pulse.region.name} · ${pulse.region.biome}`;
+    nodes.release.textContent = pulse.releaseLabel;
+    nodes.release.disabled = !pulse.releaseAvailable;
   }
 
   function updateEvolutionObservatory() {
@@ -1024,6 +1084,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         traitCards: biosphere.getTraitCards?.(3) || [],
         journal: ecologyJournal?.getEntries?.(3) || [],
       },
+      chronicle: seasonChronicle?.getPulse?.() || null,
     };
   }
 

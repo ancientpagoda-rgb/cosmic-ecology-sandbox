@@ -148,6 +148,19 @@ fs.mkdirSync(artifactDir, { recursive: true });
       `Foundry release did not enter the created lineage into the ecosystem: ${JSON.stringify({ status: releasedLineage.status, species: releasedLineage.species, releasedPopulation: releasedLineage.releasedPopulation })}`,
     );
     assert(releasedLineage.catalog.some(capsule => capsule.name === 'Test Comet Grazer') && releasedLineage.exportText.includes('eidolon-lineage-1'), 'Foundry export did not retain the portable capsule.');
+
+    const seasonBefore = await page.evaluate(() => window.realitySandboxPlanet.seasonChronicle.getPulse());
+    await page.locator('[data-pulse-observe]').click();
+    const saltglassCamera = await page.evaluate(() => window.realitySandboxUnified.getCamera());
+    assert(saltglassCamera.zoom >= 2, 'Planet Pulse did not focus Saltglass Delta.');
+    await page.locator('[data-pulse-release]').click();
+    await page.locator('[data-pulse-advance]').click();
+    const seasonAfter = await page.evaluate(() => window.realitySandboxPlanet.seasonChronicle.getPulse());
+    writeJson('season-chronicle.json', { before: seasonBefore, after: seasonAfter });
+    assert(
+      seasonAfter.season === seasonBefore.season + 1 && !seasonAfter.releaseAvailable && seasonAfter.region.history.length > 1,
+      `Planet Pulse did not preserve a release and seasonal consequence: ${JSON.stringify(seasonAfter)}`,
+    );
     await page.evaluate(() => window.realitySandboxDebug.pause());
     const clock = await page.evaluate(() => {
       const before = window.realitySandboxUnified.getState();
