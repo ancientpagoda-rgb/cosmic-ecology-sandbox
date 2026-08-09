@@ -34,10 +34,16 @@ export function createSeasonalResourceFields(world, living, waterCycle, journal)
         const latitude = Math.abs(0.5 - y / world.height) * 2;
         const seasonalLight = 0.56 + Math.sin(season * Math.PI * 2 + x / world.width * Math.PI * 2) * (0.22 - latitude * 0.08);
         const thermalFit = 1 - Math.min(1, Math.abs(terrain.temperature - 0.58) * 1.45);
-        const moisture = clamp(water.soil * 0.62 + terrain.rainfall * 0.24 + water.river * 0.34 + water.delta * 0.4, 0, 1);
+        // Water-cycle fields can be extended independently; missing optional
+        // coastal fields must not poison the visible food summary with NaN.
+        const soil = finite(water.soil);
+        const river = finite(water.river);
+        const delta = finite(water.delta);
+        const lake = finite(water.lake);
+        const moisture = clamp(soil * 0.62 + terrain.rainfall * 0.24 + river * 0.34 + delta * 0.4, 0, 1);
         const fertility = clamp(thermalFit * 0.35 + terrain.rainfall * 0.3 + moisture * 0.45, 0, 1);
         const food = terrain.land && terrain.biome !== 'ice'
-          ? clamp(fertility * seasonalLight * (water.lake > 0.72 ? 0.18 : 1), 0, 1)
+          ? clamp(fertility * seasonalLight * (lake > 0.72 ? 0.18 : 1), 0, 1)
           : 0;
         const cell = cells[row * GRID_COLUMNS + column];
         Object.assign(cell, { food, moisture, fertility, temperature: terrain.temperature });
@@ -80,3 +86,4 @@ function seasonName(index) {
 }
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
+const finite = value => Number.isFinite(value) ? value : 0;

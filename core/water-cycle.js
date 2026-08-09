@@ -203,6 +203,7 @@ export function createWaterCycle(world, orbitalSystem = null) {
       tide: tide[i],
       season: orbitalSystem?.getSeasonState(latitude) || null,
       river: clamp(hydro.river[i] + runoff[i] * 0.05, 0, 1),
+      delta: hydro.delta[i],
       lake: clamp(hydro.lake[i] + surface[i] * 0.22, 0, 1),
     };
   }

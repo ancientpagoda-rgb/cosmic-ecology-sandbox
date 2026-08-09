@@ -14,12 +14,13 @@ const living = {
   getSeason: () => 0.14,
   sampleDynamicPlanet: () => ({ land: true, biome: 'temperate', temperature: 0.61, rainfall: 0.72 }),
 };
-const waterCycle = { sample: () => ({ soil: 0.68, river: 0.2, delta: 0.1, lake: 0 }) };
+const waterCycle = { sample: () => ({ soil: 0.68, river: 0.2, lake: 0 }) };
 const fields = createSeasonalResourceFields(world, living, waterCycle, journal);
 const sample = fields.sample(550, 330);
 
 if (!(sample.food > 0 && sample.food <= 1)) throw new Error('Seasonal food field was not normalized.');
 if (!(fields.getSummary().meanFood > 0)) throw new Error('Seasonal resource summary was not populated.');
+if (!Number.isFinite(fields.getSummary().meanFood)) throw new Error('Seasonal resource summary must remain finite when an optional water field is missing.');
 fields.step(1.2);
 if (!Number.isFinite(resource.seasonalFood)) throw new Error('Seasonal fields did not feed plant state.');
 journal.record('Trait divergence', 'A deterministic test lineage shifted its inherited speed.');
