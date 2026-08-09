@@ -854,7 +854,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     for (const [key, value] of Object.entries(stats.display)) {
       if (interfaceNodes.stats[key]) interfaceNodes.stats[key].textContent = value;
     }
-    interfaceNodes.event.textContent = latestEvent;
+    if (interfaceNodes.event) interfaceNodes.event.textContent = latestEvent;
     const isPaused = Boolean(controls.isPaused?.());
     interfaceNodes.pause.textContent = isPaused ? 'Resume' : 'Pause';
     interfaceNodes.pause.setAttribute('aria-pressed', String(isPaused));
