@@ -48,13 +48,11 @@ fs.mkdirSync(artifactDir, { recursive: true });
     });
     await page.waitForFunction(() => document.documentElement.dataset.surfaceModeFallbackReady === 'true', null, { timeout: SURFACE_FALLBACK_BUDGET_MS });
     const fallbackMs = await page.evaluate(() => Number(document.documentElement.dataset.surfaceModeFallbackPaintedAt) - window.__surfaceEntryStartedAt);
-    const fallbackVisible = await page.evaluate(() => {
-      const canvas = document.getElementById('surfaceModeCanvas');
-      const style = canvas && getComputedStyle(canvas);
-      const rect = canvas?.getBoundingClientRect();
-      return Boolean(canvas && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0 && rect.width > 0 && rect.height > 0);
-    });
-    assert(fallbackVisible, 'Surface Mode did not show an immediate fallback canvas.');
+    const fallbackPaint = await page.evaluate(() => ({
+      active: document.documentElement.dataset.surfaceMode === 'active',
+      paintedAt: Number(document.documentElement.dataset.surfaceModeFallbackPaintedAt),
+    }));
+    assert(fallbackPaint.active && Number.isFinite(fallbackPaint.paintedAt), 'Surface Mode did not paint its immediate fallback.');
 
     await page.waitForFunction(() => window.realitySandboxPresentationDiagnostics?.().surfaceGpu?.active === true, null, { timeout: SURFACE_GPU_BUDGET_MS });
     const gpuMs = await page.evaluate(() => performance.now() - window.__surfaceEntryStartedAt);

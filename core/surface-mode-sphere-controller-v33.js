@@ -230,15 +230,24 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
 
   function startTerrainRenderer() {
     if (terrainRendererPromise) return terrainRendererPromise;
-    terrainRendererPromise = import('./surface-visual-layers.js')
+    // Start the renderer and the optional rich presentation bundle together.
+    // The latter already waits for the renderer's public APIs, so serializing
+    // these imports only delayed the first real Surface frame.
+    const gpuRenderer = import('./surface-terrain-water-sphere-gpu-v37.js');
+    const visualLayers = import('./surface-visual-layers.js')
       .then(() => {
         document.documentElement.dataset.surfaceVisualLayers = 'v46e-lazy-loaded';
-        return import('./surface-terrain-water-sphere-gpu-v37.js');
       })
+      .catch(error => {
+        // Cosmetic layers must not prevent the core terrain renderer from
+        // starting. Keep Surface Mode usable with its terrain-only view.
+        console.warn('[Surface Mode] Optional visual layers could not start.', error);
+        document.documentElement.dataset.surfaceVisualLayers = 'load-failed';
+      });
+    terrainRendererPromise = Promise.all([gpuRenderer, visualLayers])
       .catch(error => {
         console.warn('[Surface Mode] GPU terrain scene could not start.', error);
         document.documentElement.dataset.surfaceGpu = 'load-failed';
-        document.documentElement.dataset.surfaceVisualLayers = 'load-failed';
         paintSurfaceFallback();
       });
     return terrainRendererPromise;
