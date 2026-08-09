@@ -123,20 +123,33 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(Number.isFinite(regionAfter.temperature) && Number.isFinite(regionAfter.soilMoisture), 'The selected region lacks climate or water readings.');
     assert(await page.locator('[data-reading="water"]').getAttribute('title'), 'A regional reading is not inspectable in full.');
 
-    const lineage = await page.evaluate(() => ({
-      before: window.realitySandboxPlanet.world.ecs.components.agent.size,
-      speciesBefore: window.realitySandboxPlanet.biosphere.getSpecies().length,
-    }));
     await page.locator('[data-foundry-name]').fill('Test Comet Grazer');
     await page.locator('[data-foundry-forge]').click();
     await page.locator('[data-foundry-release]').click();
-    const releasedLineage = await page.evaluate(() => ({
-      after: window.realitySandboxPlanet.world.ecs.components.agent.size,
-      speciesAfter: window.realitySandboxPlanet.biosphere.getSpecies().length,
-      catalog: window.realitySandboxPlanet.lineageFoundry.list(),
-      exportText: window.realitySandboxPlanet.lineageFoundry.export(window.realitySandboxPlanet.lineageFoundry.list().at(-1).id),
-    }));
-    assert(releasedLineage.after >= lineage.before + 3 && releasedLineage.speciesAfter === lineage.speciesBefore + 1, 'Foundry release did not enter the created lineage into the ecosystem.');
+    const releasedLineage = await page.evaluate(() => {
+      const planet = window.realitySandboxPlanet;
+      const catalog = planet.lineageFoundry.list();
+      const capsule = catalog.find(item => item.name === 'Test Comet Grazer');
+      const species = planet.biosphere.getSpecies().find(item => item.lineageCapsuleId === capsule?.id);
+      const components = planet.world.ecs.components;
+      const releasedPopulation = [components.agent, components.predator, components.apex]
+        .flatMap(group => [...group.values()])
+        .filter(organism => organism.lineageCapsuleId === capsule?.id)
+        .length;
+      return {
+        capsule,
+        species,
+        releasedPopulation,
+        catalog,
+        exportText: capsule ? planet.lineageFoundry.export(capsule.id) : '',
+        status: document.querySelector('[data-foundry-status]')?.textContent || '',
+      };
+    });
+    writeJson('foundry-release.json', releasedLineage);
+    assert(
+      releasedLineage.species?.name === 'Test Comet Grazer' && releasedLineage.releasedPopulation >= 3,
+      `Foundry release did not enter the created lineage into the ecosystem: ${JSON.stringify({ status: releasedLineage.status, species: releasedLineage.species, releasedPopulation: releasedLineage.releasedPopulation })}`,
+    );
     assert(releasedLineage.catalog.some(capsule => capsule.name === 'Test Comet Grazer') && releasedLineage.exportText.includes('eidolon-lineage-1'), 'Foundry export did not retain the portable capsule.');
     const atlas = await page.evaluate(() => ({
       survey: window.realitySandboxPlanet.eidolonAtlas.survey(window.realitySandboxUnified.getState().selectedPoint),
