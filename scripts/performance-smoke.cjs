@@ -61,6 +61,10 @@ fs.mkdirSync(artifactDir, { recursive: true });
 
     await page.waitForFunction(() => window.realitySandboxPresentationDiagnostics?.().surfaceGpu?.active === true, null, { timeout: SURFACE_GPU_BUDGET_MS });
     const gpuMs = await page.evaluate(() => performance.now() - window.__surfaceEntryStartedAt);
+    const gpuHandoff = await page.evaluate(() => ({
+      gpuCanvasVisible: getComputedStyle(document.getElementById('surfaceGpuCanvas')).display !== 'none',
+      fallbackOpacity: Number(getComputedStyle(document.getElementById('surfaceModeCanvas')).opacity),
+    }));
 
     // Dispatching these cancellable events exercises the same production
     // recovery path deterministically, without depending on a GPU driver.
@@ -77,12 +81,13 @@ fs.mkdirSync(artifactDir, { recursive: true });
     await page.evaluate(() => document.getElementById('surfaceGpuCanvas').dispatchEvent(new Event('webglcontextrestored')));
     await page.waitForFunction(() => window.realitySandboxPresentationDiagnostics?.().surfaceGpu?.active === true, null, { timeout: 5000 });
 
-    const metrics = { startupMs, fallbackMs, gpuMs, startup, fallbackAfterContextLoss, pageErrors };
+    const metrics = { startupMs, fallbackMs, gpuMs, startup, gpuHandoff, fallbackAfterContextLoss, pageErrors };
     fs.writeFileSync(path.join(artifactDir, 'performance.json'), JSON.stringify(metrics, null, 2));
 
     assert(startupMs <= STARTUP_BUDGET_MS, `Interactive startup exceeded ${STARTUP_BUDGET_MS}ms (${startupMs}ms).`);
     assert(fallbackMs <= SURFACE_FALLBACK_BUDGET_MS, `Surface fallback exceeded ${SURFACE_FALLBACK_BUDGET_MS}ms (${fallbackMs.toFixed(1)}ms).`);
     assert(gpuMs <= SURFACE_GPU_BUDGET_MS, `Surface GPU readiness exceeded ${SURFACE_GPU_BUDGET_MS}ms (${gpuMs.toFixed(1)}ms).`);
+    assert(gpuHandoff.gpuCanvasVisible && gpuHandoff.fallbackOpacity === 0, 'Surface GPU did not complete its visible handoff after rendering.');
     assert(fallbackAfterContextLoss.surfaceGpu === 'sphere-v37-context-lost' && Number(fallbackAfterContextLoss.fallbackOpacity) > 0, 'Surface fallback did not return after simulated context loss.');
     assert(pageErrors.length === 0, `Performance smoke produced browser errors: ${pageErrors.join(' | ')}`);
   } finally {

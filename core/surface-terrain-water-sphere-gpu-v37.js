@@ -337,6 +337,10 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
   let distantQueueTimer = 0;
   let lastSurfaceActive = false;
   let rendererFailed = false;
+  // The fallback remains the visible surface until this renderer has proven it
+  // can draw one full frame. This prevents a blank handoff on weak or lost
+  // WebGL contexts.
+  let hasRendered = false;
 
   function restoreFallback(reason) {
     renderer.domElement.style.display = 'none';
@@ -848,17 +852,19 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
   }
 
   function isPresenting() {
-    return surfaceActive() && !stats.contextLost;
+    return surfaceActive() && !stats.contextLost && !rendererFailed && hasRendered;
   }
 
   renderer.domElement.addEventListener('webglcontextlost', event => {
     event.preventDefault();
     stats.contextLost = true;
+    hasRendered = false;
     restoreFallback('sphere-v37-context-lost');
   }, false);
   renderer.domElement.addEventListener('webglcontextrestored', () => {
     stats.contextLost = false;
     rendererFailed = false;
+    hasRendered = false;
     mode.showFallback?.();
   }, false);
 
@@ -899,6 +905,7 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
       renderer.domElement.style.display = 'none';
       if (lastSurfaceActive) {
         lastSurfaceActive = false;
+        hasRendered = false;
         generation++;
         requestedChunkKey = '';
         activeChunkKey = '';
@@ -912,7 +919,6 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
     lastSurfaceActive = true;
     stats.activeFrames++;
     renderer.domElement.style.display = 'block';
-    inputCanvas.style.opacity = '0';
     resize();
 
     const player = mode.getPlayer();
@@ -925,10 +931,12 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
       renderer.render(scene, camera);
       // The input canvas is an immediate, 2D fallback. Hide it only after a
       // real GPU frame succeeds so Surface Mode never transitions to black.
+      hasRendered = true;
       inputCanvas.style.opacity = '0';
       document.documentElement.dataset.surfaceGpu = 'active';
     } catch (error) {
       rendererFailed = true;
+      hasRendered = false;
       console.warn('[Surface Mode] GPU frame failed; restoring fallback.', error);
       restoreFallback('sphere-v37-render-failed');
     }
