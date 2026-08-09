@@ -58,7 +58,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
   layer.id = 'surfaceModeLayer';
   Object.assign(layer.style, {
     position: 'absolute', inset: '0', zIndex: '40', opacity: '0', pointerEvents: 'none',
-    transition: 'opacity 220ms ease', background: '#06100d', overflow: 'hidden',
+    transition: 'opacity 220ms ease', background: '#1d4038', overflow: 'hidden',
   });
 
   const canvas = document.createElement('canvas');
@@ -126,6 +126,42 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
   hud.append(info, exitButton, help, crosshair);
   layer.append(canvas, hud);
   host.append(layer, enterButton);
+
+  // The detailed terrain is loaded on demand. Paint a cheap, immediate
+  // fallback on the input canvas so a slow chunk or unavailable WebGL context
+  // never leaves Surface Mode as a black screen. The GPU renderer replaces it
+  // by setting this canvas transparent after its first active frame.
+  function paintSurfaceFallback() {
+    const rect = layer.getBoundingClientRect();
+    const width = Math.max(2, Math.min(960, Math.round(rect.width || innerWidth || 960)));
+    const height = Math.max(2, Math.min(640, Math.round(rect.height || innerHeight || 540)));
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    const context = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    if (!context) return;
+    const horizon = Math.round(height * (0.46 + clamp(player.pitch, -0.45, 0.45) * 0.24));
+    const sky = context.createLinearGradient(0, 0, 0, horizon);
+    sky.addColorStop(0, '#183531');
+    sky.addColorStop(0.6, '#6c998b');
+    sky.addColorStop(1, '#b9d4bc');
+    context.fillStyle = sky;
+    context.fillRect(0, 0, width, horizon);
+    const ground = context.createLinearGradient(0, horizon, 0, height);
+    ground.addColorStop(0, '#527b59');
+    ground.addColorStop(1, '#132b22');
+    context.fillStyle = ground;
+    context.fillRect(0, horizon, width, height - horizon);
+    context.fillStyle = 'rgba(232, 248, 221, .22)';
+    context.beginPath();
+    context.moveTo(0, horizon + height * 0.06);
+    for (let x = 0; x <= width; x += 20) {
+      const ridge = Math.sin((x / width + player.yaw * 0.2) * 8.4) * height * 0.035 + Math.sin((x / width + player.x * 0.004) * 22) * height * 0.018;
+      context.lineTo(x, horizon + height * 0.075 + ridge);
+    }
+    context.lineTo(width, horizon);
+    context.lineTo(0, horizon);
+    context.fill();
+  }
 
   function applySphereTopology() {
     let crossed = false;
@@ -210,6 +246,8 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     keys.clear();
     lastHudUpdate = -Infinity;
     document.documentElement.dataset.surfaceMode = 'active';
+    canvas.style.opacity = '1';
+    paintSurfaceFallback();
     // Keep the heavy Three.js terrain scene out of the overview page. It is
     // requested only after the explorer intentionally enters Surface Mode.
     if (!terrainRendererRequested) {
@@ -217,6 +255,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
       import('./surface-terrain-water-sphere-gpu-v37.js').catch(error => {
         console.warn('[Surface Mode] GPU terrain scene could not start.', error);
         document.documentElement.dataset.surfaceGpu = 'load-failed';
+        paintSurfaceFallback();
       });
     }
     layer.style.pointerEvents = 'auto';
@@ -328,6 +367,9 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
   });
   window.addEventListener('pointerup', () => { dragLook = false; });
   window.addEventListener('pointercancel', () => { dragLook = false; });
+  window.addEventListener('resize', () => {
+    if (active && canvas.style.opacity !== '0') paintSurfaceFallback();
+  }, { passive: true });
 
   const previousDiagnostics = window.realitySandboxPresentationDiagnostics;
   window.realitySandboxPresentationDiagnostics = () => ({
