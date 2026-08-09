@@ -7,8 +7,9 @@ const EYE_HEIGHT = 3.6;
 const MAX_ALTITUDE = 52;
 const FOV = Math.PI * 0.72;
 const MAX_VIEW_DISTANCE = 190;
-const TARGET_RENDER_INTERVAL = 1000 / 24;
-const MAX_RENDER_LONG_EDGE = 1280;
+const TARGET_RENDER_INTERVAL = 1000 / 20;
+const MAX_RENDER_LONG_EDGE = 960;
+const DISTANT_CACHE_START = 26;
 const GLOBE_RADIUS_FACTOR = 0.43;
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -221,6 +222,18 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     return waterCycle.sample(wrap(x, world.width), clamp(y, 0, world.height));
   }
 
+  function distantTerrainAt(x, y) {
+    const cache = window.realitySandboxInteractionCache;
+    if (cache?.isReady?.()) return cache.sampleTerrain(x, y);
+    return terrainAt(x, y);
+  }
+
+  function distantWaterAt(x, y) {
+    const cache = window.realitySandboxInteractionCache;
+    if (cache?.isReady?.()) return cache.sampleWater(x, y);
+    return waterAt(x, y);
+  }
+
   function groundZAt(x, y) {
     const terrain = terrainAt(x, y);
     if (!terrain) return SEA_LEVEL * Z_SCALE;
@@ -306,7 +319,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
 
   function drawTerrain(width, height, horizon, eyeZ) {
     const focal = width / (2 * Math.tan(FOV * 0.5));
-    const stride = width >= 1050 ? 3 : 2;
+    const stride = width >= 760 ? 4 : 3;
     const skyFog = [118, 151, 145];
 
     for (let sx = 0; sx < width; sx += stride) {
@@ -320,9 +333,10 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
       while (distance < MAX_VIEW_DISTANCE && coveredY > 0) {
         const wx = wrap(player.x + cos * distance, world.width);
         const wy = clamp(player.y + sin * distance, 0, world.height);
-        const terrain = terrainAt(wx, wy);
+        const useDistantCache = distance >= DISTANT_CACHE_START;
+        const terrain = useDistantCache ? distantTerrainAt(wx, wy) : terrainAt(wx, wy);
         if (!terrain) break;
-        const water = waterAt(wx, wy);
+        const water = useDistantCache ? distantWaterAt(wx, wy) : waterAt(wx, wy);
         const surfaceZ = (terrain.land ? terrain.elevation : SEA_LEVEL) * Z_SCALE;
         const projectedY = horizon - ((surfaceZ - eyeZ) / distance) * focal;
 
@@ -337,7 +351,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
           coveredY = top;
         }
 
-        distance += 0.75 + distance * 0.026;
+        distance += 1.15 + distance * 0.042;
       }
     }
 
@@ -346,8 +360,8 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
 
   function drawVegetation(width, height, horizon, eyeZ, focal) {
     const biomassSampler = window.realitySandboxVegetationPresentation?.sampleBiomass;
-    const grid = 9;
-    const range = 13;
+    const grid = 12;
+    const range = 8;
     const sprites = [];
     const originX = Math.floor(player.x / grid);
     const originY = Math.floor(player.y / grid);
@@ -466,6 +480,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     if (!force && now - lastTerrainRender < TARGET_RENDER_INTERVAL) return;
     lastTerrainRender = now;
     surfaceFrame++;
+    const startedAt = performance.now();
     syncCanvas();
     const width = canvas.width;
     const height = canvas.height;
@@ -480,6 +495,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     drawVegetation(width, height, horizon, eyeZ, focal);
     drawCreatures(width, height, horizon, eyeZ, focal);
     updateHud(terrain, localWater);
+    document.documentElement.dataset.surfaceModeRenderMs = (performance.now() - startedAt).toFixed(1);
   }
 
   function updateMovement(dt) {
@@ -648,6 +664,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     surfaceModeBiome: document.documentElement.dataset.surfaceModeBiome || 'unknown',
     surfaceModeCoordinates: document.documentElement.dataset.surfaceModeCoordinates || 'unknown',
     surfaceModeVisibleCreatures: Number(document.documentElement.dataset.surfaceModeVisibleCreatures || 0),
+    surfaceModeRenderMs: Number(document.documentElement.dataset.surfaceModeRenderMs || 0),
   });
 
   window.realitySandboxSurfaceMode = {

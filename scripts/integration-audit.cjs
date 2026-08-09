@@ -136,6 +136,8 @@ requireText('scripts/iphone-sphere-smoke.cjs', 'masthead.bottom <= metrics.inspe
 requireText('scripts/root-renderer-smoke.cjs', 'visibleSimulationCanvases.length === 1', 'single simulation canvas plus approved presentation layers');
 requireText('scripts/surface-mode-smoke.cjs', "document.documentElement.dataset.surfaceMode === 'active'", 'surface mode activates in browser');
 requireText('scripts/surface-mode-smoke.cjs', "page.keyboard.down('w')", 'surface mode movement browser assertion');
+requireText('core/surface-mode.js', 'DISTANT_CACHE_START', 'surface mode distant terrain cache');
+requireText('core/surface-mode.js', 'MAX_RENDER_LONG_EDGE = 960', 'surface mode render budget');
 
 requireText('reality-engine-v6-9.html', 'ENGINE V6.9 · HOWLER.JS SOUNDSCAPE', 'archived V6.9 compatibility page');
 requireText('README.md', 'Nysa is not Earth', 'scientific boundary documentation');
