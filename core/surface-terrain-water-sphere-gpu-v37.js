@@ -7,13 +7,13 @@ const Z_SCALE = 62;
 const TILE_SIZE = 420;
 const TILE_HALF = TILE_SIZE / 2;
 const CHUNK_STRIDE = 72;
-const NEAR_SEGMENTS_DESKTOP = 72;
+const NEAR_SEGMENTS_DESKTOP = 52;
 const NEAR_SEGMENTS_MOBILE = 52;
 const MID_SEGMENTS_DESKTOP = 18;
 const MID_SEGMENTS_MOBILE = 14;
 const FAR_SEGMENTS_DESKTOP = 10;
 const FAR_SEGMENTS_MOBILE = 8;
-const NEAR_SAMPLES_PER_SLICE = 150;
+const NEAR_SAMPLES_PER_SLICE = 220;
 const DISTANT_SAMPLES_PER_SLICE = 80;
 const DISTANT_START_DELAY_MS = 360;
 const FOV_DEGREES = 100;
@@ -336,6 +336,13 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
   let lastHeight = 0;
   let distantQueueTimer = 0;
   let lastSurfaceActive = false;
+  let rendererFailed = false;
+
+  function restoreFallback(reason) {
+    renderer.domElement.style.display = 'none';
+    mode.showFallback?.();
+    document.documentElement.dataset.surfaceGpu = reason;
+  }
 
   function chunkForPlayer(player) {
     const chunkX = Math.floor(player.x / CHUNK_STRIDE);
@@ -847,9 +854,13 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
   renderer.domElement.addEventListener('webglcontextlost', event => {
     event.preventDefault();
     stats.contextLost = true;
-    document.documentElement.dataset.surfaceGpu = 'sphere-v37-context-lost';
+    restoreFallback('sphere-v37-context-lost');
   }, false);
-  renderer.domElement.addEventListener('webglcontextrestored', () => { stats.contextLost = false; }, false);
+  renderer.domElement.addEventListener('webglcontextrestored', () => {
+    stats.contextLost = false;
+    rendererFailed = false;
+    mode.showFallback?.();
+  }, false);
 
   const up = new THREE.Vector3();
   const east = new THREE.Vector3();
@@ -884,7 +895,7 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
     requestAnimationFrame(loop);
     stats.frames++;
     const active = surfaceActive();
-    if (!active) {
+    if (!active || stats.contextLost || rendererFailed) {
       renderer.domElement.style.display = 'none';
       if (lastSurfaceActive) {
         lastSurfaceActive = false;
@@ -910,8 +921,17 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
     drawFauna(now);
 
     waterMaterial.uniforms.time.value = now * 0.001;
-    renderer.render(scene, camera);
-    document.documentElement.dataset.surfaceGpu = 'active';
+    try {
+      renderer.render(scene, camera);
+      // The input canvas is an immediate, 2D fallback. Hide it only after a
+      // real GPU frame succeeds so Surface Mode never transitions to black.
+      inputCanvas.style.opacity = '0';
+      document.documentElement.dataset.surfaceGpu = 'active';
+    } catch (error) {
+      rendererFailed = true;
+      console.warn('[Surface Mode] GPU frame failed; restoring fallback.', error);
+      restoreFallback('sphere-v37-render-failed');
+    }
   }
   requestAnimationFrame(loop);
 

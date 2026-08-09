@@ -17,7 +17,6 @@ import { createPlanetDynamics } from './core/planet-dynamics.js';
 import { createBiosphere } from './core/biosphere.js';
 import { createEcologyJournal } from './core/ecology-journal.js';
 import { createLineageFoundry } from './core/lineage-foundry.js';
-import { createEidolonAtlas } from './core/eidolon-atlas.js';
 import { createSeasonalResourceFields } from './core/seasonal-resource-fields.js';
 import { createWaterCycle } from './core/water-cycle.js';
 import { readOriginScenario } from './core/origin-scenario.js';
@@ -41,8 +40,6 @@ let dynamics;
 let ecologyJournal;
 let seasonalResources;
 let lineageFoundry;
-let eidolonAtlas;
-const ATLAS_RELAY_URL = new URLSearchParams(globalThis.location?.search || '').get('atlasRelay') || '';
 let livingPlanetRuntime;
 let moduleHost;
 let stepSphere;
@@ -342,7 +339,6 @@ async function init() {
     waterCycle = createWaterCycle(world, orbitalSystem);
     biosphere = createBiosphere(world, rng, { journal: ecologyJournal });
     lineageFoundry = createLineageFoundry({ world, biosphere, living, journal: ecologyJournal, seed: PLANET_SEED });
-    eidolonAtlas = createEidolonAtlas({ world, biosphere, living, journal: ecologyJournal, seed: PLANET_SEED, relayUrl: ATLAS_RELAY_URL });
     seasonalResources = createSeasonalResourceFields(world, living, waterCycle, ecologyJournal);
     world.setForageField(seasonalResources);
     biosphere.setSeasonalResources(seasonalResources);
@@ -358,7 +354,7 @@ async function init() {
     };
     livingPlanetRuntime = createLofiLivingRuntime(
       world,
-      { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources, lineageFoundry, eidolonAtlas },
+      { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources, lineageFoundry },
       { mobile, seed: PLANET_SEED, planetName: PLANET_NAME, controls },
     );
     livingPlanetRuntime.requires = ['planet.weather', 'planet.inspection', 'ecology.species', 'ecology.resources.seasonal'];
@@ -386,7 +382,6 @@ async function init() {
       waterCycle,
       biosphere,
       lineageFoundry,
-      eidolonAtlas,
       ecologyJournal,
       seasonalResources,
       dynamics,

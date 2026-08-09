@@ -132,7 +132,7 @@ requireText('scripts/unified-smoke.cjs', "seedScenario('coupling')", 'terrain-wa
 requireText('scripts/unified-smoke.cjs', 'statDefinitions === 8', 'defined statistic browser assertion');
 requireText('scripts/unified-smoke.cjs', 'initial.observatory.traits > 0', 'evolution observatory browser assertion');
 requireText('scripts/unified-smoke.cjs', '[title][tabindex="0"]', 'keyboard-inspectable statistic assertion');
-requireText('scripts/iphone-sphere-smoke.cjs', 'masthead.bottom <= metrics.inspector.top', 'mobile panel overlap assertion');
+requireText('scripts/iphone-sphere-smoke.cjs', 'Mobile dashboard overlaps the inspector.', 'mobile panel overlap assertion');
 requireText('scripts/root-renderer-smoke.cjs', 'visibleSimulationCanvases.length === 1', 'single simulation canvas plus approved presentation layers');
 requireText('scripts/surface-mode-smoke.cjs', "document.documentElement.dataset.surfaceMode === 'active'", 'surface mode activates in browser');
 requireText('scripts/surface-mode-smoke.cjs', "page.keyboard.down('w')", 'surface mode movement browser assertion');

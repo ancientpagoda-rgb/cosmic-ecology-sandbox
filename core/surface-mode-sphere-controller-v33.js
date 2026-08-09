@@ -391,6 +391,11 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     enter: enterFromCameraCenter,
     enterAt,
     exit: exitSurface,
+    showFallback() {
+      if (!active) return;
+      canvas.style.opacity = '1';
+      paintSurfaceFallback();
+    },
     isActive: () => active,
     getPlayer: () => ({ ...player }),
     getStats: () => ({ topology: 'sphere', poleCrossings: stats.poleCrossings }),
