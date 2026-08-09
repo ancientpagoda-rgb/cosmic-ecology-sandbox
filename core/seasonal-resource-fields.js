@@ -54,7 +54,7 @@ export function createSeasonalResourceFields(world, living, waterCycle, journal)
     meanFood = totalFood / cells.length;
     const seasonIndex = Math.floor(season * 4) % 4;
     if (previousSeason >= 0 && seasonIndex !== previousSeason) {
-      journal?.record('Seasonal resource shift', `${seasonName(seasonIndex)} redistributed plant productivity across Nysa’s watersheds and coasts.`, 'season');
+      journal?.record('Seasonal resource shift', `${seasonName(seasonIndex)} redistributed plant productivity across Eidolon’s watersheds and coasts.`, 'season');
     }
     previousSeason = seasonIndex;
     api.summary = { meanFood, fertileCells, season: seasonName(seasonIndex) };

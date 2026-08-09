@@ -131,6 +131,31 @@ select { font: inherit; }
 .planet-foundry button:disabled { cursor: default; opacity: .45; }
 .planet-foundry button:focus-visible, .planet-foundry input:focus-visible, .planet-foundry select:focus-visible, .planet-foundry textarea:focus-visible { outline: 2px solid #8df5e7; outline-offset: 2px; }
 
+.planet-atlas {
+  position: absolute;
+  right: max(14px, env(safe-area-inset-right));
+  top: min(302px, 38vh);
+  z-index: 6;
+  width: min(270px, calc(100vw - 28px));
+  padding: 11px;
+  border: 1px solid rgba(185, 157, 255, .28);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(18, 12, 31, .94), rgba(22, 15, 38, .84));
+  box-shadow: 0 16px 48px rgba(0, 0, 0, .34);
+  pointer-events: auto;
+}
+.planet-atlas__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.planet-atlas h2 { margin: 0; font-size: 13px; }
+.planet-atlas [data-atlas-status] { color: #d8baff; font: 700 8px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-align: right; }
+.planet-atlas__detail { min-height: 27px; margin: 7px 0; color: var(--muted); font-size: 9px; line-height: 1.35; }
+.planet-atlas__lattice { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.planet-atlas__cell { display: grid; min-height: 22px; place-items: center; border: 1px solid rgba(216, 186, 255, .14); border-radius: 5px; color: #a99bb8; background: rgba(146, 98, 207, .06); font: 700 8px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.planet-atlas__cell.is-selected { border-color: #d8baff; color: #fff0ff; background: rgba(216, 186, 255, .23); }
+.planet-atlas__cell.is-charted { box-shadow: inset 0 0 0 1px rgba(112, 242, 219, .52); color: #9bf4e3; }
+.planet-atlas__actions { display: flex; align-items: center; gap: 7px; margin-top: 9px; }
+.planet-atlas button { min-height: 28px; padding: 5px 7px; border: 1px solid rgba(216, 186, 255, .3); border-radius: 8px; background: rgba(146, 98, 207, .14); color: #f2e8ff; font: 700 8px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; cursor: pointer; }
+.planet-atlas [data-atlas-sightings] { min-width: 0; color: var(--muted); font-size: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .planet-evolution__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .planet-evolution h2 { margin: 0; font-size: 13px; }
 .planet-evolution [data-resource-summary] { color: var(--accent); font: 700 9px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-align: right; }
@@ -383,6 +408,7 @@ select { font: inherit; }
   .planet-inspector__grid { grid-template-columns: repeat(3, 1fr); }
   .planet-legend { display: none; }
   .planet-evolution { display: none; }
+  .planet-foundry, .planet-atlas { display: none; }
 }
 
 @media (max-width: 480px) {

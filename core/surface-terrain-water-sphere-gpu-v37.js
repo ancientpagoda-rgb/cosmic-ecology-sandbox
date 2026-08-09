@@ -177,7 +177,7 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
   renderer.toneMappingExposure = 1.03;
   renderer.setClearColor(0x7798aa, 1);
   renderer.domElement.id = 'surfaceGpuCanvas';
-  renderer.domElement.setAttribute('aria-label', 'View-priority cached spherical terrain and opaque water surface view of Nysa');
+  renderer.domElement.setAttribute('aria-label', 'View-priority cached spherical terrain and opaque water surface view of Eidolon');
   Object.assign(renderer.domElement.style, {
     position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'none', zIndex: '0', pointerEvents: 'none',
   });

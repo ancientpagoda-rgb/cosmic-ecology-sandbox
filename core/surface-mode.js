@@ -88,7 +88,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
 
   const canvas = document.createElement('canvas');
   canvas.id = 'surfaceModeCanvas';
-  canvas.setAttribute('aria-label', 'First-person surface view of Nysa');
+  canvas.setAttribute('aria-label', 'First-person surface view of Eidolon');
   canvas.tabIndex = 0;
   Object.assign(canvas.style, {
     position: 'absolute',

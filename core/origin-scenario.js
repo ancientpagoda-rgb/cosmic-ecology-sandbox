@@ -9,7 +9,7 @@ export const ORIGIN_EPOCHS = [
   ['Planetary', 'Metal-rich disks assemble worlds with distinct climates and interiors.'],
   ['Chemical', 'Energy-fed chemistry explores contingent pathways toward self-maintaining systems.'],
   ['Biological', 'Inheritance, ecology, and selection diversify a living planet.'],
-  ['Cultural', 'This layer ends at the threshold of cumulative culture; it is not simulated in Nysa.'],
+  ['Cultural', 'This layer ends at the threshold of cumulative culture; it is not simulated in Eidolon.'],
 ];
 
 export function createOriginScenario(input = {}) {
@@ -33,7 +33,7 @@ export function createOriginScenario(input = {}) {
     densityFluctuations,
     energyThroughput,
     selectionPressure,
-    planetSeed: `nysa-origin-${token}`,
+    planetSeed: `eidolon-origin-${token}`,
     star: {
       id: `origin-star-${token}`,
       name: 'Origin Star',

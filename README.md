@@ -1,12 +1,12 @@
 # Reality Sandbox
 
-Reality Sandbox is a deterministic browser simulation of **Nysa**, a fictional procedural living planet. The public experience deliberately concentrates on one causal system:
+Reality Sandbox is a deterministic browser simulation of **Eidolon**, a fictional procedural living planet. The public experience deliberately concentrates on one causal system:
 
 ```text
 terrain → water and climate → vegetation → animals → selection and speciation
 ```
 
-Nysa is not Earth and does not use measured Earth data. Every quantity labeled `model` or `index` is an internal approximation rather than an observation.
+Eidolon is not Earth and does not use measured Earth data. Every quantity labeled `model` or `index` is an internal approximation rather than an observation.
 
 ## Public experience
 
@@ -34,7 +34,7 @@ loop or a cosmological solver to the planetary simulation.
 
 The globe renderer reads `core/planet.js`, `core/living-systems.js`, `core/water-cycle.js`, `core/world.js`, and `core/biosphere.js` directly. It does not replace the canvas, monkey-patch a second renderer, or draw an unrelated Earth surface over the simulated planet.
 
-The seasonal-resource and trait-journal design is informed by [BiomeSimulator](https://github.com/andrenepomuceno/BiomeSimulator) (Apache-2.0) and [Genesis](https://github.com/bukkbeek/Genesis) (MIT). Nysa implements its own deterministic browser modules and preserves those projects’ credit separately from its code.
+The seasonal-resource and trait-journal design is informed by [BiomeSimulator](https://github.com/andrenepomuceno/BiomeSimulator) (Apache-2.0) and [Genesis](https://github.com/bukkbeek/Genesis) (MIT). Eidolon implements its own deterministic browser modules and preserves those projects’ credit separately from its code.
 
 ## Scope freeze
 

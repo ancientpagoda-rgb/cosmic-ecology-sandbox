@@ -62,7 +62,7 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
   canvas.id = 'surfaceModeCanvas';
   canvas.width = 1;
   canvas.height = 1;
-  canvas.setAttribute('aria-label', 'First-person spherical GPU surface controls for Nysa');
+  canvas.setAttribute('aria-label', 'First-person spherical GPU surface controls for Eidolon');
   canvas.tabIndex = 0;
   Object.assign(canvas.style, {
     position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block',

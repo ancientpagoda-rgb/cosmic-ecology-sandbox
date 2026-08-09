@@ -62,6 +62,10 @@ fs.mkdirSync(artifactDir, { recursive: true });
           panel: Boolean(document.querySelector('.planet-foundry')),
           api: Boolean(window.realitySandboxPlanet?.lineageFoundry?.create),
         },
+        atlas: {
+          panel: Boolean(document.querySelector('.planet-atlas')),
+          api: Boolean(window.realitySandboxPlanet?.eidolonAtlas?.survey),
+        },
         canvas: canvas ? { width: canvas.width, height: canvas.height, imageRendering: getComputedStyle(canvas).imageRendering } : null,
         retiredGlobals: Boolean(window.realitySandboxHifi || window.realitySandboxLilacClouds || window.realitySandboxRainRunoff),
         universeGlobals: Boolean(window.realitySandboxPhase8 || window.realitySandboxPhase9 || window.realitySandboxPhase10 || window.realitySandboxPhase11),
@@ -76,6 +80,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(initial.visibleSimulationCanvases.length === 1 && initial.visibleSimulationCanvases[0].id === 'lofiLivingCanvas' && initial.canvas, `The root must have one visible simulation canvas plus approved presentation layers: ${JSON.stringify(initial.visibleCanvases)}`);
     assert(initial.observatory.panel && initial.observatory.traits > 0 && initial.observatory.journal > 0, 'The evolution observatory did not render trait cards and field-journal entries.');
     assert(initial.foundry.panel && initial.foundry.api, 'The local Lineage Foundry did not initialize.');
+    assert(initial.atlas.panel && initial.atlas.api, 'The local Eidolon Atlas did not initialize.');
     assert(initial.statDefinitions === 8, 'All eight global statistics must expose definitions.');
     assert(initial.statValues.every(value => value && value !== '—'), `A statistic did not initialize: ${initial.statValues.join(', ')}`);
     assert(!initial.retiredGlobals && !initial.universeGlobals, 'A retired renderer or universe phase loaded in the public root.');
@@ -122,7 +127,12 @@ fs.mkdirSync(artifactDir, { recursive: true });
       exportText: window.realitySandboxPlanet.lineageFoundry.export(window.realitySandboxPlanet.lineageFoundry.list().at(-1).id),
     }));
     assert(releasedLineage.after >= lineage.before + 3 && releasedLineage.speciesAfter === lineage.speciesBefore + 1, 'Foundry release did not enter the created lineage into the ecosystem.');
-    assert(releasedLineage.catalog.some(capsule => capsule.name === 'Test Comet Grazer') && releasedLineage.exportText.includes('nysa-lineage-1'), 'Foundry export did not retain the portable capsule.');
+    assert(releasedLineage.catalog.some(capsule => capsule.name === 'Test Comet Grazer') && releasedLineage.exportText.includes('eidolon-lineage-1'), 'Foundry export did not retain the portable capsule.');
+    const atlas = await page.evaluate(() => ({
+      survey: window.realitySandboxPlanet.eidolonAtlas.survey(window.realitySandboxUnified.getState().selectedPoint),
+      sightings: window.realitySandboxPlanet.eidolonAtlas.getSightings(),
+    }));
+    assert(atlas.survey.id && atlas.sightings.some(sighting => sighting.name === 'Test Comet Grazer'), 'Atlas did not place the released lineage in a local sector.');
 
     await page.evaluate(() => window.realitySandboxDebug.pause());
     const clock = await page.evaluate(() => {

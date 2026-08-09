@@ -22,7 +22,7 @@ const PALETTE = {
 };
 
 export function createLofiLivingRuntime(world, dependencies, options = {}) {
-  const { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources, lineageFoundry } = dependencies;
+  const { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources, lineageFoundry, eidolonAtlas } = dependencies;
   const mobile = options.mobile ?? matchMedia('(max-width: 720px), (pointer: coarse)').matches;
   const seed = options.seed ?? 734221;
   const planetName = options.planetName || world.planetName || 'Procedural Planet';
@@ -52,6 +52,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
   let shell = null;
   let evolutionPanel = null;
   let foundryPanel = null;
+  let atlasPanel = null;
   let interfaceNodes = null;
   let activeCapsule = null;
   let pixiLoadPromise = null;
@@ -94,7 +95,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       </section>
       <section class="planet-dashboard" aria-label="Living planet overview">
         <dl class="planet-stats">
-          ${statMarkup('season', 'Season', 'Season is derived from Nysa’s procedural orbit and axial tilt.')}
+          ${statMarkup('season', 'Season', 'Season is derived from Eidolon’s procedural orbit and axial tilt.')}
           ${statMarkup('storms', 'Rain systems', 'Cloud cells currently producing rain or snow in the water-cycle grid.')}
           ${statMarkup('plants', 'Plants', 'Active plant and seed-pod entities with stored biomass above zero.')}
           ${statMarkup('grazers', 'Grazers', 'Living herbivore entities that seek and consume vegetation.')}
@@ -171,10 +172,19 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         <label>thermal <input data-foundry-trait="thermal" type="range" min="0.08" max="0.92" step="0.01" value="0.55"><output data-foundry-value="thermal">0.55</output></label>
       </div>
       <div class="planet-foundry__actions"><button type="button" data-foundry-forge>Forge capsule</button><button type="button" data-foundry-release disabled>Release at selected region</button><button type="button" data-foundry-export disabled>Export</button></div>
-      <label class="planet-foundry__import">Import capsule <textarea data-foundry-import rows="2" placeholder="Paste a .nysa-lineage capsule here"></textarea></label>
+      <label class="planet-foundry__import">Import capsule <textarea data-foundry-import rows="2" placeholder="Paste an .eidolon-lineage capsule here"></textarea></label>
       <div class="planet-foundry__actions"><button type="button" data-foundry-import-button>Import</button><select data-foundry-catalog aria-label="Saved lineages"><option value="">No saved lineages</option></select></div>`;
+    atlasPanel = document.createElement('section');
+    atlasPanel.className = 'planet-atlas';
+    atlasPanel.setAttribute('aria-label', 'Eidolon Atlas');
+    atlasPanel.innerHTML = `
+      <div class="planet-atlas__heading"><div><p class="planet-eyebrow">Eidolon Atlas · local relay</p><h2 data-atlas-name>Uncharted sector</h2></div><span data-atlas-status>offline-first</span></div>
+      <p class="planet-atlas__detail" data-atlas-detail>Select a region to survey the planetary lattice.</p>
+      <div class="planet-atlas__lattice" data-atlas-lattice aria-label="Nearby atlas sectors"></div>
+      <div class="planet-atlas__actions"><button type="button" data-atlas-site>Mark field site</button><span data-atlas-sightings>no lineage sightings</span></div>`;
     host.append(evolutionPanel);
     host.append(foundryPanel);
+    host.append(atlasPanel);
     host.append(shell);
 
     interfaceNodes = {
@@ -205,6 +215,14 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
         importButton: foundryPanel.querySelector('[data-foundry-import-button]'),
         catalog: foundryPanel.querySelector('[data-foundry-catalog]'),
       },
+      atlas: {
+        name: atlasPanel.querySelector('[data-atlas-name]'),
+        status: atlasPanel.querySelector('[data-atlas-status]'),
+        detail: atlasPanel.querySelector('[data-atlas-detail]'),
+        lattice: atlasPanel.querySelector('[data-atlas-lattice]'),
+        site: atlasPanel.querySelector('[data-atlas-site]'),
+        sightings: atlasPanel.querySelector('[data-atlas-sightings]'),
+      },
     };
 
     interfaceNodes.pause.addEventListener('click', () => {
@@ -221,6 +239,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       updateInterface(true);
     });
     installFoundryControls();
+    installAtlasControls();
   }
 
   function installFoundryControls() {
@@ -250,6 +269,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     nodes.release.addEventListener('click', () => {
       try {
         const result = lineageFoundry.release(activeCapsule.id, selectedPoint);
+        eidolonAtlas?.recordRelease?.(result);
         setStatus(`${result.species.name} released · tick ${result.release.tick}`);
         updateInterface(true);
       } catch (error) { setStatus(error.message || 'release failed'); }
@@ -260,7 +280,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `${activeCapsule.id}.nysa-lineage.json`;
+      anchor.download = `${activeCapsule.id}.eidolon-lineage.json`;
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 0);
       setStatus('capsule exported');
@@ -275,6 +295,17 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     });
     updateTraitReadouts();
     refreshFoundryCatalog();
+  }
+
+  function installAtlasControls() {
+    if (!eidolonAtlas || !interfaceNodes?.atlas) return;
+    interfaceNodes.atlas.site.addEventListener('click', () => {
+      const site = eidolonAtlas.markSite(selectedPoint);
+      interfaceNodes.atlas.status.textContent = `${site.id} charted`;
+      updateAtlas();
+    });
+    updateAtlas();
+    eidolonAtlas.sync?.().then(() => updateAtlas());
   }
 
   function refreshFoundryCatalog() {
@@ -651,6 +682,19 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
     interfaceNodes.clock.textContent = `tick ${world.tick.toLocaleString()}`;
     updateInspector(inspectSelected());
     updateEvolutionObservatory();
+    updateAtlas();
+  }
+
+  function updateAtlas() {
+    if (!interfaceNodes?.atlas || !eidolonAtlas) return;
+    const atlas = interfaceNodes.atlas;
+    const survey = eidolonAtlas.survey(selectedPoint);
+    atlas.name.textContent = `${survey.id} · ${survey.name}`;
+    atlas.status.textContent = survey.site ? `charted · tick ${survey.site.tick}` : eidolonAtlas.getRelayState?.() || 'local relay';
+    atlas.detail.textContent = `${survey.biome} · ${survey.population} nearby life · ${survey.lineages.length} lineage${survey.lineages.length === 1 ? '' : 's'}`;
+    atlas.lattice.innerHTML = eidolonAtlas.getLattice(selectedPoint).map(cell => `<span class="planet-atlas__cell ${cell.selected ? 'is-selected' : ''} ${cell.charted ? 'is-charted' : ''}" title="${cell.id} · ${cell.biome}${cell.sightings ? ` · ${cell.sightings} sighting${cell.sightings === 1 ? '' : 's'}` : ''}">${cell.id}</span>`).join('');
+    const sightings = eidolonAtlas.getSightings(1);
+    atlas.sightings.textContent = sightings[0] ? `${sightings[0].name} · ${sightings[0].regionId}` : 'no lineage sightings';
   }
 
   function updateEvolutionObservatory() {
@@ -668,7 +712,7 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       return `<article class="planet-trait-card"><h3><i style="background:#${card.color.toString(16).padStart(6, '0')}"></i>${escapeHtml(card.name)}</h3><p>${card.population} alive · generation ${card.generation}</p><div>${traits}</div></article>`;
     }).join('') || '<p class="planet-evolution__empty">No animal lineage is currently established.</p>';
     const entries = ecologyJournal.getEntries(3);
-    interfaceNodes.journal.innerHTML = entries.map(entry => `<li><b>${escapeHtml(entry.title)}</b><span>${escapeHtml(entry.description)}</span></li>`).join('') || '<li><span>Ecological observations will appear as Nysa changes.</span></li>';
+    interfaceNodes.journal.innerHTML = entries.map(entry => `<li><b>${escapeHtml(entry.title)}</b><span>${escapeHtml(entry.description)}</span></li>`).join('') || '<li><span>Ecological observations will appear as Eidolon changes.</span></li>';
   }
 
   function getPlanetStats() {

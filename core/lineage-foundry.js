@@ -1,4 +1,5 @@
-const FORMAT = 'nysa-lineage-1';
+const FORMAT = 'eidolon-lineage-1';
+const LEGACY_FORMAT = 'nysa-lineage-1';
 const MAX_CATALOG = 24;
 const TRAIT_LIMITS = Object.freeze({
   speed: [0.6, 1.4],
@@ -11,7 +12,7 @@ const GUILDS = new Set(['grazer', 'predator', 'apex']);
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const finite = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
-export function createLineageFoundry({ world, biosphere, living, journal, seed = 'nysa' }) {
+export function createLineageFoundry({ world, biosphere, living, journal, seed = 'eidolon' }) {
   const catalog = new Map();
   const releases = [];
 
@@ -29,7 +30,7 @@ export function createLineageFoundry({ world, biosphere, living, journal, seed =
       traits,
       visual,
       ancestry: { parentId: parentId || null },
-      provenance: { origin: 'Nysa Lineage Foundry', simulation: 'cosmic-ecology-sandbox' },
+      provenance: { origin: 'Eidolon Lineage Foundry', simulation: 'cosmic-ecology-sandbox' },
     };
     catalog.set(capsule.id, capsule);
     trimCatalog();
@@ -39,7 +40,7 @@ export function createLineageFoundry({ world, biosphere, living, journal, seed =
 
   function importCapsule(source) {
     const parsed = typeof source === 'string' ? JSON.parse(source) : source;
-    if (!parsed || parsed.format !== FORMAT) throw new Error('This is not a Nysa lineage capsule.');
+    if (!parsed || ![FORMAT, LEGACY_FORMAT].includes(parsed.format)) throw new Error('This is not an Eidolon lineage capsule.');
     const capsule = create({
       name: parsed.name,
       guild: parsed.guild,
@@ -124,7 +125,7 @@ function cleanId(value) { return typeof value === 'string' && /^[a-z0-9-]{3,64}$
 function defaultName(guild) { return guild === 'apex' ? 'Glass Crown' : guild === 'predator' ? 'Cinder Prowler' : 'Lumen Grazer'; }
 function wrap(value, max) { return ((value % max) + max) % max; }
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
-function storageKey(seed) { return `nysa-lineage-foundry-v1:${seed}`; }
+function storageKey(seed) { return `eidolon-lineage-foundry-v1:${seed}`; }
 
 function lineageId(value) {
   const text = JSON.stringify(value);

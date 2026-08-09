@@ -12,8 +12,8 @@ import { createWaterCycle } from './core/water-cycle.js';
 
 const FIXED_DT = 0.06;
 const STORAGE_KEY = 'reality-sandbox-living-planet-v1';
-const PLANET_NAME = 'Nysa';
-const PLANET_SEED = 'nysa-living-planet-734221';
+const PLANET_NAME = 'Eidolon';
+const PLANET_SEED = 'eidolon-living-planet-734221';
 
 let world;
 let orbitalSystem;
@@ -209,8 +209,8 @@ async function init() {
     orbitalSystem = createOrbitalSystem(world, {
       seed: 734221,
       star: {
-        id: 'nysa-star',
-        name: 'Nysa Star',
+        id: 'eidolon-star',
+        name: 'Eidolon Star',
         mass: 0.94,
         luminosity: 0.86,
         age: 5.1,

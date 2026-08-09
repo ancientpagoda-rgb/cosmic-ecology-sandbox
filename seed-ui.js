@@ -1,4 +1,4 @@
-const DEFAULT_SEED = 'nysa-living-planet-734221';
+const DEFAULT_SEED = 'eidolon-living-planet-734221';
 
 function normalizeSeed(value) {
   return String(value || '')
@@ -28,7 +28,7 @@ function randomSeed() {
     values[1] = Math.floor(Math.random() * 0xffffffff);
     values[2] = performance.now() >>> 0;
   }
-  return `nysa-${[...values].map(value => value.toString(36).padStart(7, '0')).join('-')}`;
+  return `eidolon-${[...values].map(value => value.toString(36).padStart(7, '0')).join('-')}`;
 }
 
 function navigateToSeed(seed) {

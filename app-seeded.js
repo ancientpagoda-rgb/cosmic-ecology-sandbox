@@ -17,6 +17,7 @@ import { createPlanetDynamics } from './core/planet-dynamics.js';
 import { createBiosphere } from './core/biosphere.js';
 import { createEcologyJournal } from './core/ecology-journal.js';
 import { createLineageFoundry } from './core/lineage-foundry.js';
+import { createEidolonAtlas } from './core/eidolon-atlas.js';
 import { createSeasonalResourceFields } from './core/seasonal-resource-fields.js';
 import { createWaterCycle } from './core/water-cycle.js';
 import { readOriginScenario } from './core/origin-scenario.js';
@@ -24,8 +25,8 @@ import { readOriginScenario } from './core/origin-scenario.js';
 const FIXED_DT = 0.06;
 const MAX_STEPS_PER_FRAME = 3;
 const STORAGE_PREFIX = 'reality-sandbox-living-planet-v2';
-const PLANET_NAME = 'Nysa';
-const DEFAULT_PLANET_SEED = 'nysa-living-planet-734221';
+const PLANET_NAME = 'Eidolon';
+const DEFAULT_PLANET_SEED = 'eidolon-living-planet-734221';
 const ORIGIN_SCENARIO = readOriginScenario();
 const PLANET_SEED = ORIGIN_SCENARIO?.planetSeed || readSeedFromUrl();
 const NUMERIC_SEED = hashSeed(PLANET_SEED);
@@ -40,6 +41,8 @@ let dynamics;
 let ecologyJournal;
 let seasonalResources;
 let lineageFoundry;
+let eidolonAtlas;
+const ATLAS_RELAY_URL = new URLSearchParams(globalThis.location?.search || '').get('atlasRelay') || '';
 let livingPlanetRuntime;
 let moduleHost;
 let stepSphere;
@@ -295,8 +298,8 @@ async function init() {
     orbitalSystem = createOrbitalSystem(world, {
       seed: NUMERIC_SEED,
       star: ORIGIN_SCENARIO?.star || {
-        id: 'nysa-star',
-        name: 'Nysa Star',
+        id: 'eidolon-star',
+        name: 'Eidolon Star',
         mass: 0.94,
         luminosity: 0.86,
         age: 5.1,
@@ -338,7 +341,8 @@ async function init() {
     living = createLivingSystems(world, rng, { onEvent: ecologyJournal.record });
     waterCycle = createWaterCycle(world, orbitalSystem);
     biosphere = createBiosphere(world, rng, { journal: ecologyJournal });
-    lineageFoundry = createLineageFoundry({ world, biosphere, living, ecologyJournal, seed: PLANET_SEED });
+    lineageFoundry = createLineageFoundry({ world, biosphere, living, journal: ecologyJournal, seed: PLANET_SEED });
+    eidolonAtlas = createEidolonAtlas({ world, biosphere, living, journal: ecologyJournal, seed: PLANET_SEED, relayUrl: ATLAS_RELAY_URL });
     seasonalResources = createSeasonalResourceFields(world, living, waterCycle, ecologyJournal);
     biosphere.setSeasonalResources(seasonalResources);
     dynamics = createPlanetDynamics(world, living, waterCycle, rng);
@@ -353,7 +357,7 @@ async function init() {
     };
     livingPlanetRuntime = createLofiLivingRuntime(
       world,
-      { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources, lineageFoundry },
+      { orbitalSystem, living, waterCycle, biosphere, dynamics, ecologyJournal, seasonalResources, lineageFoundry, eidolonAtlas },
       { mobile, seed: PLANET_SEED, planetName: PLANET_NAME, controls },
     );
     livingPlanetRuntime.requires = ['planet.weather', 'planet.inspection', 'ecology.species', 'ecology.resources.seasonal'];
@@ -381,6 +385,7 @@ async function init() {
       waterCycle,
       biosphere,
       lineageFoundry,
+      eidolonAtlas,
       ecologyJournal,
       seasonalResources,
       dynamics,

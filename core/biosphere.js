@@ -333,7 +333,7 @@ export function createBiosphere(world, rng = Math.random, options = {}) {
     }
     if (spec.parentId) ancestry.push({ parentId: spec.parentId, childId: id, time: world.tick });
     recount();
-    emit('Lineage released', `${spec.name} entered Nysa as a ${spec.guild} lineage.`);
+    emit('Lineage released', `${spec.name} entered Eidolon as a ${spec.guild} lineage.`);
     return { ...spec };
   }
 

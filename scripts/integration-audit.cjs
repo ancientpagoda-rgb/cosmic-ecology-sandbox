@@ -140,7 +140,7 @@ requireText('core/surface-mode.js', 'DISTANT_CACHE_START', 'surface mode distant
 requireText('core/surface-mode.js', 'MAX_RENDER_LONG_EDGE = 960', 'surface mode render budget');
 
 requireText('reality-engine-v6-9.html', 'ENGINE V6.9 · HOWLER.JS SOUNDSCAPE', 'archived V6.9 compatibility page');
-requireText('README.md', 'Nysa is not Earth', 'scientific boundary documentation');
+requireText('README.md', 'Eidolon is not Earth', 'scientific boundary documentation');
 requireText('README.md', 'Scope freeze', 'universe scope freeze documentation');
 requireText('README.md', 'No new phase should be added', 'experience-gate rule');
 requireText('package.json', '"audit:integration"', 'integration audit script');
