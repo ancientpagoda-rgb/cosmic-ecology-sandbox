@@ -41,6 +41,8 @@ export function installTrophicSatiety(world) {
   if (typeof previousStep !== 'function') return emptyApi();
   if (world.__trophicSatietyInstalled) return world.__trophicSatietyInstalled;
 
+  const knownPredators = new Set(world.ecs.components.predator?.keys?.() || []);
+  const knownApex = new Set(world.ecs.components.apex?.keys?.() || []);
   let active = true;
   let guardedPredatorSteps = 0;
   let guardedApexSteps = 0;
@@ -55,6 +57,10 @@ export function installTrophicSatiety(world) {
   let assimilatedEnergy = 0;
   let reproductiveGrazerSteps = 0;
   let peakGutReserve = 0;
+  let conservedPredatorBirths = 0;
+  let conservedApexBirths = 0;
+  let constructorEnergyRemoved = 0;
+  let lastConservedBirth = null;
 
   function wrappedStep(dt) {
     if (!active || !Number.isFinite(dt) || dt <= 0) {
@@ -90,7 +96,58 @@ export function installTrophicSatiety(world) {
     }
 
     previousStep.call(world, dt);
+    conserveCarnivoreBirthEnergy(c);
     processGrazerDigestion(c, dt);
+    rememberCarnivores(c);
+  }
+
+  function conserveCarnivoreBirthEnergy(c) {
+    conserveGroupBirths(c.predator, knownPredators, 'predator', 1);
+    conserveGroupBirths(c.apex, knownApex, 'apex', 0.45 / 0.55);
+  }
+
+  function conserveGroupBirths(group, known, guild, childToParentPostSplitRatio) {
+    for (const [id, child] of group?.entries?.() || []) {
+      if (known.has(id)) continue;
+      if (child.parentageMethod !== 'causal-reproduction-event' || child.parentEntityId == null) continue;
+      const parent = findOrganism(world.ecs.components, child.parentEntityId);
+      if (!parent) continue;
+
+      // The legacy constructors assign predator/apex newborns a full default
+      // energy value. The core then only reduces the parent, which manufactures
+      // energy at birth. Restore the intended partition of the first parent's
+      // post-reproduction energy while preserving independently paid second-
+      // parent investment and juvenile-care transfers.
+      const firstParentShare = Math.max(0.04, finite(parent.energy) * childToParentPostSplitRatio);
+      const secondParentContribution = Math.max(0, finite(child.secondParentInvestment)) * 0.58;
+      const careContribution = Math.max(0, finite(child.parentalCareReceived));
+      const allowed = firstParentShare + secondParentContribution + careContribution;
+      const current = Math.max(0, finite(child.energy));
+      const removed = Math.max(0, current - allowed);
+      if (removed <= 0.000001) continue;
+
+      child.energy = Math.max(0.04, allowed);
+      child.constructorEnergyCorrection = removed;
+      child.birthEnergyConserved = true;
+      constructorEnergyRemoved += removed;
+      if (guild === 'predator') conservedPredatorBirths += 1;
+      else conservedApexBirths += 1;
+      lastConservedBirth = {
+        childId: id,
+        parentId: child.parentEntityId,
+        guild,
+        removed: round(removed),
+        resultingEnergy: round(child.energy),
+        tick: world.tick,
+      };
+    }
+  }
+
+  function rememberCarnivores(c) {
+    knownPredators.clear();
+    for (const id of c.predator?.keys?.() || []) knownPredators.add(id);
+    knownApex.clear();
+    for (const id of c.apex?.keys?.() || []) knownApex.add(id);
   }
 
   function stabilizeForageTargets(c) {
@@ -149,9 +206,6 @@ export function installTrophicSatiety(world) {
       if (finite(grazer.grazeClock) > 0) {
         const food = clamp(finite(field.sample(position.x, position.y)?.food), 0, 1);
         if (food > 0.08 && reserve < gutCapacity) {
-          // A brief grazing bout gathers food much faster than it can be
-          // metabolically converted. The finite reserve prevents free energy
-          // while allowing digestion to continue after the animal moves on.
           const intakeEfficiency = clamp(1.08 - (metabolism - 1) * 0.08, 0.94, 1.16);
           const requested = dt * food * 1.50 * intakeEfficiency;
           const intake = Math.min(gutCapacity - reserve, requested);
@@ -205,8 +259,8 @@ export function installTrophicSatiety(world) {
         if (reserve > 0.001) grazersWithFoodStored += 1;
       }
       return {
-        version: 4,
-        model: 'finite-gut-digestion-persistent-forage-pursuit-and-hunger-driven-predation',
+        version: 5,
+        model: 'conservative-trophic-reproduction-finite-digestion-and-hunger-driven-predation',
         grazers: c.agent?.size || 0,
         predators: c.predator?.size || 0,
         apex: c.apex?.size || 0,
@@ -216,6 +270,10 @@ export function installTrophicSatiety(world) {
         guardedApexSteps,
         predatorHungerSteps,
         apexHungerSteps,
+        conservedPredatorBirths,
+        conservedApexBirths,
+        constructorEnergyRemoved: round(constructorEnergyRemoved),
+        lastConservedBirth,
         forageTargetLocks,
         forageTargetsReached,
         forageTargetsAbandoned,
@@ -228,7 +286,7 @@ export function installTrophicSatiety(world) {
         grazersWithFoodStored,
         peakGutReserve: round(peakGutReserve),
         forageNavigation: 'valuable-targets-persist-until-reached-or-devalued',
-        energyPath: 'local-forage-to-finite-gut-reserve-to-metabolic-energy',
+        energyPath: 'resource-or-prey-energy-is-conserved-through-feeding-and-reproduction',
         populationCap: null,
       };
     },
@@ -249,12 +307,22 @@ export function installTrophicSatiety(world) {
 
 export function predatorHungerThreshold(predator) {
   const metabolism = clamp(finite(predator?.dna?.metabolism, 1), 0.4, 2.2);
-  return clamp(1.48 + metabolism * 0.16, 1.54, 1.82);
+  // A mature predator must be hungry enough to hunt, but a successful prey
+  // capture can create a genuine reproductive surplus. Conservation at birth
+  // prevents that surplus from becoming duplicated energy.
+  return clamp(1.78 + metabolism * 0.10, 1.82, 1.98);
 }
 
 export function apexHungerThreshold(apex) {
   const metabolism = clamp(finite(apex?.dna?.metabolism, 1), 0.5, 1.6);
-  return clamp(2.34 + metabolism * 0.20, 2.44, 2.66);
+  // Apex animals wait for a deeper energy deficit before risking another kill;
+  // this prevents one predator meal from automatically triggering an apex boom.
+  return clamp(1.56 + metabolism * 0.12, 1.62, 1.75);
+}
+
+function findOrganism(components, id) {
+  if (id == null) return null;
+  return components.agent?.get(id) || components.predator?.get(id) || components.apex?.get(id) || null;
 }
 
 function countHungry(group, thresholdFor) {
@@ -286,7 +354,7 @@ function round(value) {
 
 function emptyApi() {
   return {
-    getSnapshot: () => ({ version: 4, model: 'finite-gut-digestion-persistent-forage-pursuit-and-hunger-driven-predation', disabled: true }),
+    getSnapshot: () => ({ version: 5, model: 'conservative-trophic-reproduction-finite-digestion-and-hunger-driven-predation', disabled: true }),
     destroy() {},
   };
 }
