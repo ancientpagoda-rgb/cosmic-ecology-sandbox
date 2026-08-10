@@ -46,7 +46,10 @@ export function calibratedDragDelta({
   const radius = Math.max(1, Math.min(width, height) * radiusFactor * Math.max(COSMIC_ZOOM_THRESHOLD, zoom));
   return {
     centerX: -dx / (Math.PI * 2 * radius) * gain,
-    centerY: dy / (Math.PI * radius) * gain,
+    // Grab semantics: dragging the visible surface downward should move the
+    // projected surface downward, which requires the camera latitude to move
+    // north (smaller normalized centerY), not south.
+    centerY: -dy / (Math.PI * radius) * gain,
     radius,
   };
 }
@@ -145,7 +148,7 @@ export function installCalibratedGlobeDrag(runtime, canvas) {
       MAX_YAW_SPEED,
     );
     const instantaneousY = clamp(
-      stepY / (Math.PI * drag.radius) * DRAG_GAIN / elapsed,
+      -stepY / (Math.PI * drag.radius) * DRAG_GAIN / elapsed,
       -MAX_PITCH_SPEED,
       MAX_PITCH_SPEED,
     );
@@ -241,8 +244,8 @@ export function installCalibratedGlobeDrag(runtime, canvas) {
 
   function getSnapshot() {
     return {
-      version: 1,
-      model: 'sphere-radius-angular-drag',
+      version: 2,
+      model: 'sphere-radius-angular-grab-drag',
       radiusFactor: DESKTOP_RADIUS_FACTOR,
       gain: DRAG_GAIN,
       flickDecayPerSecond: FLICK_DECAY_PER_SECOND,
@@ -253,6 +256,7 @@ export function installCalibratedGlobeDrag(runtime, canvas) {
       active: Boolean(drag),
       inertiaActive: Boolean(inertia),
       pointerTypes: ['mouse', 'pen'],
+      grabDirection: true,
     };
   }
 
