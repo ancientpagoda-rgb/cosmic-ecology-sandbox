@@ -43,7 +43,8 @@ fs.mkdirSync(outputDir, { recursive: true });
       window.realitySandboxGrazerDigestionPhysiology &&
       window.realitySandboxPredatorEncounterEcology &&
       window.realitySandboxGrazerFamineMigration &&
-      window.realitySandboxCarnivoreReserveMobilization
+      window.realitySandboxCarnivoreReserveMobilization &&
+      window.realitySandboxPredatorRecruitment
     ), null, { timeout: 120000 });
     await page.waitForTimeout(250);
 
@@ -73,6 +74,7 @@ fs.mkdirSync(outputDir, { recursive: true });
           digestion: compactDigestion(window.realitySandboxGrazerDigestionPhysiology.getSnapshot()),
           migration: compactMigration(window.realitySandboxGrazerFamineMigration.getSnapshot()),
           reserve: compactReserve(window.realitySandboxCarnivoreReserveMobilization.getSnapshot()),
+          recruitment: compactRecruitment(window.realitySandboxPredatorRecruitment.getSnapshot()),
         });
       }
 
@@ -134,6 +136,7 @@ fs.mkdirSync(outputDir, { recursive: true });
           encounter: window.realitySandboxPredatorEncounterEcology?.getSnapshot?.() || null,
           migration: window.realitySandboxGrazerFamineMigration?.getSnapshot?.() || null,
           reserve: window.realitySandboxCarnivoreReserveMobilization?.getSnapshot?.() || null,
+          recruitment: window.realitySandboxPredatorRecruitment?.getSnapshot?.() || null,
         },
       };
 
@@ -256,6 +259,22 @@ fs.mkdirSync(outputDir, { recursive: true });
           carnivoresWithReserve: snapshot.carnivoresWithReserve,
         };
       }
+
+      function compactRecruitment(snapshot) {
+        return {
+          preyPerPredator: snapshot.preyPerPredator,
+          requiredReserve: snapshot.requiredReserve,
+          eligibleSteps: snapshot.eligibleSteps,
+          scarcitySuppressedSteps: snapshot.scarcitySuppressedSteps,
+          reserveSuppressedSteps: snapshot.reserveSuppressedSteps,
+          cooldownSuppressedSteps: snapshot.cooldownSuppressedSteps,
+          recruitmentFundings: snapshot.recruitmentFundings,
+          recruitmentBirths: snapshot.recruitmentBirths,
+          reserveCommitted: snapshot.reserveCommitted,
+          somaticEnergyFunded: snapshot.somaticEnergyFunded,
+          conversionLoss: snapshot.conversionLoss,
+        };
+      }
     }, ENDURANCE_SEED);
 
     fs.writeFileSync(path.join(outputDir, 'fresh-world.json'), JSON.stringify(result, null, 2));
@@ -273,6 +292,7 @@ fs.mkdirSync(outputDir, { recursive: true });
     assert(result.systems.encounter?.model === 'local-encounter-finite-pursuit-and-prey-vigilance', 'Predator pursuit ecology did not initialize.');
     assert(result.systems.migration?.model === 'energy-budgeted-opportunistic-famine-dispersal', 'Grazer famine migration did not initialize.');
     assert(result.systems.reserve?.model === 'reversible-meal-surplus-allocation-between-reproduction-and-survival', 'Carnivore reserve mobilization did not initialize.');
+    assert(result.systems.recruitment?.model === 'continuous-prey-density-and-meal-reserve-funded-predator-recruitment', 'Predator recruitment did not initialize.');
     assert(pageErrors.length === 0, `Browser page errors: ${pageErrors.map(error => error.message).join(' | ')}`);
 
     console.log(JSON.stringify({
@@ -291,6 +311,7 @@ fs.mkdirSync(outputDir, { recursive: true });
       digestion: result.systems.digestion,
       migration: result.systems.migration,
       reserve: result.systems.reserve,
+      recruitment: result.systems.recruitment,
       msPerStep: result.msPerStep,
     }, null, 2));
   } finally {
