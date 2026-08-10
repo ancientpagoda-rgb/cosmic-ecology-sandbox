@@ -1,7 +1,9 @@
 const CONTROL_ID = 'eidolon-pause-toggle';
 const STEP_ID = 'eidolon-step-once';
+const SPEED_ID = 'eidolon-playback-speed';
 const GROUP_ID = 'eidolon-time-controls';
 const STYLE_ID = 'eidolon-pause-control-style';
+const SPEEDS = Object.freeze([0.25, 1, 4, 8]);
 
 async function start() {
   try {
@@ -38,9 +40,11 @@ function installPauseControl() {
     typeof debug.pause !== 'function' ||
     typeof debug.resume !== 'function' ||
     typeof debug.isPaused !== 'function' ||
-    typeof debug.advance !== 'function'
+    typeof debug.advance !== 'function' ||
+    typeof debug.setTimeScale !== 'function' ||
+    typeof debug.snapshot !== 'function'
   ) {
-    throw new Error('Simulation pause/step API is incomplete.');
+    throw new Error('Simulation pause/step/speed API is incomplete.');
   }
 
   installStyles();
@@ -64,8 +68,20 @@ function installPauseControl() {
   stepButton.title = 'Advance one simulation step while paused (.)';
   stepButton.innerHTML = '<span aria-hidden="true">▸|</span><span>Step</span>';
 
+  const speedButton = document.createElement('button');
+  speedButton.id = SPEED_ID;
+  speedButton.type = 'button';
+  speedButton.className = 'eidolon-speed-control';
+  speedButton.title = 'Cycle simulation playback speed ([ slower, ] faster)';
+
+  const readTimeScale = () => {
+    const value = Number(debug.snapshot()?.timeScale);
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  };
+
   const update = () => {
     const paused = Boolean(debug.isPaused());
+    const timeScale = readTimeScale();
     button.dataset.paused = paused ? 'true' : 'false';
     button.setAttribute('aria-pressed', paused ? 'true' : 'false');
     button.setAttribute('aria-label', paused ? 'Resume simulation' : 'Pause simulation');
@@ -74,11 +90,20 @@ function installPauseControl() {
       : '<span class="eidolon-pause-icon" aria-hidden="true">Ⅱ</span><span>Pause</span>';
     stepButton.hidden = !paused;
     group.dataset.paused = paused ? 'true' : 'false';
+    speedButton.textContent = `${formatScale(timeScale)}×`;
+    speedButton.setAttribute('aria-label', `Simulation playback speed ${formatScale(timeScale)} times`);
+    speedButton.dataset.scale = String(timeScale);
   };
 
   const dispatchState = () => {
     window.dispatchEvent(new CustomEvent('eidolon-pause-state-changed', {
       detail: { paused: Boolean(debug.isPaused()) },
+    }));
+  };
+
+  const dispatchSpeed = (previous, current, source) => {
+    window.dispatchEvent(new CustomEvent('eidolon-time-scale-changed', {
+      detail: { previous, current, source },
     }));
   };
 
@@ -101,8 +126,43 @@ function installPauseControl() {
     return Number.isFinite(before) && Number.isFinite(after) && after > before;
   };
 
+  const setSpeed = (value, source = 'api') => {
+    const previous = readTimeScale();
+    const current = Number(debug.setTimeScale(value));
+    update();
+    dispatchSpeed(previous, current, source);
+    return current;
+  };
+
+  const nearestSpeedIndex = value => {
+    let bestIndex = 0;
+    let bestDistance = Infinity;
+    for (let index = 0; index < SPEEDS.length; index += 1) {
+      const distance = Math.abs(Math.log(SPEEDS[index]) - Math.log(Math.max(0.001, value)));
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = index;
+      }
+    }
+    return bestIndex;
+  };
+
+  const adjustSpeed = (direction, source = 'hotkey') => {
+    const current = readTimeScale();
+    const index = nearestSpeedIndex(current);
+    const next = clamp(index + Math.sign(direction || 1), 0, SPEEDS.length - 1);
+    return setSpeed(SPEEDS[next], source);
+  };
+
+  const cycleSpeed = () => {
+    const current = readTimeScale();
+    const index = nearestSpeedIndex(current);
+    return setSpeed(SPEEDS[(index + 1) % SPEEDS.length], 'button');
+  };
+
   button.addEventListener('click', toggle);
   stepButton.addEventListener('click', stepOnce);
+  speedButton.addEventListener('click', cycleSpeed);
   window.addEventListener('keydown', event => {
     if (event.defaultPrevented || event.repeat || event.altKey || event.ctrlKey || event.metaKey) return;
     const target = event.target;
@@ -117,10 +177,20 @@ function installPauseControl() {
     if (key === '.' && debug.isPaused()) {
       event.preventDefault();
       stepOnce();
+      return;
+    }
+    if (key === '[') {
+      event.preventDefault();
+      adjustSpeed(-1, 'hotkey');
+      return;
+    }
+    if (key === ']') {
+      event.preventDefault();
+      adjustSpeed(1, 'hotkey');
     }
   });
 
-  group.append(button, stepButton);
+  group.append(button, stepButton, speedButton);
   document.body.append(group);
   update();
 
@@ -132,20 +202,38 @@ function installPauseControl() {
     resume() { debug.resume(); update(); dispatchState(); },
     toggle,
     step: stepOnce,
+    setSpeed: value => setSpeed(value, 'api'),
+    speedUp: () => adjustSpeed(1, 'api'),
+    slowDown: () => adjustSpeed(-1, 'api'),
     isPaused: () => Boolean(debug.isPaused()),
+    getTimeScale: readTimeScale,
     getSnapshot: () => ({
-      version: 2,
-      model: 'master-simulation-pause-and-single-step-control',
+      version: 3,
+      model: 'master-simulation-pause-step-and-playback-speed-control',
       paused: Boolean(debug.isPaused()),
+      timeScale: readTimeScale(),
+      speedPresets: [...SPEEDS],
       hotkey: 'P',
       stepHotkey: '.',
+      slowerHotkey: '[',
+      fasterHotkey: ']',
       controlId: CONTROL_ID,
       stepControlId: STEP_ID,
+      speedControlId: SPEED_ID,
     }),
   };
   window.realitySandboxPauseControl = api;
   window.realitySandboxPlanet.pauseControl = api;
   window.dispatchEvent(new CustomEvent('eidolon-pause-control-ready', { detail: api.getSnapshot() }));
+}
+
+function formatScale(value) {
+  if (Math.abs(value - Math.round(value)) < 1e-9) return String(Math.round(value));
+  return String(Number(value.toFixed(2)));
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function installStyles() {
@@ -164,7 +252,8 @@ function installStyles() {
       pointer-events: none;
     }
     .eidolon-pause-control,
-    .eidolon-step-control {
+    .eidolon-step-control,
+    .eidolon-speed-control {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -186,13 +275,19 @@ function installStyles() {
       touch-action: manipulation;
       pointer-events: auto;
     }
+    .eidolon-speed-control {
+      min-width: 48px;
+      font-variant-numeric: tabular-nums;
+    }
     .eidolon-pause-control:hover,
-    .eidolon-step-control:hover {
+    .eidolon-step-control:hover,
+    .eidolon-speed-control:hover {
       border-color: rgba(190, 255, 225, 0.42);
       background: rgba(8, 28, 23, 0.9);
     }
     .eidolon-pause-control:focus-visible,
-    .eidolon-step-control:focus-visible {
+    .eidolon-step-control:focus-visible,
+    .eidolon-speed-control:focus-visible {
       outline: 2px solid rgba(185, 255, 225, 0.88);
       outline-offset: 3px;
     }
@@ -219,10 +314,14 @@ function installStyles() {
         gap: 6px;
       }
       .eidolon-pause-control,
-      .eidolon-step-control {
+      .eidolon-step-control,
+      .eidolon-speed-control {
         min-height: 44px;
-        padding: 10px 14px;
+        padding: 10px 13px;
         font-size: 13px;
+      }
+      .eidolon-speed-control {
+        min-width: 52px;
       }
     }
   `;
