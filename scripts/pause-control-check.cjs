@@ -28,7 +28,8 @@ fs.mkdirSync(outputDir, { recursive: true });
       window.realitySandboxDebug?.ready &&
       window.realitySandboxUnified &&
       window.realitySandboxPauseControl &&
-      document.getElementById('eidolon-pause-toggle')
+      document.getElementById('eidolon-pause-toggle') &&
+      document.getElementById('eidolon-step-once')
     ), null, { timeout: 120000 });
     await page.waitForTimeout(350);
 
@@ -39,6 +40,7 @@ fs.mkdirSync(outputDir, { recursive: true });
 
     const initial = await snapshot(page);
     assert(!initial.paused, 'Pause check did not begin in a running state.');
+    assert(initial.stepHidden, 'Single-step control should be hidden while the simulation is running.');
 
     await page.locator('#eidolon-pause-toggle').click();
     await page.waitForTimeout(120);
@@ -46,6 +48,7 @@ fs.mkdirSync(outputDir, { recursive: true });
     assert(pausedA.paused, 'Visible Pause button did not pause the master simulation.');
     assert(pausedA.buttonPressed === 'true', 'Pause button aria-pressed state did not become true.');
     assert(/Resume/i.test(pausedA.buttonText), `Paused control did not display Resume: ${pausedA.buttonText}`);
+    assert(!pausedA.stepHidden, 'Single-step control did not appear while paused.');
 
     await page.waitForTimeout(650);
     const pausedB = await snapshot(page);
@@ -54,12 +57,32 @@ fs.mkdirSync(outputDir, { recursive: true });
     assert(pausedB.worldTick === pausedA.worldTick, `World tick advanced while paused (${pausedA.worldTick} -> ${pausedB.worldTick}).`);
     await page.screenshot({ path: path.join(outputDir, 'paused.png'), fullPage: true });
 
+    await page.locator('#eidolon-step-once').click();
+    await page.waitForTimeout(80);
+    const steppedByButton = await snapshot(page);
+    assert(steppedByButton.paused, 'Single-step button resumed the simulation instead of keeping it paused.');
+    assert(steppedByButton.masterSteps === pausedB.masterSteps + 1, `Single-step button advanced ${steppedByButton.masterSteps - pausedB.masterSteps} master steps instead of 1.`);
+    assert(steppedByButton.worldTick === pausedB.worldTick + 1, `Single-step button advanced world tick ${steppedByButton.worldTick - pausedB.worldTick} instead of 1.`);
+
+    await page.waitForTimeout(300);
+    const steppedFrozen = await snapshot(page);
+    assert(steppedFrozen.masterSteps === steppedByButton.masterSteps, 'Simulation continued advancing after a single-step button press.');
+    assert(steppedFrozen.worldTick === steppedByButton.worldTick, 'World tick continued advancing after a single-step button press.');
+
+    await page.keyboard.press('.');
+    await page.waitForTimeout(80);
+    const steppedByHotkey = await snapshot(page);
+    assert(steppedByHotkey.paused, 'Single-step hotkey resumed the simulation instead of keeping it paused.');
+    assert(steppedByHotkey.masterSteps === steppedFrozen.masterSteps + 1, `Single-step hotkey advanced ${steppedByHotkey.masterSteps - steppedFrozen.masterSteps} master steps instead of 1.`);
+    assert(steppedByHotkey.worldTick === steppedFrozen.worldTick + 1, `Single-step hotkey advanced world tick ${steppedByHotkey.worldTick - steppedFrozen.worldTick} instead of 1.`);
+
     await page.locator('#eidolon-pause-toggle').click();
     await page.waitForTimeout(500);
     const resumed = await snapshot(page);
     assert(!resumed.paused, 'Visible Resume button did not resume the simulation.');
-    assert(resumed.masterSteps > pausedB.masterSteps, `Master steps did not advance after resume (${pausedB.masterSteps} -> ${resumed.masterSteps}).`);
-    assert(resumed.worldTick > pausedB.worldTick, `World tick did not advance after resume (${pausedB.worldTick} -> ${resumed.worldTick}).`);
+    assert(resumed.masterSteps > steppedByHotkey.masterSteps, `Master steps did not advance after resume (${steppedByHotkey.masterSteps} -> ${resumed.masterSteps}).`);
+    assert(resumed.worldTick > steppedByHotkey.worldTick, `World tick did not advance after resume (${steppedByHotkey.worldTick} -> ${resumed.worldTick}).`);
+    assert(resumed.stepHidden, 'Single-step control remained visible after resume.');
 
     await page.keyboard.press('p');
     await page.waitForTimeout(120);
@@ -81,10 +104,13 @@ fs.mkdirSync(outputDir, { recursive: true });
 
     const result = {
       ok: true,
-      model: 'player-visible-master-pause-control',
+      model: 'player-visible-master-pause-and-single-step-control',
       initial,
       pausedA,
       pausedB,
+      steppedByButton,
+      steppedFrozen,
+      steppedByHotkey,
       resumed,
       hotkeyPaused,
       hotkeyFrozen,
@@ -107,12 +133,15 @@ async function snapshot(page) {
   return page.evaluate(() => {
     const state = window.realitySandboxUnified.getState();
     const button = document.getElementById('eidolon-pause-toggle');
+    const stepButton = document.getElementById('eidolon-step-once');
     return {
       paused: Boolean(window.realitySandboxDebug.isPaused()),
       masterSteps: Number(state.masterSteps),
       worldTick: Number(window.realitySandboxPlanet.world.tick),
       buttonText: button?.textContent?.trim() || '',
       buttonPressed: button?.getAttribute('aria-pressed') || '',
+      stepHidden: Boolean(stepButton?.hidden),
+      stepText: stepButton?.textContent?.trim() || '',
       control: window.realitySandboxPauseControl?.getSnapshot?.() || null,
     };
   });
