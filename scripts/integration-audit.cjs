@@ -124,11 +124,14 @@ requireMissing('.github/workflows/phase9-live.yml', 'Phase 9 live workflow froze
 requireMissing('.github/workflows/phase10-live.yml', 'Phase 10 live workflow frozen');
 requireMissing('.github/workflows/phase11-live.yml', 'Phase 11 live workflow frozen');
 forbidText('.github/workflows/browser-smoke.yml', 'node scripts/browser-smoke.cjs', 'Phase 11 browser suite');
-requireText('.github/workflows/browser-smoke.yml', 'node scripts/unified-smoke.cjs', 'living-planet experience check');
+requireText('.github/workflows/browser-smoke.yml', 'node scripts/reality-check.cjs', 'autonomous living-planet experience check');
 requireText('.github/workflows/browser-smoke.yml', 'node scripts/iphone-sphere-smoke.cjs', 'iPhone visual check');
 requireText('.github/workflows/browser-smoke.yml', 'node scripts/surface-mode-smoke.cjs', 'surface-mode interaction check');
 requireText('.github/workflows/browser-smoke.yml', 'node scripts/performance-smoke.cjs', 'startup and Surface Mode performance check');
 
+requireText('scripts/reality-check.cjs', 'exerciseDesktopInteraction', 'real browser camera interaction');
+requireText('scripts/reality-check.cjs', 'exerciseBiology', 'causal reproduction browser scenario');
+requireText('scripts/reality-check.cjs', 'exerciseLongRun', 'deterministic long-run browser stress test');
 requireText('scripts/unified-smoke.cjs', "seedScenario('coupling')", 'terrain-water-inspector coupling scenario');
 requireText('scripts/unified-smoke.cjs', 'statDefinitions === 8', 'defined statistic browser assertion');
 requireText('scripts/unified-smoke.cjs', 'initial.observatory.traits > 0', 'evolution observatory browser assertion');
