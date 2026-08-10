@@ -29,18 +29,22 @@ fs.mkdirSync(outputDir, { recursive: true });
       window.realitySandboxUnified &&
       window.realitySandboxPauseControl &&
       document.getElementById('eidolon-pause-toggle') &&
-      document.getElementById('eidolon-step-once')
+      document.getElementById('eidolon-step-once') &&
+      document.getElementById('eidolon-playback-speed')
     ), null, { timeout: 120000 });
     await page.waitForTimeout(350);
 
-    if (await page.evaluate(() => window.realitySandboxDebug.isPaused())) {
-      await page.evaluate(() => window.realitySandboxDebug.resume());
-      await page.waitForTimeout(250);
-    }
+    await page.evaluate(() => {
+      if (window.realitySandboxDebug.isPaused()) window.realitySandboxDebug.resume();
+      window.realitySandboxPauseControl.setSpeed(1);
+    });
+    await page.waitForTimeout(250);
 
     const initial = await snapshot(page);
     assert(!initial.paused, 'Pause check did not begin in a running state.');
     assert(initial.stepHidden, 'Single-step control should be hidden while the simulation is running.');
+    assert(initial.timeScale === 1, `Playback speed did not begin at 1x (${initial.timeScale}).`);
+    assert(/1×/.test(initial.speedText), `Playback speed control did not display 1×: ${initial.speedText}`);
 
     await page.locator('#eidolon-pause-toggle').click();
     await page.waitForTimeout(120);
@@ -100,11 +104,43 @@ fs.mkdirSync(outputDir, { recursive: true });
     assert(!hotkeyResumed.paused, 'Second P hotkey did not resume the simulation.');
     assert(hotkeyResumed.masterSteps > hotkeyFrozen.masterSteps, 'Master steps did not resume after P hotkey.');
     assert(hotkeyResumed.worldTick > hotkeyFrozen.worldTick, 'World tick did not resume after P hotkey.');
+
+    await page.evaluate(() => window.realitySandboxPauseControl.setSpeed(1));
+    await page.waitForTimeout(100);
+    await page.locator('#eidolon-playback-speed').click();
+    await page.waitForTimeout(120);
+    const fastStart = await snapshot(page);
+    assert(fastStart.timeScale === 4, `Speed button did not cycle 1× -> 4× (${fastStart.timeScale}).`);
+    assert(/4×/.test(fastStart.speedText), `Speed button did not display 4×: ${fastStart.speedText}`);
+    await page.waitForTimeout(800);
+    const fastEnd = await snapshot(page);
+    const fastSteps = fastEnd.masterSteps - fastStart.masterSteps;
+    assert(fastSteps > 0, '4× playback produced no simulation steps.');
+
+    await page.keyboard.press('[');
+    await page.waitForTimeout(100);
+    const normalFromHotkey = await snapshot(page);
+    assert(normalFromHotkey.timeScale === 1, `[ hotkey did not reduce 4× -> 1× (${normalFromHotkey.timeScale}).`);
+    await page.keyboard.press('[');
+    await page.waitForTimeout(120);
+    const slowStart = await snapshot(page);
+    assert(slowStart.timeScale === 0.25, `[ hotkey did not reduce 1× -> 0.25× (${slowStart.timeScale}).`);
+    assert(/0\.25×/.test(slowStart.speedText), `Speed button did not display 0.25×: ${slowStart.speedText}`);
+    await page.waitForTimeout(800);
+    const slowEnd = await snapshot(page);
+    const slowSteps = slowEnd.masterSteps - slowStart.masterSteps;
+    assert(fastSteps > Math.max(2, slowSteps * 2), `4× playback was not materially faster than 0.25× (${fastSteps} vs ${slowSteps} steps).`);
+
+    await page.keyboard.press(']');
+    await page.waitForTimeout(120);
+    const restoredSpeed = await snapshot(page);
+    assert(restoredSpeed.timeScale === 1, `] hotkey did not restore 0.25× -> 1× (${restoredSpeed.timeScale}).`);
+    assert(/1×/.test(restoredSpeed.speedText), `Speed button did not return to 1×: ${restoredSpeed.speedText}`);
     assert(pageErrors.length === 0, `Browser page errors: ${pageErrors.map(error => error.message).join(' | ')}`);
 
     const result = {
       ok: true,
-      model: 'player-visible-master-pause-and-single-step-control',
+      model: 'player-visible-pause-step-and-playback-speed-control',
       initial,
       pausedA,
       pausedB,
@@ -115,6 +151,14 @@ fs.mkdirSync(outputDir, { recursive: true });
       hotkeyPaused,
       hotkeyFrozen,
       hotkeyResumed,
+      fastStart,
+      fastEnd,
+      fastSteps,
+      normalFromHotkey,
+      slowStart,
+      slowEnd,
+      slowSteps,
+      restoredSpeed,
       pageErrors,
     };
     fs.writeFileSync(path.join(outputDir, 'pause-control.json'), JSON.stringify(result, null, 2));
@@ -134,14 +178,18 @@ async function snapshot(page) {
     const state = window.realitySandboxUnified.getState();
     const button = document.getElementById('eidolon-pause-toggle');
     const stepButton = document.getElementById('eidolon-step-once');
+    const speedButton = document.getElementById('eidolon-playback-speed');
+    const debugSnapshot = window.realitySandboxDebug.snapshot();
     return {
       paused: Boolean(window.realitySandboxDebug.isPaused()),
       masterSteps: Number(state.masterSteps),
       worldTick: Number(window.realitySandboxPlanet.world.tick),
+      timeScale: Number(debugSnapshot.timeScale),
       buttonText: button?.textContent?.trim() || '',
       buttonPressed: button?.getAttribute('aria-pressed') || '',
       stepHidden: Boolean(stepButton?.hidden),
       stepText: stepButton?.textContent?.trim() || '',
+      speedText: speedButton?.textContent?.trim() || '',
       control: window.realitySandboxPauseControl?.getSnapshot?.() || null,
     };
   });
