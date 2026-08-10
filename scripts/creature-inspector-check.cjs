@@ -93,12 +93,16 @@ fs.mkdirSync(outputDir, { recursive: true });
 
     const canvas = await page.locator('#lofiLivingCanvas').boundingBox();
     assert(canvas, 'Living canvas did not have bounds for manual follow override test.');
+    const beforeManualCamera = followedMove.camera;
     await page.mouse.move(canvas.x + canvas.width * 0.5, canvas.y + canvas.height * 0.5);
-    await page.mouse.wheel(0, -120);
-    await page.waitForTimeout(160);
+    await page.mouse.wheel(0, -220);
+    await page.waitForTimeout(220);
     const manualOverride = await snapshot(page);
+    fs.writeFileSync(path.join(outputDir, 'manual-override.json'), JSON.stringify({ beforeManualCamera, manualOverride }, null, 2));
+    assert(Math.abs(manualOverride.camera.zoom - beforeManualCamera.zoom) > 0.005, `Manual wheel did not actually change globe zoom (${beforeManualCamera.zoom} -> ${manualOverride.camera.zoom}).`);
     assert(!manualOverride.follow?.following, 'Manual globe zoom did not disengage creature follow mode.');
-    assert((manualOverride.follow?.manualCancellations || 0) >= 1, 'Follow controller did not record the manual camera override.');
+    const cancellationCount = (manualOverride.follow?.manualCancellations || 0) + (manualOverride.follow?.cameraMutationCancellations || 0);
+    assert(cancellationCount >= 1, 'Follow controller did not record the manual/external camera override.');
 
     await page.keyboard.press('Escape');
     await page.waitForTimeout(100);
@@ -115,6 +119,7 @@ fs.mkdirSync(outputDir, { recursive: true });
       followEnabled,
       relocated,
       followedMove,
+      beforeManualCamera,
       manualOverride,
       cleared,
       pageErrors,
