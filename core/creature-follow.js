@@ -2,6 +2,8 @@ const CONTROL_ID = 'eidolon-creature-follow';
 const STYLE_ID = 'eidolon-creature-follow-style';
 const FOLLOW_INTERVAL_MS = 80;
 const MIN_FOLLOW_ZOOM = 2.15;
+const EXTERNAL_ZOOM_EPSILON = 0.005;
+const EXTERNAL_CENTER_EPSILON = 0.04;
 
 async function start() {
   try {
@@ -66,9 +68,11 @@ export function installCreatureFollow({ planet, runtime, inspector }) {
   let followedEntityId = null;
   let followUpdates = 0;
   let manualCancellations = 0;
+  let cameraMutationCancellations = 0;
   let lostTargetCancellations = 0;
   let lastPosition = null;
   let lastCamera = null;
+  let lastCancelSource = null;
 
   function currentSelectedId() {
     const raw = inspector.getSnapshot?.().selectedEntityId;
@@ -82,6 +86,7 @@ export function installCreatureFollow({ planet, runtime, inspector }) {
     const next = Boolean(value && selectedId != null);
     following = next;
     followedEntityId = next ? selectedId : null;
+    if (!next && source !== 'api') lastCancelSource = source;
     updateButton();
     if (next) updateCamera(true);
     window.dispatchEvent(new CustomEvent('eidolon-creature-follow-changed', {
@@ -135,6 +140,18 @@ export function installCreatureFollow({ planet, runtime, inspector }) {
     return true;
   }
 
+  function detectExternalCameraMutation() {
+    if (!following || !lastCamera) return false;
+    const camera = runtime.getCamera();
+    const zoomChanged = Math.abs(finite(camera.zoom, 1) - finite(lastCamera.zoom, 1)) > EXTERNAL_ZOOM_EPSILON;
+    const centerChanged = unitCircleDistance(finite(camera.centerX, 0.5), finite(lastCamera.centerX, 0.5)) > EXTERNAL_CENTER_EPSILON
+      || Math.abs(finite(camera.centerY, 0.5) - finite(lastCamera.centerY, 0.5)) > EXTERNAL_CENTER_EPSILON;
+    if (!zoomChanged && !centerChanged) return false;
+    cameraMutationCancellations += 1;
+    setFollowing(false, 'camera-mutated');
+    return true;
+  }
+
   function cancelForManualInteraction(event) {
     if (!following || !eventInsideGlobe(event)) return;
     manualCancellations += 1;
@@ -170,19 +187,21 @@ export function installCreatureFollow({ planet, runtime, inspector }) {
   const timer = window.setInterval(() => {
     if (!active) return;
     updateButton();
-    if (following) updateCamera(false);
+    if (following && !detectExternalCameraMutation()) updateCamera(false);
   }, FOLLOW_INTERVAL_MS);
   updateButton();
 
   function getSnapshot() {
     return {
-      version: 2,
-      model: 'selected-ecs-entity-camera-follow-with-coordinate-manual-override',
+      version: 3,
+      model: 'selected-ecs-entity-camera-follow-with-input-and-camera-mutation-override',
       following,
       followedEntityId,
       followUpdates,
       manualCancellations,
+      cameraMutationCancellations,
       lostTargetCancellations,
+      lastCancelSource,
       minFollowZoom: MIN_FOLLOW_ZOOM,
       lastPosition: lastPosition ? { ...lastPosition } : null,
       lastCamera: lastCamera ? { ...lastCamera } : null,
@@ -209,6 +228,15 @@ export function installCreatureFollow({ planet, runtime, inspector }) {
     getSnapshot,
     destroy,
   };
+}
+
+function finite(value, fallback = 0) {
+  return Number.isFinite(Number(value)) ? Number(value) : fallback;
+}
+
+function unitCircleDistance(a, b) {
+  const distance = Math.abs(a - b) % 1;
+  return Math.min(distance, 1 - distance);
 }
 
 function injectStyles() {
