@@ -32,7 +32,9 @@ fs.mkdirSync(outputDir, { recursive: true });
       window.realitySandboxMonotonicWorldClock &&
       window.realitySandboxLifeHistorySelection &&
       window.realitySandboxCulturalTraditions &&
-      window.realitySandboxTrophicSatiety
+      window.realitySandboxTrophicSatiety &&
+      window.realitySandboxGrazerDigestionPhysiology &&
+      window.realitySandboxPredatorEncounterEcology
     ), null, { timeout: 120000 });
     await page.waitForTimeout(500);
 
@@ -58,6 +60,8 @@ fs.mkdirSync(outputDir, { recursive: true });
           clock: window.realitySandboxMonotonicWorldClock.getSnapshot(),
           lifeHistory: compactLifeHistory(window.realitySandboxLifeHistorySelection.getSnapshot()),
           trophic: compactTrophic(window.realitySandboxTrophicSatiety.getSnapshot()),
+          encounter: compactEncounter(window.realitySandboxPredatorEncounterEcology.getSnapshot()),
+          digestion: compactDigestion(window.realitySandboxGrazerDigestionPhysiology.getSnapshot()),
         });
       }
 
@@ -113,6 +117,8 @@ fs.mkdirSync(outputDir, { recursive: true });
           learning: window.realitySandboxSocialLearning?.getSnapshot?.() || null,
           culture: window.realitySandboxCulturalTraditions?.getSnapshot?.() || null,
           trophic: window.realitySandboxTrophicSatiety?.getSnapshot?.() || null,
+          digestion: window.realitySandboxGrazerDigestionPhysiology?.getSnapshot?.() || null,
+          encounter: window.realitySandboxPredatorEncounterEcology?.getSnapshot?.() || null,
         },
       };
 
@@ -163,6 +169,32 @@ fs.mkdirSync(outputDir, { recursive: true });
           reproductiveGrazerSteps: snapshot.reproductiveGrazerSteps,
         };
       }
+
+      function compactEncounter(snapshot) {
+        return {
+          predatorSearchSteps: snapshot.predatorSearchSteps,
+          apexSearchSteps: snapshot.apexSearchSteps,
+          predatorEncounterSteps: snapshot.predatorEncounterSteps,
+          apexEncounterSteps: snapshot.apexEncounterSteps,
+          predatorEncounterEvents: snapshot.predatorEncounterEvents,
+          apexEncounterEvents: snapshot.apexEncounterEvents,
+          predatorRefugeMisses: snapshot.predatorRefugeMisses,
+          apexRefugeMisses: snapshot.apexRefugeMisses,
+          predatorEncounterFraction: snapshot.predatorEncounterFraction,
+          apexEncounterFraction: snapshot.apexEncounterFraction,
+          searchEnergySpent: snapshot.searchEnergySpent,
+        };
+      }
+
+      function compactDigestion(snapshot) {
+        return {
+          supplementalDigestionSteps: snapshot.supplementalDigestionSteps,
+          storedForageDigested: snapshot.storedForageDigested,
+          supplementalEnergyAssimilated: snapshot.supplementalEnergyAssimilated,
+          livingGutReserve: snapshot.livingGutReserve,
+          fullGuts: snapshot.fullGuts,
+        };
+      }
     });
 
     fs.writeFileSync(path.join(outputDir, 'fresh-world.json'), JSON.stringify(result, null, 2));
@@ -175,6 +207,7 @@ fs.mkdirSync(outputDir, { recursive: true });
     assert(result.invalid.length === 0, `Non-finite organism state appeared: ${JSON.stringify(result.invalid.slice(0, 5))}`);
     assert(result.final.living > 0, 'No living organisms remain at the end of the fresh-world endurance run.');
     assert(result.diagnostics.ok, `Endurance diagnostics failed: ${(result.diagnostics.failures || []).join(', ')}`);
+    assert(result.systems.encounter?.model === 'finite-local-predator-detection-with-vegetated-prey-refugia', 'Predator encounter ecology did not initialize.');
     assert(pageErrors.length === 0, `Browser page errors: ${pageErrors.map(error => error.message).join(' | ')}`);
 
     console.log(JSON.stringify({
@@ -186,6 +219,8 @@ fs.mkdirSync(outputDir, { recursive: true });
       ecosystemEpochs: result.finalClock.ecosystemEpoch - result.beforeClock.ecosystemEpoch,
       warnings: result.warnings,
       trophic: result.systems.trophic,
+      encounter: result.systems.encounter,
+      digestion: result.systems.digestion,
       msPerStep: result.msPerStep,
     }, null, 2));
   } finally {
