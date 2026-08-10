@@ -49,6 +49,9 @@ export function installTrophicSatiety(world) {
   let grazingAssimilationSteps = 0;
   let assimilatedEnergy = 0;
   let reproductiveGrazerSteps = 0;
+  let forageTargetLocks = 0;
+  let forageTargetsReached = 0;
+  let forageTargetsAbandoned = 0;
 
   function wrappedStep(dt) {
     if (!active || !Number.isFinite(dt) || dt <= 0) {
@@ -57,6 +60,8 @@ export function installTrophicSatiety(world) {
     }
 
     const c = world.ecs.components;
+    stabilizeForageTargets(c);
+
     for (const predator of c.predator?.values?.() || []) {
       const threshold = predatorHungerThreshold(predator);
       predator.hungerThreshold = threshold;
@@ -83,6 +88,49 @@ export function installTrophicSatiety(world) {
 
     previousStep.call(world, dt);
     assimilateActiveGrazing(c, dt);
+  }
+
+  function stabilizeForageTargets(c) {
+    const field = world.forageField;
+    if (!field?.sample) return;
+
+    for (const [id, grazer] of c.agent?.entries?.() || []) {
+      const position = c.position?.get(id);
+      const target = grazer.forageTarget;
+      if (!position || !target || !Number.isFinite(target.x) || !Number.isFinite(target.y)) continue;
+
+      const dx = wrappedDelta(position.x, target.x, world.width);
+      const dy = target.y - position.y;
+      const distance = Math.hypot(dx, dy);
+      const currentFood = clamp(finite(field.sample(position.x, position.y)?.food), 0, 1);
+      const targetFood = clamp(finite(field.sample(target.x, target.y)?.food, target.food), 0, 1);
+
+      if (distance <= 24) {
+        forageTargetsReached += 1;
+        // Once the animal reaches the patch, stop extending the target timer.
+        // The core can graze there and then naturally reconsider its route.
+        continue;
+      }
+
+      const worthTravelling = targetFood >= 0.10 && targetFood >= currentFood + 0.012;
+      if (!worthTravelling) {
+        if (finite(grazer.forageClock) > 0.18) {
+          grazer.forageClock = 0.18;
+          forageTargetsAbandoned += 1;
+        }
+        continue;
+      }
+
+      const speed = Math.max(12, 40 * clamp(finite(grazer.dna?.speed, 1), 0.6, 1.4));
+      const travelSeconds = distance / speed;
+      const lockSeconds = clamp(travelSeconds * 1.45 + 0.55, 0.9, 5.5);
+      if (finite(grazer.forageClock) < lockSeconds) {
+        grazer.forageClock = lockSeconds;
+        forageTargetLocks += 1;
+      }
+      grazer.committedForageQuality = targetFood;
+      grazer.committedForageDistance = distance;
+    }
   }
 
   function assimilateActiveGrazing(c, dt) {
@@ -122,8 +170,8 @@ export function installTrophicSatiety(world) {
     getSnapshot() {
       const c = world.ecs.components;
       return {
-        version: 2,
-        model: 'resource-assimilation-and-metabolic-hunger-driven-predation',
+        version: 3,
+        model: 'persistent-resource-pursuit-assimilation-and-hunger-driven-predation',
         grazers: c.agent?.size || 0,
         predators: c.predator?.size || 0,
         apex: c.apex?.size || 0,
@@ -133,9 +181,13 @@ export function installTrophicSatiety(world) {
         guardedApexSteps,
         predatorHungerSteps,
         apexHungerSteps,
+        forageTargetLocks,
+        forageTargetsReached,
+        forageTargetsAbandoned,
         grazingAssimilationSteps,
         assimilatedEnergy: round(assimilatedEnergy),
         reproductiveGrazerSteps,
+        forageNavigation: 'valuable-targets-persist-until-reached-or-devalued',
         assimilation: 'only-while-actively-grazing-scaled-by-local-food-and-metabolism',
         populationCap: null,
       };
@@ -173,6 +225,13 @@ function countHungry(group, thresholdFor) {
   return count;
 }
 
+function wrappedDelta(a, b, width) {
+  let delta = b - a;
+  if (delta > width / 2) delta -= width;
+  if (delta < -width / 2) delta += width;
+  return delta;
+}
+
 function finite(value, fallback = 0) {
   return Number.isFinite(Number(value)) ? Number(value) : fallback;
 }
@@ -187,7 +246,7 @@ function round(value) {
 
 function emptyApi() {
   return {
-    getSnapshot: () => ({ version: 2, model: 'resource-assimilation-and-metabolic-hunger-driven-predation', disabled: true }),
+    getSnapshot: () => ({ version: 3, model: 'persistent-resource-pursuit-assimilation-and-hunger-driven-predation', disabled: true }),
     destroy() {},
   };
 }
