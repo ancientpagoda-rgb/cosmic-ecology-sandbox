@@ -1,4 +1,4 @@
-const MODEL_VERSION = 1;
+const MODEL_VERSION = 2;
 const GUILD_MATURITY = Object.freeze({ grazer: 8, predator: 10, apex: 14 });
 const GUILD_BASE_LIFESPAN = Object.freeze({ grazer: 150, predator: 190, apex: 230 });
 
@@ -41,6 +41,10 @@ export function installLifeHistorySelection({ world }) {
   let diseaseDeaths = 0;
   let juvenileDeaths = 0;
   let recoveries = 0;
+  let fastingToleranceSteps = 0;
+  let starvationDebtAvoided = 0;
+  const deathsByGuild = { grazer: 0, predator: 0, apex: 0 };
+  const starvationDeathsByGuild = { grazer: 0, predator: 0, apex: 0 };
   let lastDeath = null;
   let active = true;
 
@@ -78,11 +82,26 @@ export function installLifeHistorySelection({ world }) {
           : 'senescent';
 
       const energy = Math.max(0, finite(organism.energy));
-      if (energy < 0.14) {
-        const deficit = (0.14 - energy) / 0.14;
-        const tolerance = 10 + (1.6 - clamp(finite(organism.dna?.metabolism, 1), 0.4, 2.2)) * 5;
-        organism.starvationDebt = Math.max(0, finite(organism.starvationDebt) + dt * deficit / Math.max(5, tolerance));
-      } else if (energy > 0.28) {
+      const fasting = fastingPhysiology(organism, row.guild);
+      const starvationThreshold = 0.14 * fasting.thresholdFactor;
+      organism.fastingToleranceFactor = fasting.toleranceFactor;
+      organism.fastingThreshold = starvationThreshold;
+
+      if (fasting.adaptive) fastingToleranceSteps += 1;
+
+      if (energy < starvationThreshold) {
+        const deficit = (starvationThreshold - energy) / Math.max(0.001, starvationThreshold);
+        const baseTolerance = 10 + (1.6 - clamp(finite(organism.dna?.metabolism, 1), 0.4, 2.2)) * 5;
+        const tolerance = baseTolerance * fasting.toleranceFactor;
+        const actualIncrement = dt * deficit / Math.max(5, tolerance);
+        organism.starvationDebt = Math.max(0, finite(organism.starvationDebt) + actualIncrement);
+
+        if (fasting.adaptive && energy < 0.14) {
+          const baselineDeficit = (0.14 - energy) / 0.14;
+          const baselineIncrement = dt * baselineDeficit / Math.max(5, baseTolerance);
+          starvationDebtAvoided += Math.max(0, baselineIncrement - actualIncrement);
+        }
+      } else if (energy > starvationThreshold * 2) {
         organism.starvationDebt = Math.max(0, finite(organism.starvationDebt) - dt * 0.055);
       }
 
@@ -110,8 +129,11 @@ export function installLifeHistorySelection({ world }) {
       if (!world.ecs.entities?.has(record.id)) continue;
       world.ecs.destroyEntity(record.id);
       deaths += 1;
-      if (record.cause === 'starvation') starvationDeaths += 1;
-      else if (record.cause === 'senescence') senescenceDeaths += 1;
+      deathsByGuild[record.guild] = (deathsByGuild[record.guild] || 0) + 1;
+      if (record.cause === 'starvation') {
+        starvationDeaths += 1;
+        starvationDeathsByGuild[record.guild] = (starvationDeathsByGuild[record.guild] || 0) + 1;
+      } else if (record.cause === 'senescence') senescenceDeaths += 1;
       else if (record.cause === 'disease') diseaseDeaths += 1;
       else if (record.cause === 'juvenile-viability') juvenileDeaths += 1;
       lastDeath = {
@@ -157,11 +179,16 @@ export function installLifeHistorySelection({ world }) {
       stages,
       meanAgeFraction: n ? round(meanAgeFraction / n) : 0,
       deaths,
+      deathsByGuild: { ...deathsByGuild },
       starvationDeaths,
+      starvationDeathsByGuild: { ...starvationDeathsByGuild },
       senescenceDeaths,
       diseaseDeaths,
       juvenileDeaths,
       infectionRecoveries: recoveries,
+      fastingToleranceSteps,
+      starvationDebtAvoided: round(starvationDebtAvoided),
+      fastingPhysiology: 'carnivore-starvation-threshold-and-debt-scale-with-low-search-activity',
       lastDeath,
       mortality: 'deterministic-accumulated-hazard',
       populationCap: null,
@@ -185,14 +212,18 @@ export function computeExpectedLifespan(organism, guild, id = 0) {
   return base * (1 / Math.sqrt(metabolism)) * (0.82 + resistance * 0.32) * viability * inherited;
 }
 
-export function mortalityHazard({ organism, age, lifespan, maturity }) {
+export function mortalityHazard({ organism, guild = 'grazer', age, lifespan, maturity }) {
   const energy = Math.max(0, finite(organism?.energy));
   const starvationDebt = Math.max(0, finite(organism?.starvationDebt));
   const infected = finite(organism?.infected) > 0;
   const ageFraction = age / Math.max(1, lifespan);
   const viability = clamp(finite(organism?.developmentalViability, 1), 0.72, 1.04);
+  const fasting = fastingPhysiology(organism, guild);
+  const acuteThreshold = 0.08 * fasting.thresholdFactor;
 
-  const starvation = energy < 0.08 ? ((0.08 - energy) / 0.08) * 0.018 + starvationDebt * 0.035 : starvationDebt * 0.006;
+  const starvation = energy < acuteThreshold
+    ? (((acuteThreshold - energy) / Math.max(0.001, acuteThreshold)) * 0.018 + starvationDebt * 0.035) * fasting.hazardFactor
+    : starvationDebt * 0.006 * fasting.hazardFactor;
   const disease = infected ? (0.003 + (1 - clamp(finite(organism?.diseaseResistance, 0.6), 0, 1)) * 0.009) : 0;
   const senescence = ageFraction > 0.72 ? Math.pow((ageFraction - 0.72) / 0.28, 2) * 0.012 : 0;
   const juvenile = age < maturity && viability < 0.94 ? (0.94 - viability) * 0.022 : 0;
@@ -203,6 +234,22 @@ export function mortalityHazard({ organism, age, lifespan, maturity }) {
     senescence,
     juvenile,
     total: starvation + disease + senescence + juvenile,
+  };
+}
+
+function fastingPhysiology(organism, guild) {
+  if (guild !== 'predator' && guild !== 'apex') {
+    return { adaptive: false, thresholdFactor: 1, toleranceFactor: 1, hazardFactor: 1 };
+  }
+
+  const activity = clamp(finite(organism?.searchActivityFactor, 1), 0.2, 1);
+  const scarcityResponse = 1 - activity;
+  const apex = guild === 'apex';
+  return {
+    adaptive: scarcityResponse > 0.08,
+    thresholdFactor: clamp(1 - scarcityResponse * (apex ? 0.42 : 0.35), 0.58, 1),
+    toleranceFactor: 1 + scarcityResponse * (apex ? 3.2 : 2.5),
+    hazardFactor: clamp(0.45 + activity * 0.55, 0.5, 1),
   };
 }
 
