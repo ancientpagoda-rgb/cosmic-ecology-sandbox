@@ -62,6 +62,10 @@ export function installTrophicSatiety(world) {
   let guardedApexSteps = 0;
   let predatorHungerSteps = 0;
   let apexHungerSteps = 0;
+  let scarcitySuppressedPredatorSteps = 0;
+  let scarcitySuppressedApexSteps = 0;
+  let predatorReproductionSuppressed = 0;
+  let apexReproductionSuppressed = 0;
   let forageTargetLocks = 0;
   let forageTargetsReached = 0;
   let forageTargetsAbandoned = 0;
@@ -82,6 +86,8 @@ export function installTrophicSatiety(world) {
   let reproductiveReserveCaptured = 0;
   let reproductiveReserveSpent = 0;
   let lastReserveEvent = null;
+  let lastGrazerPerPredator = 0;
+  let lastPredatorPerApex = 0;
 
   function wrappedStep(dt) {
     if (!active || !Number.isFinite(dt) || dt <= 0) {
@@ -90,30 +96,40 @@ export function installTrophicSatiety(world) {
     }
 
     const c = world.ecs.components;
+    const ratios = trophicRatios(c);
+    lastGrazerPerPredator = ratios.grazerPerPredator;
+    lastPredatorPerApex = ratios.predatorPerApex;
+
     stabilizeForageTargets(c);
-    fundCarnivoreReproduction(c);
+    fundCarnivoreReproduction(c, ratios);
     const predatorBefore = snapshotEnergy(c.predator);
     const apexBefore = snapshotEnergy(c.apex);
 
     for (const predator of c.predator?.values?.() || []) {
-      const threshold = predatorHungerThreshold(predator);
+      const threshold = predatorHungerThreshold(predator, ratios.grazerPerPredator);
       predator.hungerThreshold = threshold;
+      predator.preyPerConsumer = ratios.grazerPerPredator;
       predator.hungry = finite(predator.energy, 0) <= threshold;
-      if (predator.hungry) predatorHungerSteps += 1;
-      else {
+      if (predator.hungry) {
+        predatorHungerSteps += 1;
+      } else {
         predator.rest = Math.max(finite(predator.rest), Math.max(0.18, dt * 2.5));
         guardedPredatorSteps += 1;
+        if (ratios.grazerPerPredator < 4) scarcitySuppressedPredatorSteps += 1;
       }
     }
 
     for (const apex of c.apex?.values?.() || []) {
-      const threshold = apexHungerThreshold(apex);
+      const threshold = apexHungerThreshold(apex, ratios.predatorPerApex);
       apex.hungerThreshold = threshold;
+      apex.preyPerConsumer = ratios.predatorPerApex;
       apex.hungry = finite(apex.energy, 0) <= threshold;
-      if (apex.hungry) apexHungerSteps += 1;
-      else {
+      if (apex.hungry) {
+        apexHungerSteps += 1;
+      } else {
         apex.rest = Math.max(finite(apex.rest), Math.max(0.22, dt * 3));
         guardedApexSteps += 1;
+        if (ratios.predatorPerApex < 3) scarcitySuppressedApexSteps += 1;
       }
     }
 
@@ -125,17 +141,37 @@ export function installTrophicSatiety(world) {
     rememberCarnivores(c);
   }
 
-  function fundCarnivoreReproduction(c) {
-    fundGroupReproduction(c.predator, 'predator', 2.8, 10);
-    fundGroupReproduction(c.apex, 'apex', 3.2, 14);
+  function trophicRatios(c) {
+    const grazers = c.agent?.size || 0;
+    const predators = c.predator?.size || 0;
+    const apex = c.apex?.size || 0;
+    return {
+      grazerPerPredator: predators > 0 ? grazers / predators : grazers,
+      predatorPerApex: apex > 0 ? predators / apex : predators,
+    };
   }
 
-  function fundGroupReproduction(group, guild, threshold, maturityAge) {
+  function fundCarnivoreReproduction(c, ratios) {
+    fundGroupReproduction(c.predator, 'predator', 2.8, 10, ratios.grazerPerPredator, 4.5);
+    fundGroupReproduction(c.apex, 'apex', 3.2, 14, ratios.predatorPerApex, 3.5);
+  }
+
+  function fundGroupReproduction(group, guild, threshold, maturityAge, preyPerConsumer, minimumPreyRatio) {
     for (const [id, organism] of group?.entries?.() || []) {
       if (finite(organism.age) <= maturityAge) continue;
       const reserve = Math.max(0, finite(organism.reproductiveReserve));
+      if (reserve <= 0.001) continue;
+
+      if (preyPerConsumer < minimumPreyRatio) {
+        if (guild === 'predator') predatorReproductionSuppressed += 1;
+        else apexReproductionSuppressed += 1;
+        organism.reproductionSuppressedByPreyScarcity = true;
+        continue;
+      }
+
+      organism.reproductionSuppressedByPreyScarcity = false;
       const energy = Math.max(0, finite(organism.energy));
-      if (reserve <= 0.001 || energy >= threshold || energy + reserve < threshold + 0.005) continue;
+      if (energy >= threshold || energy + reserve < threshold + 0.005) continue;
 
       const transfer = Math.min(reserve, Math.max(0, threshold + 0.01 - energy));
       if (transfer <= 0) continue;
@@ -153,6 +189,7 @@ export function installTrophicSatiety(world) {
         energy: round(organism.energy),
         reserveSpent: round(transfer),
         reserveRemaining: round(organism.reproductiveReserve),
+        preyPerConsumer: round(preyPerConsumer),
         tick: world.tick,
       };
     }
@@ -344,18 +381,24 @@ export function installTrophicSatiety(world) {
         for (const organism of group?.values?.() || []) carnivoreReproductiveReserve += Math.max(0, finite(organism.reproductiveReserve));
       }
       return {
-        version: 7,
-        model: 'meal-funded-conservative-carnivore-reproduction-and-finite-digestion',
+        version: 8,
+        model: 'prey-density-regulated-meal-funded-trophic-reproduction',
         stackOrder: 'after-parentage-recombination-parental-care-and-culture',
         grazers: c.agent?.size || 0,
         predators: c.predator?.size || 0,
         apex: c.apex?.size || 0,
-        hungryPredators: countHungry(c.predator, predatorHungerThreshold),
-        hungryApex: countHungry(c.apex, apexHungerThreshold),
+        grazerPerPredator: round(lastGrazerPerPredator),
+        predatorPerApex: round(lastPredatorPerApex),
+        hungryPredators: countHungry(c.predator, organism => predatorHungerThreshold(organism, lastGrazerPerPredator)),
+        hungryApex: countHungry(c.apex, organism => apexHungerThreshold(organism, lastPredatorPerApex)),
         guardedPredatorSteps,
         guardedApexSteps,
         predatorHungerSteps,
         apexHungerSteps,
+        scarcitySuppressedPredatorSteps,
+        scarcitySuppressedApexSteps,
+        predatorReproductionSuppressed,
+        apexReproductionSuppressed,
         predatorMealsBanked,
         apexMealsBanked,
         predatorReserveFundings,
@@ -379,6 +422,7 @@ export function installTrophicSatiety(world) {
         livingGutReserve: round(gutReserve),
         grazersWithFoodStored,
         peakGutReserve: round(peakGutReserve),
+        functionalResponse: 'hunting-and-reproduction-decline-continuously-with-prey-per-consumer',
         forageNavigation: 'valuable-targets-persist-until-reached-or-devalued',
         energyPath: 'forage-or-prey-surplus-must-be-stored-before-it-can-fund-offspring',
         populationCap: null,
@@ -399,14 +443,21 @@ export function installTrophicSatiety(world) {
   return api;
 }
 
-export function predatorHungerThreshold(predator) {
+export function predatorHungerThreshold(predator, grazerPerPredator = 6) {
   const metabolism = clamp(finite(predator?.dna?.metabolism, 1), 0.4, 2.2);
-  return clamp(1.48 + metabolism * 0.12, 1.55, 1.72);
+  const abundance = smoothDensityResponse(grazerPerPredator, 0.8, 6);
+  return clamp(0.48 + abundance * 1.12 + (metabolism - 1) * 0.08, 0.42, 1.72);
 }
 
-export function apexHungerThreshold(apex) {
+export function apexHungerThreshold(apex, predatorPerApex = 5) {
   const metabolism = clamp(finite(apex?.dna?.metabolism, 1), 0.5, 1.6);
-  return clamp(1.38 + metabolism * 0.12, 1.44, 1.58);
+  const abundance = smoothDensityResponse(predatorPerApex, 1, 5);
+  return clamp(0.45 + abundance * 0.95 + (metabolism - 1) * 0.06, 0.40, 1.48);
+}
+
+function smoothDensityResponse(value, low, high) {
+  const t = clamp((finite(value) - low) / Math.max(0.001, high - low), 0, 1);
+  return t * t * (3 - 2 * t);
 }
 
 function findOrganism(components, id) {
@@ -443,7 +494,7 @@ function round(value) {
 
 function emptyApi() {
   return {
-    getSnapshot: () => ({ version: 7, model: 'meal-funded-conservative-carnivore-reproduction-and-finite-digestion', disabled: true }),
+    getSnapshot: () => ({ version: 8, model: 'prey-density-regulated-meal-funded-trophic-reproduction', disabled: true }),
     destroy() {},
   };
 }
