@@ -1,7 +1,9 @@
-const MODEL_VERSION = 1;
+const MODEL_VERSION = 2;
 const PREDATOR_BASE_DETECTION_RADIUS = 78;
-const APEX_BASE_DETECTION_RADIUS = 100;
+const APEX_BASE_DETECTION_RADIUS = 150;
 const ENCOUNTER_HOLD_SECONDS = 0.14;
+const GRAZER_VIGILANCE_RADIUS = 76;
+const PREDATOR_VIGILANCE_RADIUS = 96;
 
 async function start() {
   try {
@@ -59,11 +61,19 @@ export function installPredatorEncounterEcology(world) {
   let apexRefugeMisses = 0;
   let predatorEncounterEvents = 0;
   let apexEncounterEvents = 0;
+  let predatorChaseAbandonments = 0;
+  let apexChaseAbandonments = 0;
+  let grazerVigilanceSteps = 0;
+  let grazerFleeEvents = 0;
+  let predatorVigilanceSteps = 0;
+  let predatorFleeEvents = 0;
+  let coveredFleeSteps = 0;
   let searchEnergySpent = 0;
   let coveredPreyDetections = 0;
   let peakPredatorDetectionRadius = 0;
   let peakApexDetectionRadius = 0;
   let lastEncounter = null;
+  let lastEscape = null;
 
   function wrappedStep(dt) {
     if (!active || !Number.isFinite(dt) || dt <= 0) {
@@ -72,19 +82,95 @@ export function installPredatorEncounterEcology(world) {
     }
 
     const c = world.ecs.components;
+    applyGrazerVigilance(c, dt);
+    applyPredatorVigilance(c, dt);
     regulatePredatorEncounters(c, dt);
     regulateApexEncounters(c, dt);
     previousStep.call(world, dt);
   }
 
+  function applyGrazerVigilance(c, dt) {
+    for (const [id, grazer] of c.agent?.entries?.() || []) {
+      const pos = c.position?.get(id);
+      const velocity = c.velocity?.get(id);
+      if (!pos || !velocity) continue;
+
+      const dna = grazer.dna || { speed: 1, sense: 1 };
+      const cover = forageCover(pos);
+      const vigilanceRadius = GRAZER_VIGILANCE_RADIUS
+        * clamp(finite(dna.sense, 1), 0.6, 1.4)
+        * (1 + cover * 0.12);
+      const threat = nearestThreat(pos, c.predator, c, vigilanceRadius, predator => shouldSeek(predator) && finite(predator.rest) <= 0.22);
+
+      if (!threat) {
+        grazer.predatorAlert = false;
+        continue;
+      }
+
+      grazerVigilanceSteps += 1;
+      if (!grazer.predatorAlert) {
+        grazerFleeEvents += 1;
+        lastEscape = { guild: 'grazer', id, threatId: threat.id, distance: round(threat.distance), cover: round(cover), tick: world.tick };
+      }
+      grazer.predatorAlert = true;
+      grazer.grazeClock = 0;
+      if (finite(grazer.forageClock) > 0.22) grazer.forageClock = 0.22;
+      if (cover > 0.3) coveredFleeSteps += 1;
+
+      const away = Math.atan2(pos.y - threat.position.y, pos.x - threat.position.x);
+      const weave = Math.sin(world.tick * 0.17 + id * 1.73) * (0.18 + cover * 0.22);
+      const heading = away + weave;
+      const escapeSpeed = 52 * clamp(finite(dna.speed, 1), 0.6, 1.4) * (1 + cover * 0.24);
+      const response = 1 - Math.exp(-dt * (8 + finite(dna.sense, 1) * 2));
+      const targetVx = Math.cos(heading) * escapeSpeed;
+      const targetVy = Math.sin(heading) * escapeSpeed;
+      velocity.vx += (targetVx - velocity.vx) * response;
+      velocity.vy += (targetVy - velocity.vy) * response;
+    }
+  }
+
+  function applyPredatorVigilance(c, dt) {
+    for (const [id, predator] of c.predator?.entries?.() || []) {
+      const pos = c.position?.get(id);
+      const velocity = c.velocity?.get(id);
+      if (!pos || !velocity) continue;
+      const dna = predator.dna || { speed: 1, sense: 1 };
+      const vigilanceRadius = PREDATOR_VIGILANCE_RADIUS * clamp(finite(dna.sense, 1), 0.35, 2.1);
+      const threat = nearestThreat(pos, c.apex, c, vigilanceRadius, apex => shouldSeek(apex) && finite(apex.rest) <= 0.22);
+
+      if (!threat) {
+        predator.apexAlert = false;
+        continue;
+      }
+
+      predatorVigilanceSteps += 1;
+      if (!predator.apexAlert) {
+        predatorFleeEvents += 1;
+        lastEscape = { guild: 'predator', id, threatId: threat.id, distance: round(threat.distance), cover: 0, tick: world.tick };
+      }
+      predator.apexAlert = true;
+      const away = Math.atan2(pos.y - threat.position.y, pos.x - threat.position.x);
+      const heading = away + Math.sin(world.tick * 0.13 + id * 0.91) * 0.16;
+      const escapeSpeed = 61 * clamp(finite(dna.speed, 1), 0.45, 2);
+      const response = 1 - Math.exp(-dt * 7);
+      velocity.vx += (Math.cos(heading) * escapeSpeed - velocity.vx) * response;
+      velocity.vy += (Math.sin(heading) * escapeSpeed - velocity.vy) * response;
+    }
+  }
+
   function regulatePredatorEncounters(c, dt) {
     const globalPrey = c.agent?.size || 0;
     for (const [id, predator] of c.predator?.entries?.() || []) {
+      if (coolingDown(predator, dt)) continue;
       if (!shouldSeek(predator)) {
         clearEncounterHold(predator);
+        predator.encounterChaseClock = 0;
         continue;
       }
-      if (finite(predator.rest) > 0.22 && !predator.encounterSearchHold) continue;
+      if (finite(predator.rest) > 0.22 && !predator.encounterSearchHold) {
+        predator.encounterChaseClock = 0;
+        continue;
+      }
 
       const detection = detectNearest({
         hunterId: id,
@@ -98,17 +184,24 @@ export function installPredatorEncounterEcology(world) {
       peakPredatorDetectionRadius = Math.max(peakPredatorDetectionRadius, detection.radius);
 
       if (detection.preyId != null) {
+        const sameTarget = predator.lastEncounterPreyId === detection.preyId;
+        predator.encounterChaseClock = sameTarget ? finite(predator.encounterChaseClock) + dt : dt;
+        const maxChase = predatorMaxChase(predator);
+        if (predator.encounterChaseClock > maxChase) {
+          predatorChaseAbandonments += 1;
+          beginRecovery(predator, predatorRecovery(predator));
+          predator.lastEncounterPreyId = null;
+          lastEscape = { guild: 'grazer', id: detection.preyId, threatId: id, distance: round(detection.distance), cover: round(detection.cover), tick: world.tick, outcome: 'chase-abandoned' };
+          continue;
+        }
+
         predatorEncounterSteps += 1;
-        if (predator.lastEncounterPreyId !== detection.preyId) {
+        if (!sameTarget) {
           predatorEncounterEvents += 1;
           lastEncounter = {
-            guild: 'predator',
-            hunterId: id,
-            preyId: detection.preyId,
-            distance: round(detection.distance),
-            radius: round(detection.radius),
-            cover: round(detection.cover),
-            tick: world.tick,
+            guild: 'predator', hunterId: id, preyId: detection.preyId,
+            distance: round(detection.distance), radius: round(detection.radius),
+            cover: round(detection.cover), maxChase: round(maxChase), tick: world.tick,
           };
         }
         if (detection.cover > 0.3) coveredPreyDetections += 1;
@@ -117,6 +210,7 @@ export function installPredatorEncounterEcology(world) {
         continue;
       }
 
+      predator.encounterChaseClock = Math.max(0, finite(predator.encounterChaseClock) - dt * 2);
       predatorSearchSteps += 1;
       if (globalPrey > 0) predatorRefugeMisses += 1;
       predator.lastEncounterPreyId = null;
@@ -128,11 +222,16 @@ export function installPredatorEncounterEcology(world) {
   function regulateApexEncounters(c, dt) {
     const globalPrey = c.predator?.size || 0;
     for (const [id, apex] of c.apex?.entries?.() || []) {
+      if (coolingDown(apex, dt)) continue;
       if (!shouldSeek(apex)) {
         clearEncounterHold(apex);
+        apex.encounterChaseClock = 0;
         continue;
       }
-      if (finite(apex.rest) > 0.22 && !apex.encounterSearchHold) continue;
+      if (finite(apex.rest) > 0.22 && !apex.encounterSearchHold) {
+        apex.encounterChaseClock = 0;
+        continue;
+      }
 
       const detection = detectNearest({
         hunterId: id,
@@ -146,17 +245,24 @@ export function installPredatorEncounterEcology(world) {
       peakApexDetectionRadius = Math.max(peakApexDetectionRadius, detection.radius);
 
       if (detection.preyId != null) {
+        const sameTarget = apex.lastEncounterPreyId === detection.preyId;
+        apex.encounterChaseClock = sameTarget ? finite(apex.encounterChaseClock) + dt : dt;
+        const maxChase = apexMaxChase(apex);
+        if (apex.encounterChaseClock > maxChase) {
+          apexChaseAbandonments += 1;
+          beginRecovery(apex, apexRecovery(apex));
+          apex.lastEncounterPreyId = null;
+          lastEscape = { guild: 'predator', id: detection.preyId, threatId: id, distance: round(detection.distance), cover: 0, tick: world.tick, outcome: 'chase-abandoned' };
+          continue;
+        }
+
         apexEncounterSteps += 1;
-        if (apex.lastEncounterPreyId !== detection.preyId) {
+        if (!sameTarget) {
           apexEncounterEvents += 1;
           lastEncounter = {
-            guild: 'apex',
-            hunterId: id,
-            preyId: detection.preyId,
-            distance: round(detection.distance),
-            radius: round(detection.radius),
-            cover: 0,
-            tick: world.tick,
+            guild: 'apex', hunterId: id, preyId: detection.preyId,
+            distance: round(detection.distance), radius: round(detection.radius),
+            cover: 0, maxChase: round(maxChase), tick: world.tick,
           };
         }
         apex.lastEncounterPreyId = detection.preyId;
@@ -164,6 +270,7 @@ export function installPredatorEncounterEcology(world) {
         continue;
       }
 
+      apex.encounterChaseClock = Math.max(0, finite(apex.encounterChaseClock) - dt * 2);
       apexSearchSteps += 1;
       if (globalPrey > 0) apexRefugeMisses += 1;
       apex.lastEncounterPreyId = null;
@@ -202,17 +309,63 @@ export function installPredatorEncounterEcology(world) {
       bestCover = cover;
     }
 
-    return {
-      preyId,
-      distance: bestDistance,
-      radius: bestRadius,
-      cover: bestCover,
-    };
+    return { preyId, distance: bestDistance, radius: bestRadius, cover: bestCover };
+  }
+
+  function nearestThreat(position, group, c, radius, predicate) {
+    let best = null;
+    for (const [id, organism] of group?.entries?.() || []) {
+      if (predicate && !predicate(organism)) continue;
+      const threatPos = c.position?.get(id);
+      if (!threatPos) continue;
+      const distance = Math.hypot(threatPos.x - position.x, threatPos.y - position.y);
+      if (distance > radius || (best && distance >= best.distance)) continue;
+      best = { id, organism, position: threatPos, distance };
+    }
+    return best;
   }
 
   function forageCover(position) {
     const sample = world.forageField?.sample?.(position.x, position.y);
     return clamp(finite(sample?.food), 0, 1);
+  }
+
+  function predatorMaxChase(predator) {
+    const dna = predator.dna || { sense: 1, metabolism: 1 };
+    return clamp(1.65 + finite(dna.sense, 1) * 0.65 - finite(dna.metabolism, 1) * 0.28, 1.45, 2.75);
+  }
+
+  function apexMaxChase(apex) {
+    const dna = apex.dna || { sense: 1, metabolism: 1 };
+    return clamp(2.2 + finite(dna.sense, 1) * 0.75 - finite(dna.metabolism, 1) * 0.24, 2.2, 3.6);
+  }
+
+  function predatorRecovery(predator) {
+    const metabolism = clamp(finite(predator.dna?.metabolism, 1), 0.4, 2.2);
+    return clamp(0.7 + metabolism * 0.32, 0.82, 1.35);
+  }
+
+  function apexRecovery(apex) {
+    const metabolism = clamp(finite(apex.dna?.metabolism, 1), 0.5, 1.6);
+    return clamp(0.9 + metabolism * 0.36, 1.05, 1.5);
+  }
+
+  function coolingDown(hunter, dt) {
+    let recovery = Math.max(0, finite(hunter.encounterRecovery));
+    if (recovery <= 0) return false;
+    recovery = Math.max(0, recovery - dt);
+    hunter.encounterRecovery = recovery;
+    hunter.encounterSearchHold = false;
+    hunter.rest = Math.max(finite(hunter.rest), Math.max(recovery, dt * 2.2));
+    hunter.encounterChaseClock = 0;
+    return true;
+  }
+
+  function beginRecovery(hunter, duration) {
+    hunter.encounterRecovery = Math.max(finite(hunter.encounterRecovery), duration);
+    hunter.encounterSearchHold = false;
+    hunter.rest = Math.max(finite(hunter.rest), duration);
+    hunter.encounterChaseClock = 0;
   }
 
   function shouldSeek(hunter) {
@@ -260,7 +413,7 @@ export function installPredatorEncounterEcology(world) {
       const apexAttempts = apexSearchSteps + apexEncounterSteps;
       return {
         version: MODEL_VERSION,
-        model: 'finite-local-predator-detection-with-vegetated-prey-refugia',
+        model: 'local-encounter-finite-pursuit-and-prey-vigilance',
         predatorBaseDetectionRadius: PREDATOR_BASE_DETECTION_RADIUS,
         apexBaseDetectionRadius: APEX_BASE_DETECTION_RADIUS,
         peakPredatorDetectionRadius: round(peakPredatorDetectionRadius),
@@ -271,15 +424,24 @@ export function installPredatorEncounterEcology(world) {
         apexEncounterSteps,
         predatorEncounterEvents,
         apexEncounterEvents,
+        predatorChaseAbandonments,
+        apexChaseAbandonments,
+        grazerVigilanceSteps,
+        grazerFleeEvents,
+        predatorVigilanceSteps,
+        predatorFleeEvents,
         predatorRefugeMisses,
         apexRefugeMisses,
         predatorEncounterFraction: predatorAttempts ? round(predatorEncounterSteps / predatorAttempts) : 0,
         apexEncounterFraction: apexAttempts ? round(apexEncounterSteps / apexAttempts) : 0,
         coveredPreyDetections,
+        coveredFleeSteps,
         searchEnergySpent: round(searchEnergySpent),
         lastEncounter,
-        refugeMechanism: 'prey-must-fall-within-local-sensory-range; dense-forage-cover-reduces-detection-range',
-        searchCost: 'encounter-searching-pays-the-active-metabolic-cost-hidden-by-the-core-rest-gate',
+        lastEscape,
+        refugeMechanism: 'local detection plus vegetation concealment, active prey escape, finite chase endurance, and recovery',
+        topDownControl: 'apex predators locally encounter and pursue mesopredators, which can also flee',
+        searchCost: 'encounter-searching-pays-the-active-metabolic-cost hidden by the core rest gate',
         populationFloor: null,
         populationCap: null,
       };
@@ -314,11 +476,7 @@ function round(value) {
 
 function emptyApi() {
   return {
-    getSnapshot: () => ({
-      version: MODEL_VERSION,
-      model: 'finite-local-predator-detection-with-vegetated-prey-refugia',
-      disabled: true,
-    }),
+    getSnapshot: () => ({ version: MODEL_VERSION, model: 'local-encounter-finite-pursuit-and-prey-vigilance', disabled: true }),
     destroy() {},
   };
 }
