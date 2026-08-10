@@ -112,7 +112,7 @@ export function createCreatureRenderer({ world, biosphere, runtime, canvas }) {
       );
       const heading = ahead.visible ? Math.atan2(ahead.y - point.y, ahead.x - point.x) : 0;
       const morphology = morphologyFor({ id, species, organism, role });
-      nodes.push(creatureNode(point, heading, morphology, organism, camera.zoom));
+      nodes.push(creatureNode(id, point, heading, morphology, organism, camera.zoom));
     }
 
     svg.replaceChildren(...nodes);
@@ -131,13 +131,14 @@ export function createCreatureRenderer({ world, biosphere, runtime, canvas }) {
 
   function getSnapshot() {
     return {
-      version: 1,
+      version: 2,
       style: 'googrid-inspired-lineage-morphology',
       projection: 'pixi-backing-space-mapped-to-css',
       totalOrganisms: total,
       visibleOrganisms: visible,
       renderedOrganisms: rendered,
       displayCap: null,
+      interactiveEntityIds: true,
       lastRenderAt,
       forms: FORMS.map(([id]) => id),
     };
@@ -193,7 +194,7 @@ export function morphologyFor({ id, species, organism, role }) {
   };
 }
 
-function creatureNode(point, heading, m, organism, zoom) {
+function creatureNode(id, point, heading, m, organism, zoom) {
   const group = document.createElementNS(SVG_NS, 'g');
   const detail = zoom >= 2.1 ? 2 : zoom >= 1.15 ? 1 : 0;
   const base = clamp(4.4 * Math.sqrt(Math.max(1, finite(zoom))), 4.4, 15);
@@ -203,6 +204,8 @@ function creatureNode(point, heading, m, organism, zoom) {
 
   group.setAttribute('transform', `translate(${point.x.toFixed(2)} ${point.y.toFixed(2)}) rotate(${(heading * 180 / Math.PI).toFixed(2)})`);
   group.setAttribute('opacity', alpha.toFixed(3));
+  group.setAttribute('data-entity-id', String(id));
+  group.setAttribute('data-role', m.role);
   group.classList.add('eidolon-creature', `is-${m.role}`, `form-${m.form}`);
   if (m.infected) group.classList.add('is-infected');
 
@@ -328,7 +331,9 @@ function injectStyles() {
   style.id = STYLE_ID;
   style.textContent = `
     .eidolon-creatures{position:absolute;z-index:7;overflow:visible;pointer-events:none;contain:layout style paint}
-    .eidolon-creature{vector-effect:non-scaling-stroke;filter:drop-shadow(0 1px 1px rgb(0 0 0/.45))}
+    .eidolon-creature{vector-effect:non-scaling-stroke;pointer-events:visiblePainted;cursor:pointer;filter:drop-shadow(0 1px 1px rgb(0 0 0/.45))}
+    .eidolon-creature:hover{filter:drop-shadow(0 0 3px rgb(225 255 244/.72)) drop-shadow(0 1px 1px rgb(0 0 0/.45))}
+    .eidolon-creature.is-selected{filter:drop-shadow(0 0 4px rgb(255 245 175/.92)) drop-shadow(0 1px 1px rgb(0 0 0/.5))}
     .eidolon-creature.is-infected{filter:drop-shadow(0 0 2px rgb(213 255 104/.55))}
     .eidolon-creature-form-control select{min-width:86px}
     .eidolon-creature-studio-note{margin:-2px 0 7px;color:#9baba0;font:9px/1.3 system-ui,sans-serif}
