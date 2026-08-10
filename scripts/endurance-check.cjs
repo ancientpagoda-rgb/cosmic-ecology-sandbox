@@ -5,6 +5,8 @@ const { chromium } = require('playwright');
 const baseUrl = process.env.REALITY_BASE_URL || 'http://127.0.0.1:4173/';
 const artifactDir = process.env.REALITY_CHECK_ARTIFACT_DIR || path.join(process.cwd(), 'artifacts', 'reality-check');
 const outputDir = path.join(artifactDir, 'endurance');
+const ENDURANCE_SEED = 'eidolon-endurance-fixed-v1';
+const STORAGE_KEY = `reality-sandbox-living-planet-v2:${ENDURANCE_SEED}`;
 fs.mkdirSync(outputDir, { recursive: true });
 
 (async () => {
@@ -22,9 +24,14 @@ fs.mkdirSync(outputDir, { recursive: true });
   page.on('console', message => consoleEntries.push({ type: message.type(), text: message.text() }));
 
   try {
+    await page.addInitScript(({ storageKey }) => {
+      localStorage.setItem(storageKey, JSON.stringify({ paused: true, timeScale: 1, modules: {} }));
+    }, { storageKey: STORAGE_KEY });
+
     const url = new URL(baseUrl);
     url.searchParams.set('debug', '1');
     url.searchParams.set('endurance', 'fresh-world');
+    url.searchParams.set('seed', ENDURANCE_SEED);
     await page.goto(url.toString(), { waitUntil: 'domcontentloaded', timeout: 120000 });
     await page.waitForFunction(() => Boolean(
       window.realitySandboxDebug?.ready &&
@@ -36,9 +43,9 @@ fs.mkdirSync(outputDir, { recursive: true });
       window.realitySandboxGrazerDigestionPhysiology &&
       window.realitySandboxPredatorEncounterEcology
     ), null, { timeout: 120000 });
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(250);
 
-    const result = await page.evaluate(() => {
+    const result = await page.evaluate(seed => {
       const debug = window.realitySandboxDebug;
       const planet = window.realitySandboxPlanet;
       const c = planet.world.ecs.components;
@@ -94,6 +101,8 @@ fs.mkdirSync(outputDir, { recursive: true });
 
       return {
         model: 'fresh-world-ecological-endurance',
+        seed,
+        deterministicBoot: true,
         requestedSteps: chunks * stepsPerChunk,
         elapsedMs,
         msPerStep: elapsedMs / (chunks * stepsPerChunk),
@@ -144,10 +153,14 @@ fs.mkdirSync(outputDir, { recursive: true });
       function compactLifeHistory(snapshot) {
         return {
           deaths: snapshot.deaths,
+          deathsByGuild: snapshot.deathsByGuild,
           starvationDeaths: snapshot.starvationDeaths,
+          starvationDeathsByGuild: snapshot.starvationDeathsByGuild,
           diseaseDeaths: snapshot.diseaseDeaths,
           senescenceDeaths: snapshot.senescenceDeaths,
           juvenileDeaths: snapshot.juvenileDeaths,
+          fastingToleranceSteps: snapshot.fastingToleranceSteps,
+          starvationDebtAvoided: snapshot.starvationDebtAvoided,
         };
       }
 
@@ -189,6 +202,9 @@ fs.mkdirSync(outputDir, { recursive: true });
           predatorEncounterFraction: snapshot.predatorEncounterFraction,
           apexEncounterFraction: snapshot.apexEncounterFraction,
           searchEnergySpent: snapshot.searchEnergySpent,
+          searchEnergySaved: snapshot.searchEnergySaved,
+          scarcityConservingPredatorSteps: snapshot.scarcityConservingPredatorSteps,
+          scarcityConservingApexSteps: snapshot.scarcityConservingApexSteps,
         };
       }
 
@@ -201,13 +217,15 @@ fs.mkdirSync(outputDir, { recursive: true });
           fullGuts: snapshot.fullGuts,
         };
       }
-    });
+    }, ENDURANCE_SEED);
 
     fs.writeFileSync(path.join(outputDir, 'fresh-world.json'), JSON.stringify(result, null, 2));
     fs.writeFileSync(path.join(outputDir, 'console.json'), JSON.stringify(consoleEntries, null, 2));
     fs.writeFileSync(path.join(outputDir, 'page-errors.json'), JSON.stringify(pageErrors, null, 2));
     await page.screenshot({ path: path.join(outputDir, 'fresh-world-after-5000.png'), fullPage: true });
 
+    assert(result.initial.tick === 0, `Deterministic endurance boot did not start at tick zero (got ${result.initial.tick}).`);
+    assert(result.beforeState.masterSteps === 0, `Deterministic endurance master clock did not start at zero (got ${result.beforeState.masterSteps}).`);
     assert(result.afterState.masterSteps - result.beforeState.masterSteps === result.requestedSteps, 'Endurance master clock did not advance exactly one step per requested step.');
     assert(result.finalClock.tick >= result.beforeClock.tick + result.requestedSteps, 'Planetary clock did not remain monotonic through the endurance run.');
     assert(result.invalid.length === 0, `Non-finite organism state appeared: ${JSON.stringify(result.invalid.slice(0, 5))}`);
@@ -218,12 +236,15 @@ fs.mkdirSync(outputDir, { recursive: true });
 
     console.log(JSON.stringify({
       ok: true,
+      deterministicBoot: result.deterministicBoot,
+      seed: result.seed,
       ecologyStable: result.ecologyStable,
       initial: result.initial,
       final: result.final,
       occupancy: result.occupancy,
       ecosystemEpochs: result.finalClock.ecosystemEpoch - result.beforeClock.ecosystemEpoch,
       warnings: result.warnings,
+      lifeHistory: result.systems.lifeHistory,
       trophic: result.systems.trophic,
       encounter: result.systems.encounter,
       digestion: result.systems.digestion,
