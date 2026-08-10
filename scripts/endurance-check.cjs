@@ -44,7 +44,8 @@ fs.mkdirSync(outputDir, { recursive: true });
       window.realitySandboxPredatorEncounterEcology &&
       window.realitySandboxGrazerFamineMigration &&
       window.realitySandboxCarnivoreReserveMobilization &&
-      window.realitySandboxPredatorRecruitment
+      window.realitySandboxPredatorRecruitment &&
+      window.realitySandboxPredatorDispersal
     ), null, { timeout: 120000 });
     await page.waitForTimeout(250);
 
@@ -137,6 +138,7 @@ fs.mkdirSync(outputDir, { recursive: true });
           migration: window.realitySandboxGrazerFamineMigration?.getSnapshot?.() || null,
           reserve: window.realitySandboxCarnivoreReserveMobilization?.getSnapshot?.() || null,
           recruitment: window.realitySandboxPredatorRecruitment?.getSnapshot?.() || null,
+          dispersal: window.realitySandboxPredatorDispersal?.getSnapshot?.() || null,
         },
       };
 
@@ -293,6 +295,7 @@ fs.mkdirSync(outputDir, { recursive: true });
     assert(result.systems.migration?.model === 'energy-budgeted-opportunistic-famine-dispersal', 'Grazer famine migration did not initialize.');
     assert(result.systems.reserve?.model === 'reversible-meal-surplus-allocation-between-reproduction-and-survival', 'Carnivore reserve mobilization did not initialize.');
     assert(result.systems.recruitment?.model === 'continuous-prey-density-and-meal-reserve-funded-predator-recruitment', 'Predator recruitment did not initialize.');
+    assert(result.systems.dispersal?.model === 'coarse-prey-density-gradient-predator-dispersal', 'Predator dispersal did not initialize.');
     assert(pageErrors.length === 0, `Browser page errors: ${pageErrors.map(error => error.message).join(' | ')}`);
 
     console.log(JSON.stringify({
@@ -312,6 +315,7 @@ fs.mkdirSync(outputDir, { recursive: true });
       migration: result.systems.migration,
       reserve: result.systems.reserve,
       recruitment: result.systems.recruitment,
+      dispersal: result.systems.dispersal,
       msPerStep: result.msPerStep,
     }, null, 2));
   } finally {
