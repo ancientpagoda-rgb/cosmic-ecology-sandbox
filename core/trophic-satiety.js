@@ -1,6 +1,7 @@
 async function start() {
   try {
     await waitForSandboxReady();
+    await waitForBiologyStack();
     const planet = window.realitySandboxPlanet;
     if (!planet?.world?.ecs) throw new Error('Living world did not become available.');
 
@@ -33,6 +34,29 @@ function waitForSandboxReady() {
       };
       poll();
     });
+  });
+}
+
+function waitForBiologyStack() {
+  if (window.realitySandboxCulturalTraditions && window.realitySandboxParentalInvestment) {
+    return Promise.resolve();
+  }
+  return new Promise(resolve => {
+    const started = performance.now();
+    const poll = () => {
+      if (window.realitySandboxCulturalTraditions && window.realitySandboxParentalInvestment) {
+        resolve();
+        return;
+      }
+      // Trophic regulation is still useful if an optional presentation-side
+      // biology layer failed, so do not block the world forever.
+      if (performance.now() - started > 10000) {
+        resolve();
+        return;
+      }
+      setTimeout(poll, 25);
+    };
+    poll();
   });
 }
 
@@ -113,11 +137,6 @@ export function installTrophicSatiety(world) {
       const parent = findOrganism(world.ecs.components, child.parentEntityId);
       if (!parent) continue;
 
-      // The legacy constructors assign predator/apex newborns a full default
-      // energy value. The core then only reduces the parent, which manufactures
-      // energy at birth. Restore the intended partition of the first parent's
-      // post-reproduction energy while preserving independently paid second-
-      // parent investment and juvenile-care transfers.
       const firstParentShare = Math.max(0.04, finite(parent.energy) * childToParentPostSplitRatio);
       const secondParentContribution = Math.max(0, finite(child.secondParentInvestment)) * 0.58;
       const careContribution = Math.max(0, finite(child.parentalCareReceived));
@@ -259,8 +278,9 @@ export function installTrophicSatiety(world) {
         if (reserve > 0.001) grazersWithFoodStored += 1;
       }
       return {
-        version: 5,
-        model: 'conservative-trophic-reproduction-finite-digestion-and-hunger-driven-predation',
+        version: 6,
+        model: 'ordered-conservative-trophic-reproduction-finite-digestion',
+        stackOrder: 'after-parentage-recombination-parental-care-and-culture',
         grazers: c.agent?.size || 0,
         predators: c.predator?.size || 0,
         apex: c.apex?.size || 0,
@@ -307,16 +327,11 @@ export function installTrophicSatiety(world) {
 
 export function predatorHungerThreshold(predator) {
   const metabolism = clamp(finite(predator?.dna?.metabolism, 1), 0.4, 2.2);
-  // A mature predator must be hungry enough to hunt, but a successful prey
-  // capture can create a genuine reproductive surplus. Conservation at birth
-  // prevents that surplus from becoming duplicated energy.
   return clamp(1.78 + metabolism * 0.10, 1.82, 1.98);
 }
 
 export function apexHungerThreshold(apex) {
   const metabolism = clamp(finite(apex?.dna?.metabolism, 1), 0.5, 1.6);
-  // Apex animals wait for a deeper energy deficit before risking another kill;
-  // this prevents one predator meal from automatically triggering an apex boom.
   return clamp(1.56 + metabolism * 0.12, 1.62, 1.75);
 }
 
@@ -354,7 +369,7 @@ function round(value) {
 
 function emptyApi() {
   return {
-    getSnapshot: () => ({ version: 5, model: 'conservative-trophic-reproduction-finite-digestion-and-hunger-driven-predation', disabled: true }),
+    getSnapshot: () => ({ version: 6, model: 'ordered-conservative-trophic-reproduction-finite-digestion', disabled: true }),
     destroy() {},
   };
 }
