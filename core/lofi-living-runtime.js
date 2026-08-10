@@ -743,6 +743,16 @@ export function createLofiLivingRuntime(world, dependencies, options = {}) {
       lastDrawnEntities += 1;
     }
 
+    const chronicleRegion = seasonChronicle?.getRegion?.();
+    if (chronicleRegion) {
+      const region = worldToSphereScreen(chronicleRegion.x / world.width, chronicleRegion.y / world.height, width, height);
+      if (region.visible) {
+        const markerRadius = clamp(6 + camera.zoom * 1.4, 7, 15);
+        graphics.circle(region.x, region.y, markerRadius).stroke({ color: PALETTE.selection, width: 1.5, alpha: 0.78 * region.depth });
+        graphics.circle(region.x, region.y, 2.1).fill({ color: PALETTE.selection, alpha: 0.92 * region.depth });
+      }
+    }
+
     const selected = worldToSphereScreen(selectedPoint.x / world.width, selectedPoint.y / world.height, width, height);
     if (selected.visible) {
       graphics.circle(selected.x, selected.y, clamp(4 + camera.zoom * 1.2, 5, 13)).stroke({ color: PALETTE.selection, width: 2, alpha: 0.92 });
