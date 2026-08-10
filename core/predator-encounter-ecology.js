@@ -1,4 +1,4 @@
-const MODEL_VERSION = 2;
+const MODEL_VERSION = 3;
 const PREDATOR_BASE_DETECTION_RADIUS = 78;
 const APEX_BASE_DETECTION_RADIUS = 150;
 const ENCOUNTER_HOLD_SECONDS = 0.14;
@@ -69,6 +69,11 @@ export function installPredatorEncounterEcology(world) {
   let predatorFleeEvents = 0;
   let coveredFleeSteps = 0;
   let searchEnergySpent = 0;
+  let searchEnergySaved = 0;
+  let scarcityConservingPredatorSteps = 0;
+  let scarcityConservingApexSteps = 0;
+  let lastPredatorSearchActivity = 1;
+  let lastApexSearchActivity = 1;
   let coveredPreyDetections = 0;
   let peakPredatorDetectionRadius = 0;
   let peakApexDetectionRadius = 0;
@@ -160,6 +165,8 @@ export function installPredatorEncounterEcology(world) {
 
   function regulatePredatorEncounters(c, dt) {
     const globalPrey = c.agent?.size || 0;
+    const consumerCount = Math.max(1, c.predator?.size || 0);
+    const preyPerHunter = globalPrey / consumerCount;
     for (const [id, predator] of c.predator?.entries?.() || []) {
       if (coolingDown(predator, dt)) continue;
       if (!shouldSeek(predator)) {
@@ -215,12 +222,18 @@ export function installPredatorEncounterEcology(world) {
       if (globalPrey > 0) predatorRefugeMisses += 1;
       predator.lastEncounterPreyId = null;
       holdSearch(predator, dt);
-      searchEnergySpent += chargePredatorSearch(predator, dt);
+      const search = chargePredatorSearch(predator, dt, preyPerHunter);
+      searchEnergySpent += search.spent;
+      searchEnergySaved += search.saved;
+      lastPredatorSearchActivity = search.activity;
+      if (search.activity < 0.72) scarcityConservingPredatorSteps += 1;
     }
   }
 
   function regulateApexEncounters(c, dt) {
     const globalPrey = c.predator?.size || 0;
+    const consumerCount = Math.max(1, c.apex?.size || 0);
+    const preyPerHunter = globalPrey / consumerCount;
     for (const [id, apex] of c.apex?.entries?.() || []) {
       if (coolingDown(apex, dt)) continue;
       if (!shouldSeek(apex)) {
@@ -275,7 +288,11 @@ export function installPredatorEncounterEcology(world) {
       if (globalPrey > 0) apexRefugeMisses += 1;
       apex.lastEncounterPreyId = null;
       holdSearch(apex, dt);
-      searchEnergySpent += chargeApexSearch(apex, dt);
+      const search = chargeApexSearch(apex, dt, preyPerHunter);
+      searchEnergySpent += search.spent;
+      searchEnergySaved += search.saved;
+      lastApexSearchActivity = search.activity;
+      if (search.activity < 0.72) scarcityConservingApexSteps += 1;
     }
   }
 
@@ -385,24 +402,41 @@ export function installPredatorEncounterEcology(world) {
     hunter.encounterSearchHold = false;
   }
 
-  function chargePredatorSearch(predator, dt) {
+  function chargePredatorSearch(predator, dt, preyPerHunter) {
     const dna = predator.dna || { speed: 1, sense: 1, metabolism: 1 };
     const aggression = clamp(finite(dna.speed, 1) + finite(dna.sense, 1) - finite(dna.metabolism, 1), 0.2, 1.4);
     const activeDrain = 0.03 * finite(world.globals?.metabolism, 1) * 1.9
       * finite(dna.metabolism, 1) * (0.7 + aggression * 0.4);
-    const missing = activeDrain * 0.6 * dt;
-    predator.energy = Math.max(0, finite(predator.energy) - missing);
-    predator.searchEnergySpent = finite(predator.searchEnergySpent) + missing;
-    return missing;
+    const activity = 0.25 + 0.75 * smoothDensityResponse(preyPerHunter, 0.8, 5);
+    const fullMissing = activeDrain * 0.6 * dt;
+    const spent = fullMissing * activity;
+    const saved = Math.max(0, fullMissing - spent);
+    predator.energy = Math.max(0, finite(predator.energy) - spent);
+    predator.searchEnergySpent = finite(predator.searchEnergySpent) + spent;
+    predator.searchEnergySaved = finite(predator.searchEnergySaved) + saved;
+    predator.searchActivityFactor = activity;
+    predator.preyPerSearchConsumer = preyPerHunter;
+    return { spent, saved, activity };
   }
 
-  function chargeApexSearch(apex, dt) {
+  function chargeApexSearch(apex, dt, preyPerHunter) {
     const dna = apex.dna || { metabolism: 1 };
     const activeDrain = 0.03 * finite(world.globals?.metabolism, 1) * 1.1 * finite(dna.metabolism, 1);
-    const missing = activeDrain * 0.7 * dt;
-    apex.energy = Math.max(0, finite(apex.energy) - missing);
-    apex.searchEnergySpent = finite(apex.searchEnergySpent) + missing;
-    return missing;
+    const activity = 0.2 + 0.8 * smoothDensityResponse(preyPerHunter, 0.8, 4);
+    const fullMissing = activeDrain * 0.7 * dt;
+    const spent = fullMissing * activity;
+    const saved = Math.max(0, fullMissing - spent);
+    apex.energy = Math.max(0, finite(apex.energy) - spent);
+    apex.searchEnergySpent = finite(apex.searchEnergySpent) + spent;
+    apex.searchEnergySaved = finite(apex.searchEnergySaved) + saved;
+    apex.searchActivityFactor = activity;
+    apex.preyPerSearchConsumer = preyPerHunter;
+    return { spent, saved, activity };
+  }
+
+  function smoothDensityResponse(value, low, high) {
+    const t = clamp((finite(value) - low) / Math.max(0.001, high - low), 0, 1);
+    return t * t * (3 - 2 * t);
   }
 
   world.step = wrappedStep;
@@ -437,11 +471,17 @@ export function installPredatorEncounterEcology(world) {
         coveredPreyDetections,
         coveredFleeSteps,
         searchEnergySpent: round(searchEnergySpent),
+        searchEnergySaved: round(searchEnergySaved),
+        scarcityConservingPredatorSteps,
+        scarcityConservingApexSteps,
+        lastPredatorSearchActivity: round(lastPredatorSearchActivity),
+        lastApexSearchActivity: round(lastApexSearchActivity),
         lastEncounter,
         lastEscape,
         refugeMechanism: 'local detection plus vegetation concealment, active prey escape, finite chase endurance, and recovery',
         topDownControl: 'apex predators locally encounter and pursue mesopredators, which can also flee',
-        searchCost: 'encounter-searching-pays-the-active-metabolic-cost hidden by the core rest gate',
+        searchMetabolicMode: 'prey-density-dependent-sit-and-wait-to-active-search',
+        searchCost: 'core rest metabolism plus a prey-density-scaled fraction of active-search expenditure',
         populationFloor: null,
         populationCap: null,
       };
