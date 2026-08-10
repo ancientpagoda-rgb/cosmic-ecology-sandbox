@@ -46,6 +46,9 @@ export function installTrophicSatiety(world) {
   let guardedApexSteps = 0;
   let predatorHungerSteps = 0;
   let apexHungerSteps = 0;
+  let grazingAssimilationSteps = 0;
+  let assimilatedEnergy = 0;
+  let reproductiveGrazerSteps = 0;
 
   function wrappedStep(dt) {
     if (!active || !Number.isFinite(dt) || dt <= 0) {
@@ -61,9 +64,6 @@ export function installTrophicSatiety(world) {
       if (predator.hungry) {
         predatorHungerSteps += 1;
       } else {
-        // Core steering and predation already honor `rest`. Keep a tiny rolling
-        // rest token while satiated; metabolism still consumes energy, so the
-        // animal eventually becomes hungry and naturally resumes hunting.
         predator.rest = Math.max(finite(predator.rest), Math.max(0.18, dt * 2.5));
         guardedPredatorSteps += 1;
       }
@@ -82,6 +82,38 @@ export function installTrophicSatiety(world) {
     }
 
     previousStep.call(world, dt);
+    assimilateActiveGrazing(c, dt);
+  }
+
+  function assimilateActiveGrazing(c, dt) {
+    const field = world.forageField;
+    if (!field?.sample) return;
+
+    for (const [id, grazer] of c.agent?.entries?.() || []) {
+      if (finite(grazer.grazeClock) <= 0) continue;
+      const position = c.position?.get(id);
+      if (!position) continue;
+      const availability = field.sample(position.x, position.y);
+      const food = clamp(finite(availability?.food), 0, 1);
+      if (food <= 0.08) continue;
+
+      const metabolism = clamp(finite(grazer.dna?.metabolism, 1), 0.6, 1.6);
+      const efficiency = clamp(1.18 - (metabolism - 1) * 0.22, 0.82, 1.28);
+      const richness = Math.pow(food, 1.15);
+      const gain = dt * richness * 0.18 * efficiency;
+      const before = finite(grazer.energy);
+      grazer.energy = Math.min(2, before + gain);
+      const realized = Math.max(0, grazer.energy - before);
+      if (realized > 0) {
+        grazingAssimilationSteps += 1;
+        assimilatedEnergy += realized;
+        grazer.assimilatedForage = finite(grazer.assimilatedForage) + realized;
+        grazer.lastForageQuality = food;
+      }
+      if (grazer.energy >= finite(world.globals?.reproductionThreshold, 1.6)) {
+        reproductiveGrazerSteps += 1;
+      }
+    }
   }
 
   world.step = wrappedStep;
@@ -90,8 +122,9 @@ export function installTrophicSatiety(world) {
     getSnapshot() {
       const c = world.ecs.components;
       return {
-        version: 1,
-        model: 'metabolic-hunger-driven-predation',
+        version: 2,
+        model: 'resource-assimilation-and-metabolic-hunger-driven-predation',
+        grazers: c.agent?.size || 0,
         predators: c.predator?.size || 0,
         apex: c.apex?.size || 0,
         hungryPredators: countHungry(c.predator, predatorHungerThreshold),
@@ -100,6 +133,10 @@ export function installTrophicSatiety(world) {
         guardedApexSteps,
         predatorHungerSteps,
         apexHungerSteps,
+        grazingAssimilationSteps,
+        assimilatedEnergy: round(assimilatedEnergy),
+        reproductiveGrazerSteps,
+        assimilation: 'only-while-actively-grazing-scaled-by-local-food-and-metabolism',
         populationCap: null,
       };
     },
@@ -144,9 +181,13 @@ function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
+function round(value) {
+  return Math.round(finite(value) * 1000) / 1000;
+}
+
 function emptyApi() {
   return {
-    getSnapshot: () => ({ version: 1, model: 'metabolic-hunger-driven-predation', disabled: true }),
+    getSnapshot: () => ({ version: 2, model: 'resource-assimilation-and-metabolic-hunger-driven-predation', disabled: true }),
     destroy() {},
   };
 }
