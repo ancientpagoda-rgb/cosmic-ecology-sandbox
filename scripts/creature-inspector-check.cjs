@@ -94,13 +94,19 @@ fs.mkdirSync(outputDir, { recursive: true });
     const canvas = await page.locator('#lofiLivingCanvas').boundingBox();
     assert(canvas, 'Living canvas did not have bounds for manual follow override test.');
     const beforeManualCamera = followedMove.camera;
-    await page.mouse.move(canvas.x + canvas.width * 0.5, canvas.y + canvas.height * 0.5);
-    await page.mouse.wheel(0, -220);
+    const grabX = canvas.x + canvas.width * 0.5 + Math.min(canvas.width, canvas.height) * 0.18;
+    const grabY = canvas.y + canvas.height * 0.5 + Math.min(canvas.width, canvas.height) * 0.06;
+    await page.mouse.move(grabX, grabY);
+    await page.mouse.down();
+    await page.mouse.move(grabX + 125, grabY + 42, { steps: 8 });
+    await page.mouse.up();
     await page.waitForTimeout(220);
     const manualOverride = await snapshot(page);
     fs.writeFileSync(path.join(outputDir, 'manual-override.json'), JSON.stringify({ beforeManualCamera, manualOverride }, null, 2));
-    assert(Math.abs(manualOverride.camera.zoom - beforeManualCamera.zoom) > 0.005, `Manual wheel did not actually change globe zoom (${beforeManualCamera.zoom} -> ${manualOverride.camera.zoom}).`);
-    assert(!manualOverride.follow?.following, 'Manual globe zoom did not disengage creature follow mode.');
+    const centerMoved = circularDistance(manualOverride.camera.centerX, beforeManualCamera.centerX) > 0.0001
+      || Math.abs(manualOverride.camera.centerY - beforeManualCamera.centerY) > 0.0001;
+    assert(centerMoved, `Manual globe drag did not actually move camera center (${JSON.stringify(beforeManualCamera)} -> ${JSON.stringify(manualOverride.camera)}).`);
+    assert(!manualOverride.follow?.following, 'Manual globe drag did not disengage creature follow mode.');
     const cancellationCount = (manualOverride.follow?.manualCancellations || 0) + (manualOverride.follow?.cameraMutationCancellations || 0);
     assert(cancellationCount >= 1, 'Follow controller did not record the manual/external camera override.');
 
@@ -153,6 +159,11 @@ async function snapshot(page) {
       camera: window.realitySandboxUnified?.getCamera?.() || null,
     };
   });
+}
+
+function circularDistance(a, b) {
+  const delta = Math.abs(Number(a) - Number(b)) % 1;
+  return Math.min(delta, 1 - delta);
 }
 
 function assert(condition, message) {
