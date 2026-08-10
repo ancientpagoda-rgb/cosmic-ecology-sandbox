@@ -46,12 +46,15 @@ export function installTrophicSatiety(world) {
   let guardedApexSteps = 0;
   let predatorHungerSteps = 0;
   let apexHungerSteps = 0;
-  let grazingAssimilationSteps = 0;
-  let assimilatedEnergy = 0;
-  let reproductiveGrazerSteps = 0;
   let forageTargetLocks = 0;
   let forageTargetsReached = 0;
   let forageTargetsAbandoned = 0;
+  let grazingIntakeSteps = 0;
+  let digestionSteps = 0;
+  let forageIntake = 0;
+  let assimilatedEnergy = 0;
+  let reproductiveGrazerSteps = 0;
+  let peakGutReserve = 0;
 
   function wrappedStep(dt) {
     if (!active || !Number.isFinite(dt) || dt <= 0) {
@@ -87,7 +90,7 @@ export function installTrophicSatiety(world) {
     }
 
     previousStep.call(world, dt);
-    assimilateActiveGrazing(c, dt);
+    processGrazerDigestion(c, dt);
   }
 
   function stabilizeForageTargets(c) {
@@ -107,8 +110,6 @@ export function installTrophicSatiety(world) {
 
       if (distance <= 24) {
         forageTargetsReached += 1;
-        // Once the animal reaches the patch, stop extending the target timer.
-        // The core can graze there and then naturally reconsider its route.
         continue;
       }
 
@@ -133,31 +134,58 @@ export function installTrophicSatiety(world) {
     }
   }
 
-  function assimilateActiveGrazing(c, dt) {
+  function processGrazerDigestion(c, dt) {
     const field = world.forageField;
     if (!field?.sample) return;
 
     for (const [id, grazer] of c.agent?.entries?.() || []) {
-      if (finite(grazer.grazeClock) <= 0) continue;
       const position = c.position?.get(id);
       if (!position) continue;
-      const availability = field.sample(position.x, position.y);
-      const food = clamp(finite(availability?.food), 0, 1);
-      if (food <= 0.08) continue;
 
       const metabolism = clamp(finite(grazer.dna?.metabolism, 1), 0.6, 1.6);
-      const efficiency = clamp(1.18 - (metabolism - 1) * 0.22, 0.82, 1.28);
-      const richness = Math.pow(food, 1.15);
-      const gain = dt * richness * 0.18 * efficiency;
-      const before = finite(grazer.energy);
-      grazer.energy = Math.min(2, before + gain);
-      const realized = Math.max(0, grazer.energy - before);
-      if (realized > 0) {
-        grazingAssimilationSteps += 1;
-        assimilatedEnergy += realized;
-        grazer.assimilatedForage = finite(grazer.assimilatedForage) + realized;
-        grazer.lastForageQuality = food;
+      const gutCapacity = clamp(0.82 - (metabolism - 1) * 0.12, 0.68, 0.90);
+      let reserve = clamp(finite(grazer.gutReserve), 0, gutCapacity);
+
+      if (finite(grazer.grazeClock) > 0) {
+        const food = clamp(finite(field.sample(position.x, position.y)?.food), 0, 1);
+        if (food > 0.08 && reserve < gutCapacity) {
+          // A brief grazing bout gathers food much faster than it can be
+          // metabolically converted. The finite reserve prevents free energy
+          // while allowing digestion to continue after the animal moves on.
+          const intakeEfficiency = clamp(1.08 - (metabolism - 1) * 0.08, 0.94, 1.16);
+          const requested = dt * food * 1.50 * intakeEfficiency;
+          const intake = Math.min(gutCapacity - reserve, requested);
+          if (intake > 0) {
+            reserve += intake;
+            forageIntake += intake;
+            grazingIntakeSteps += 1;
+            grazer.lastForageQuality = food;
+            grazer.totalForageIntake = finite(grazer.totalForageIntake) + intake;
+          }
+        }
       }
+
+      if (reserve > 0 && finite(grazer.energy) < 2) {
+        const assimilationEfficiency = clamp(0.88 - (metabolism - 1) * 0.08, 0.80, 0.94);
+        const digestionRate = clamp(0.047 + (metabolism - 1) * 0.004, 0.043, 0.051);
+        const maxDigest = dt * digestionRate;
+        const energyRoom = Math.max(0, 2 - finite(grazer.energy));
+        const digested = Math.min(reserve, maxDigest, energyRoom / Math.max(0.01, assimilationEfficiency));
+        if (digested > 0) {
+          reserve -= digested;
+          const gained = digested * assimilationEfficiency;
+          grazer.energy = Math.min(2, finite(grazer.energy) + gained);
+          assimilatedEnergy += gained;
+          digestionSteps += 1;
+          grazer.assimilatedForage = finite(grazer.assimilatedForage) + gained;
+        }
+      }
+
+      grazer.gutCapacity = gutCapacity;
+      grazer.gutReserve = clamp(reserve, 0, gutCapacity);
+      grazer.gutFullness = gutCapacity > 0 ? grazer.gutReserve / gutCapacity : 0;
+      peakGutReserve = Math.max(peakGutReserve, grazer.gutReserve);
+
       if (grazer.energy >= finite(world.globals?.reproductionThreshold, 1.6)) {
         reproductiveGrazerSteps += 1;
       }
@@ -169,9 +197,16 @@ export function installTrophicSatiety(world) {
   const api = {
     getSnapshot() {
       const c = world.ecs.components;
+      let gutReserve = 0;
+      let grazersWithFoodStored = 0;
+      for (const grazer of c.agent?.values?.() || []) {
+        const reserve = Math.max(0, finite(grazer.gutReserve));
+        gutReserve += reserve;
+        if (reserve > 0.001) grazersWithFoodStored += 1;
+      }
       return {
-        version: 3,
-        model: 'persistent-resource-pursuit-assimilation-and-hunger-driven-predation',
+        version: 4,
+        model: 'finite-gut-digestion-persistent-forage-pursuit-and-hunger-driven-predation',
         grazers: c.agent?.size || 0,
         predators: c.predator?.size || 0,
         apex: c.apex?.size || 0,
@@ -184,11 +219,16 @@ export function installTrophicSatiety(world) {
         forageTargetLocks,
         forageTargetsReached,
         forageTargetsAbandoned,
-        grazingAssimilationSteps,
+        grazingIntakeSteps,
+        digestionSteps,
+        forageIntake: round(forageIntake),
         assimilatedEnergy: round(assimilatedEnergy),
         reproductiveGrazerSteps,
+        livingGutReserve: round(gutReserve),
+        grazersWithFoodStored,
+        peakGutReserve: round(peakGutReserve),
         forageNavigation: 'valuable-targets-persist-until-reached-or-devalued',
-        assimilation: 'only-while-actively-grazing-scaled-by-local-food-and-metabolism',
+        energyPath: 'local-forage-to-finite-gut-reserve-to-metabolic-energy',
         populationCap: null,
       };
     },
@@ -246,7 +286,7 @@ function round(value) {
 
 function emptyApi() {
   return {
-    getSnapshot: () => ({ version: 3, model: 'persistent-resource-pursuit-assimilation-and-hunger-driven-predation', disabled: true }),
+    getSnapshot: () => ({ version: 4, model: 'finite-gut-digestion-persistent-forage-pursuit-and-hunger-driven-predation', disabled: true }),
     destroy() {},
   };
 }
