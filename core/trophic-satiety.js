@@ -38,22 +38,12 @@ function waitForSandboxReady() {
 }
 
 function waitForBiologyStack() {
-  if (window.realitySandboxCulturalTraditions && window.realitySandboxParentalInvestment) {
-    return Promise.resolve();
-  }
+  if (window.realitySandboxCulturalTraditions && window.realitySandboxParentalInvestment) return Promise.resolve();
   return new Promise(resolve => {
     const started = performance.now();
     const poll = () => {
-      if (window.realitySandboxCulturalTraditions && window.realitySandboxParentalInvestment) {
-        resolve();
-        return;
-      }
-      // Trophic regulation is still useful if an optional presentation-side
-      // biology layer failed, so do not block the world forever.
-      if (performance.now() - started > 10000) {
-        resolve();
-        return;
-      }
+      if (window.realitySandboxCulturalTraditions && window.realitySandboxParentalInvestment) return resolve();
+      if (performance.now() - started > 10000) return resolve();
       setTimeout(poll, 25);
     };
     poll();
@@ -85,6 +75,13 @@ export function installTrophicSatiety(world) {
   let conservedApexBirths = 0;
   let constructorEnergyRemoved = 0;
   let lastConservedBirth = null;
+  let predatorMealsBanked = 0;
+  let apexMealsBanked = 0;
+  let predatorReserveFundings = 0;
+  let apexReserveFundings = 0;
+  let reproductiveReserveCaptured = 0;
+  let reproductiveReserveSpent = 0;
+  let lastReserveEvent = null;
 
   function wrappedStep(dt) {
     if (!active || !Number.isFinite(dt) || dt <= 0) {
@@ -94,14 +91,16 @@ export function installTrophicSatiety(world) {
 
     const c = world.ecs.components;
     stabilizeForageTargets(c);
+    fundCarnivoreReproduction(c);
+    const predatorBefore = snapshotEnergy(c.predator);
+    const apexBefore = snapshotEnergy(c.apex);
 
     for (const predator of c.predator?.values?.() || []) {
       const threshold = predatorHungerThreshold(predator);
       predator.hungerThreshold = threshold;
       predator.hungry = finite(predator.energy, 0) <= threshold;
-      if (predator.hungry) {
-        predatorHungerSteps += 1;
-      } else {
+      if (predator.hungry) predatorHungerSteps += 1;
+      else {
         predator.rest = Math.max(finite(predator.rest), Math.max(0.18, dt * 2.5));
         guardedPredatorSteps += 1;
       }
@@ -111,18 +110,83 @@ export function installTrophicSatiety(world) {
       const threshold = apexHungerThreshold(apex);
       apex.hungerThreshold = threshold;
       apex.hungry = finite(apex.energy, 0) <= threshold;
-      if (apex.hungry) {
-        apexHungerSteps += 1;
-      } else {
+      if (apex.hungry) apexHungerSteps += 1;
+      else {
         apex.rest = Math.max(finite(apex.rest), Math.max(0.22, dt * 3));
         guardedApexSteps += 1;
       }
     }
 
     previousStep.call(world, dt);
+    captureMealSurplus(c.predator, predatorBefore, 'predator', 0.45, 0.38, 1.35);
+    captureMealSurplus(c.apex, apexBefore, 'apex', 0.78, 0.54, 1.90);
     conserveCarnivoreBirthEnergy(c);
     processGrazerDigestion(c, dt);
     rememberCarnivores(c);
+  }
+
+  function fundCarnivoreReproduction(c) {
+    fundGroupReproduction(c.predator, 'predator', 2.8, 10);
+    fundGroupReproduction(c.apex, 'apex', 3.2, 14);
+  }
+
+  function fundGroupReproduction(group, guild, threshold, maturityAge) {
+    for (const [id, organism] of group?.entries?.() || []) {
+      if (finite(organism.age) <= maturityAge) continue;
+      const reserve = Math.max(0, finite(organism.reproductiveReserve));
+      const energy = Math.max(0, finite(organism.energy));
+      if (reserve <= 0.001 || energy >= threshold || energy + reserve < threshold + 0.005) continue;
+
+      const transfer = Math.min(reserve, Math.max(0, threshold + 0.01 - energy));
+      if (transfer <= 0) continue;
+      organism.reproductiveReserve = reserve - transfer;
+      organism.energy = energy + transfer;
+      organism.reproductionFundedFromMeals = true;
+      organism.lastReproductiveReserveSpend = transfer;
+      reproductiveReserveSpent += transfer;
+      if (guild === 'predator') predatorReserveFundings += 1;
+      else apexReserveFundings += 1;
+      lastReserveEvent = {
+        kind: 'reproduction-funded',
+        id,
+        guild,
+        energy: round(organism.energy),
+        reserveSpent: round(transfer),
+        reserveRemaining: round(organism.reproductiveReserve),
+        tick: world.tick,
+      };
+    }
+  }
+
+  function snapshotEnergy(group) {
+    const result = new Map();
+    for (const [id, organism] of group?.entries?.() || []) result.set(id, finite(organism.energy));
+    return result;
+  }
+
+  function captureMealSurplus(group, before, guild, minimumJump, bankAmount, reserveCap) {
+    for (const [id, organism] of group?.entries?.() || []) {
+      if (!before.has(id)) continue;
+      const gain = finite(organism.energy) - finite(before.get(id));
+      if (gain < minimumJump) continue;
+      const banked = Math.min(gain, bankAmount, Math.max(0, reserveCap - finite(organism.reproductiveReserve)));
+      if (banked <= 0) continue;
+      organism.energy = Math.max(0.04, finite(organism.energy) - banked);
+      organism.reproductiveReserve = finite(organism.reproductiveReserve) + banked;
+      organism.mealsBanked = finite(organism.mealsBanked) + 1;
+      reproductiveReserveCaptured += banked;
+      if (guild === 'predator') predatorMealsBanked += 1;
+      else apexMealsBanked += 1;
+      lastReserveEvent = {
+        kind: 'meal-surplus-banked',
+        id,
+        guild,
+        mealGain: round(gain),
+        banked: round(banked),
+        reserve: round(organism.reproductiveReserve),
+        tick: world.tick,
+      };
+    }
   }
 
   function conserveCarnivoreBirthEnergy(c) {
@@ -259,9 +323,7 @@ export function installTrophicSatiety(world) {
       grazer.gutFullness = gutCapacity > 0 ? grazer.gutReserve / gutCapacity : 0;
       peakGutReserve = Math.max(peakGutReserve, grazer.gutReserve);
 
-      if (grazer.energy >= finite(world.globals?.reproductionThreshold, 1.6)) {
-        reproductiveGrazerSteps += 1;
-      }
+      if (grazer.energy >= finite(world.globals?.reproductionThreshold, 1.6)) reproductiveGrazerSteps += 1;
     }
   }
 
@@ -272,14 +334,18 @@ export function installTrophicSatiety(world) {
       const c = world.ecs.components;
       let gutReserve = 0;
       let grazersWithFoodStored = 0;
+      let carnivoreReproductiveReserve = 0;
       for (const grazer of c.agent?.values?.() || []) {
         const reserve = Math.max(0, finite(grazer.gutReserve));
         gutReserve += reserve;
         if (reserve > 0.001) grazersWithFoodStored += 1;
       }
+      for (const group of [c.predator, c.apex]) {
+        for (const organism of group?.values?.() || []) carnivoreReproductiveReserve += Math.max(0, finite(organism.reproductiveReserve));
+      }
       return {
-        version: 6,
-        model: 'ordered-conservative-trophic-reproduction-finite-digestion',
+        version: 7,
+        model: 'meal-funded-conservative-carnivore-reproduction-and-finite-digestion',
         stackOrder: 'after-parentage-recombination-parental-care-and-culture',
         grazers: c.agent?.size || 0,
         predators: c.predator?.size || 0,
@@ -290,6 +356,14 @@ export function installTrophicSatiety(world) {
         guardedApexSteps,
         predatorHungerSteps,
         apexHungerSteps,
+        predatorMealsBanked,
+        apexMealsBanked,
+        predatorReserveFundings,
+        apexReserveFundings,
+        reproductiveReserveCaptured: round(reproductiveReserveCaptured),
+        reproductiveReserveSpent: round(reproductiveReserveSpent),
+        livingCarnivoreReproductiveReserve: round(carnivoreReproductiveReserve),
+        lastReserveEvent,
         conservedPredatorBirths,
         conservedApexBirths,
         constructorEnergyRemoved: round(constructorEnergyRemoved),
@@ -306,7 +380,7 @@ export function installTrophicSatiety(world) {
         grazersWithFoodStored,
         peakGutReserve: round(peakGutReserve),
         forageNavigation: 'valuable-targets-persist-until-reached-or-devalued',
-        energyPath: 'resource-or-prey-energy-is-conserved-through-feeding-and-reproduction',
+        energyPath: 'forage-or-prey-surplus-must-be-stored-before-it-can-fund-offspring',
         populationCap: null,
       };
     },
@@ -327,12 +401,12 @@ export function installTrophicSatiety(world) {
 
 export function predatorHungerThreshold(predator) {
   const metabolism = clamp(finite(predator?.dna?.metabolism, 1), 0.4, 2.2);
-  return clamp(1.78 + metabolism * 0.10, 1.82, 1.98);
+  return clamp(1.48 + metabolism * 0.12, 1.55, 1.72);
 }
 
 export function apexHungerThreshold(apex) {
   const metabolism = clamp(finite(apex?.dna?.metabolism, 1), 0.5, 1.6);
-  return clamp(1.56 + metabolism * 0.12, 1.62, 1.75);
+  return clamp(1.38 + metabolism * 0.12, 1.44, 1.58);
 }
 
 function findOrganism(components, id) {
@@ -369,7 +443,7 @@ function round(value) {
 
 function emptyApi() {
   return {
-    getSnapshot: () => ({ version: 6, model: 'ordered-conservative-trophic-reproduction-finite-digestion', disabled: true }),
+    getSnapshot: () => ({ version: 7, model: 'meal-funded-conservative-carnivore-reproduction-and-finite-digestion', disabled: true }),
     destroy() {},
   };
 }
