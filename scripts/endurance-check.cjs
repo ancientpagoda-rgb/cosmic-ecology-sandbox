@@ -31,7 +31,8 @@ fs.mkdirSync(outputDir, { recursive: true });
       window.realitySandboxPlanet?.world?.ecs &&
       window.realitySandboxMonotonicWorldClock &&
       window.realitySandboxLifeHistorySelection &&
-      window.realitySandboxCulturalTraditions
+      window.realitySandboxCulturalTraditions &&
+      window.realitySandboxTrophicSatiety
     ), null, { timeout: 120000 });
     await page.waitForTimeout(500);
 
@@ -56,6 +57,7 @@ fs.mkdirSync(outputDir, { recursive: true });
           ...counts(),
           clock: window.realitySandboxMonotonicWorldClock.getSnapshot(),
           lifeHistory: compactLifeHistory(window.realitySandboxLifeHistorySelection.getSnapshot()),
+          trophic: compactTrophic(window.realitySandboxTrophicSatiety.getSnapshot()),
         });
       }
 
@@ -110,6 +112,7 @@ fs.mkdirSync(outputDir, { recursive: true });
           parental: window.realitySandboxParentalInvestment?.getSnapshot?.() || null,
           learning: window.realitySandboxSocialLearning?.getSnapshot?.() || null,
           culture: window.realitySandboxCulturalTraditions?.getSnapshot?.() || null,
+          trophic: window.realitySandboxTrophicSatiety?.getSnapshot?.() || null,
         },
       };
 
@@ -141,6 +144,25 @@ fs.mkdirSync(outputDir, { recursive: true });
           juvenileDeaths: snapshot.juvenileDeaths,
         };
       }
+
+      function compactTrophic(snapshot) {
+        return {
+          grazerPerPredator: snapshot.grazerPerPredator,
+          predatorPerApex: snapshot.predatorPerApex,
+          hungryPredators: snapshot.hungryPredators,
+          hungryApex: snapshot.hungryApex,
+          predatorMealsBanked: snapshot.predatorMealsBanked,
+          apexMealsBanked: snapshot.apexMealsBanked,
+          predatorReserveFundings: snapshot.predatorReserveFundings,
+          apexReserveFundings: snapshot.apexReserveFundings,
+          predatorReproductionSuppressed: snapshot.predatorReproductionSuppressed,
+          apexReproductionSuppressed: snapshot.apexReproductionSuppressed,
+          conservedPredatorBirths: snapshot.conservedPredatorBirths,
+          conservedApexBirths: snapshot.conservedApexBirths,
+          constructorEnergyRemoved: snapshot.constructorEnergyRemoved,
+          reproductiveGrazerSteps: snapshot.reproductiveGrazerSteps,
+        };
+      }
     });
 
     fs.writeFileSync(path.join(outputDir, 'fresh-world.json'), JSON.stringify(result, null, 2));
@@ -163,6 +185,7 @@ fs.mkdirSync(outputDir, { recursive: true });
       occupancy: result.occupancy,
       ecosystemEpochs: result.finalClock.ecosystemEpoch - result.beforeClock.ecosystemEpoch,
       warnings: result.warnings,
+      trophic: result.systems.trophic,
       msPerStep: result.msPerStep,
     }, null, 2));
   } finally {
