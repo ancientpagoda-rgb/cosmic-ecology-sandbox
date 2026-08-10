@@ -161,6 +161,13 @@ fs.mkdirSync(artifactDir, { recursive: true });
       seasonAfter.season === seasonBefore.season + 1 && !seasonAfter.releaseAvailable && seasonAfter.region.history.length > 1,
       `Planet Pulse did not preserve a release and seasonal consequence: ${JSON.stringify(seasonAfter)}`,
     );
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => Boolean(window.realitySandboxDebug?.ready && window.realitySandboxPlanet?.seasonChronicle), null, { timeout: 120000 });
+    const returnedSeason = await page.evaluate(() => window.realitySandboxPlanet.seasonChronicle.getPulse());
+    assert(
+      returnedSeason.season === seasonAfter.season && returnedSeason.region.releasedLineageId === seasonAfter.region.releasedLineageId,
+      `Planet Pulse did not remember the returning player: ${JSON.stringify({ seasonAfter, returnedSeason })}`,
+    );
     await page.evaluate(() => window.realitySandboxDebug.pause());
     const clock = await page.evaluate(() => {
       const before = window.realitySandboxUnified.getState();
