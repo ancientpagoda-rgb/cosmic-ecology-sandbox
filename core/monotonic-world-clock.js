@@ -1,8 +1,8 @@
 async function start() {
   try {
-    if (window.realitySandboxReady) await window.realitySandboxReady;
+    await waitForSandboxReady();
     const planet = window.realitySandboxPlanet;
-    if (!planet?.world) return;
+    if (!planet?.world) throw new Error('Living world did not become available.');
 
     const api = installMonotonicWorldClock(planet.world);
     planet.monotonicWorldClock = api;
@@ -13,6 +13,36 @@ async function start() {
   } catch (error) {
     console.warn('[monotonic-world-clock] disabled:', error);
   }
+}
+
+function waitForSandboxReady() {
+  const afterDom = document.readyState === 'loading'
+    ? new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }))
+    : Promise.resolve();
+
+  return afterDom.then(async () => {
+    const ready = window.realitySandboxReady;
+    if (ready && typeof ready.then === 'function') {
+      await ready;
+      return;
+    }
+    if (window.realitySandboxPlanet?.world) return;
+    await new Promise((resolve, reject) => {
+      const started = performance.now();
+      const poll = () => {
+        if (window.realitySandboxPlanet?.world) {
+          resolve();
+          return;
+        }
+        if (performance.now() - started > 10000) {
+          reject(new Error('Timed out waiting for the living world.'));
+          return;
+        }
+        setTimeout(poll, 25);
+      };
+      poll();
+    });
+  });
 }
 
 export function installMonotonicWorldClock(world) {
@@ -55,8 +85,9 @@ export function installMonotonicWorldClock(world) {
   const api = {
     getSnapshot() {
       return {
-        version: 1,
+        version: 2,
         model: 'monotonic-planetary-time-with-ecological-epochs',
+        installed: true,
         tick,
         ecosystemEpoch,
         preventedRewinds,
@@ -82,7 +113,7 @@ function finite(value, fallback = 0) {
 function emptyApi() {
   return {
     getSnapshot: () => ({
-      version: 1,
+      version: 2,
       model: 'monotonic-planetary-time-with-ecological-epochs',
       disabled: true,
     }),
