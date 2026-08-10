@@ -64,6 +64,7 @@ export function createCreatureRenderer({ world, biosphere, runtime, canvas }) {
   let visible = 0;
   let total = 0;
   let lastRenderAt = 0;
+  const mobileProjection = matchMedia('(max-width: 720px), (pointer: coarse)').matches;
 
   function start() {
     if (timer) return;
@@ -83,6 +84,7 @@ export function createCreatureRenderer({ world, biosphere, runtime, canvas }) {
     }
 
     syncBounds(rect);
+    const projectionFrame = getProjectionFrame(canvas, rect, mobileProjection);
 
     const components = world.ecs.components;
     const nodes = [];
@@ -97,16 +99,15 @@ export function createCreatureRenderer({ world, biosphere, runtime, canvas }) {
 
       const species = biosphere.getSpeciesForEntity?.(id) || null;
       const role = components.apex?.has(id) ? 'apex' : components.predator?.has(id) ? 'predator' : 'grazer';
-      const point = project(position.x / world.width, position.y / world.height, rect.width, rect.height, camera);
+      const point = projectToOverlay(position.x / world.width, position.y / world.height, projectionFrame, camera);
       if (!point.visible) continue;
       visible += 1;
 
       const velocity = components.velocity?.get(id) || { vx: 0, vy: 0 };
-      const ahead = project(
+      const ahead = projectToOverlay(
         wrap01((position.x + finite(velocity.vx) * 0.7) / world.width),
         clamp((position.y + finite(velocity.vy) * 0.7) / world.height, 0, 1),
-        rect.width,
-        rect.height,
+        projectionFrame,
         camera,
       );
       const heading = ahead.visible ? Math.atan2(ahead.y - point.y, ahead.x - point.x) : 0;
@@ -120,9 +121,10 @@ export function createCreatureRenderer({ world, biosphere, runtime, canvas }) {
   }
 
   function syncBounds(rect) {
+    const hostRect = host.getBoundingClientRect();
     svg.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
-    svg.style.left = `${canvas.offsetLeft}px`;
-    svg.style.top = `${canvas.offsetTop}px`;
+    svg.style.left = `${rect.left - hostRect.left}px`;
+    svg.style.top = `${rect.top - hostRect.top}px`;
     svg.style.width = `${rect.width}px`;
     svg.style.height = `${rect.height}px`;
   }
@@ -131,6 +133,7 @@ export function createCreatureRenderer({ world, biosphere, runtime, canvas }) {
     return {
       version: 1,
       style: 'googrid-inspired-lineage-morphology',
+      projection: 'pixi-backing-space-mapped-to-css',
       totalOrganisms: total,
       visibleOrganisms: visible,
       renderedOrganisms: rendered,
@@ -333,8 +336,39 @@ function injectStyles() {
   document.head.append(style);
 }
 
-function project(worldX, worldY, width, height, camera) {
-  const radius = Math.min(width, height) * 0.43 * finite(camera.zoom || 1);
+export function getProjectionFrame(canvas, rect, mobile = false) {
+  // Pixi draws the globe in its backing/render coordinate space, then CSS can
+  // stretch that canvas to the current viewport. Project creatures in that
+  // same backing space first and only then map x/y independently into CSS
+  // pixels. This keeps overlays locked even after resize, DPR/resolution
+  // changes, or any non-uniform canvas stretch.
+  return {
+    sourceWidth: Math.max(1, finite(canvas?.width) || finite(rect?.width) || 1),
+    sourceHeight: Math.max(1, finite(canvas?.height) || finite(rect?.height) || 1),
+    cssWidth: Math.max(1, finite(rect?.width) || 1),
+    cssHeight: Math.max(1, finite(rect?.height) || 1),
+    radiusScale: mobile ? 0.42 : 0.43,
+  };
+}
+
+export function projectToOverlay(worldX, worldY, frame, camera) {
+  const source = project(
+    worldX,
+    worldY,
+    frame.sourceWidth,
+    frame.sourceHeight,
+    camera,
+    frame.radiusScale,
+  );
+  return {
+    ...source,
+    x: source.x / frame.sourceWidth * frame.cssWidth,
+    y: source.y / frame.sourceHeight * frame.cssHeight,
+  };
+}
+
+function project(worldX, worldY, width, height, camera, radiusScale = 0.43) {
+  const radius = Math.min(width, height) * radiusScale * finite(camera.zoom || 1);
   const cx = width * 0.5;
   const cy = height * 0.5;
   const lon = (worldX - 0.5) * Math.PI * 2;
