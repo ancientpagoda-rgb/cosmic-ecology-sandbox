@@ -1,4 +1,6 @@
 const CONTROL_ID = 'eidolon-pause-toggle';
+const STEP_ID = 'eidolon-step-once';
+const GROUP_ID = 'eidolon-time-controls';
 const STYLE_ID = 'eidolon-pause-control-style';
 
 async function start() {
@@ -29,13 +31,23 @@ function waitForDebugApi() {
 }
 
 function installPauseControl() {
-  if (document.getElementById(CONTROL_ID)) return;
+  if (document.getElementById(GROUP_ID)) return;
   const debug = window.realitySandboxDebug;
-  if (!debug || typeof debug.pause !== 'function' || typeof debug.resume !== 'function' || typeof debug.isPaused !== 'function') {
-    throw new Error('Simulation pause API is incomplete.');
+  if (
+    !debug ||
+    typeof debug.pause !== 'function' ||
+    typeof debug.resume !== 'function' ||
+    typeof debug.isPaused !== 'function' ||
+    typeof debug.advance !== 'function'
+  ) {
+    throw new Error('Simulation pause/step API is incomplete.');
   }
 
   installStyles();
+
+  const group = document.createElement('div');
+  group.id = GROUP_ID;
+  group.className = 'eidolon-time-controls';
 
   const button = document.createElement('button');
   button.id = CONTROL_ID;
@@ -43,6 +55,14 @@ function installPauseControl() {
   button.className = 'eidolon-pause-control';
   button.setAttribute('aria-live', 'polite');
   button.title = 'Pause or resume the simulation (P)';
+
+  const stepButton = document.createElement('button');
+  stepButton.id = STEP_ID;
+  stepButton.type = 'button';
+  stepButton.className = 'eidolon-step-control';
+  stepButton.setAttribute('aria-label', 'Advance one simulation step');
+  stepButton.title = 'Advance one simulation step while paused (.)';
+  stepButton.innerHTML = '<span aria-hidden="true">▸|</span><span>Step</span>';
 
   const update = () => {
     const paused = Boolean(debug.isPaused());
@@ -52,44 +72,75 @@ function installPauseControl() {
     button.innerHTML = paused
       ? '<span class="eidolon-pause-icon" aria-hidden="true">▶</span><span>Resume</span>'
       : '<span class="eidolon-pause-icon" aria-hidden="true">Ⅱ</span><span>Pause</span>';
+    stepButton.hidden = !paused;
+    group.dataset.paused = paused ? 'true' : 'false';
+  };
+
+  const dispatchState = () => {
+    window.dispatchEvent(new CustomEvent('eidolon-pause-state-changed', {
+      detail: { paused: Boolean(debug.isPaused()) },
+    }));
   };
 
   const toggle = () => {
     if (debug.isPaused()) debug.resume();
     else debug.pause();
     update();
-    window.dispatchEvent(new CustomEvent('eidolon-pause-state-changed', {
-      detail: { paused: Boolean(debug.isPaused()) },
+    dispatchState();
+  };
+
+  const stepOnce = () => {
+    if (!debug.isPaused()) return false;
+    const before = Number(window.realitySandboxPlanet?.world?.tick);
+    debug.advance(1);
+    const after = Number(window.realitySandboxPlanet?.world?.tick);
+    update();
+    window.dispatchEvent(new CustomEvent('eidolon-simulation-stepped', {
+      detail: { beforeTick: before, afterTick: after, steps: 1 },
     }));
+    return Number.isFinite(before) && Number.isFinite(after) && after > before;
   };
 
   button.addEventListener('click', toggle);
+  stepButton.addEventListener('click', stepOnce);
   window.addEventListener('keydown', event => {
     if (event.defaultPrevented || event.repeat || event.altKey || event.ctrlKey || event.metaKey) return;
-    if (String(event.key).toLowerCase() !== 'p') return;
     const target = event.target;
     if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
-    event.preventDefault();
-    toggle();
+
+    const key = String(event.key).toLowerCase();
+    if (key === 'p') {
+      event.preventDefault();
+      toggle();
+      return;
+    }
+    if (key === '.' && debug.isPaused()) {
+      event.preventDefault();
+      stepOnce();
+    }
   });
 
-  document.body.appendChild(button);
+  group.append(button, stepButton);
+  document.body.append(group);
   update();
 
   const syncTimer = window.setInterval(update, 250);
   window.addEventListener('pagehide', () => window.clearInterval(syncTimer), { once: true });
 
   const api = {
-    pause() { debug.pause(); update(); },
-    resume() { debug.resume(); update(); },
+    pause() { debug.pause(); update(); dispatchState(); },
+    resume() { debug.resume(); update(); dispatchState(); },
     toggle,
+    step: stepOnce,
     isPaused: () => Boolean(debug.isPaused()),
     getSnapshot: () => ({
-      version: 1,
-      model: 'master-simulation-pause-control',
+      version: 2,
+      model: 'master-simulation-pause-and-single-step-control',
       paused: Boolean(debug.isPaused()),
       hotkey: 'P',
+      stepHotkey: '.',
       controlId: CONTROL_ID,
+      stepControlId: STEP_ID,
     }),
   };
   window.realitySandboxPauseControl = api;
@@ -102,13 +153,21 @@ function installStyles() {
   const style = document.createElement('style');
   style.id = STYLE_ID;
   style.textContent = `
-    .eidolon-pause-control {
+    .eidolon-time-controls {
       position: fixed;
       left: max(14px, env(safe-area-inset-left));
       bottom: max(14px, env(safe-area-inset-bottom));
       z-index: 10040;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      pointer-events: none;
+    }
+    .eidolon-pause-control,
+    .eidolon-step-control {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 7px;
       min-height: 38px;
       padding: 8px 12px;
@@ -125,19 +184,26 @@ function installStyles() {
       user-select: none;
       -webkit-tap-highlight-color: transparent;
       touch-action: manipulation;
+      pointer-events: auto;
     }
-    .eidolon-pause-control:hover {
+    .eidolon-pause-control:hover,
+    .eidolon-step-control:hover {
       border-color: rgba(190, 255, 225, 0.42);
       background: rgba(8, 28, 23, 0.9);
     }
-    .eidolon-pause-control:focus-visible {
+    .eidolon-pause-control:focus-visible,
+    .eidolon-step-control:focus-visible {
       outline: 2px solid rgba(185, 255, 225, 0.88);
       outline-offset: 3px;
     }
-    .eidolon-pause-control[data-paused="true"] {
+    .eidolon-pause-control[data-paused="true"],
+    .eidolon-step-control {
       background: rgba(30, 22, 8, 0.88);
       border-color: rgba(255, 222, 155, 0.42);
       color: rgba(255, 245, 220, 0.98);
+    }
+    .eidolon-step-control[hidden] {
+      display: none !important;
     }
     .eidolon-pause-icon {
       display: inline-grid;
@@ -147,7 +213,13 @@ function installStyles() {
       line-height: 1;
     }
     @media (max-width: 720px), (pointer: coarse) {
-      .eidolon-pause-control {
+      .eidolon-time-controls {
+        left: max(8px, env(safe-area-inset-left));
+        bottom: max(8px, env(safe-area-inset-bottom));
+        gap: 6px;
+      }
+      .eidolon-pause-control,
+      .eidolon-step-control {
         min-height: 44px;
         padding: 10px 14px;
         font-size: 13px;
