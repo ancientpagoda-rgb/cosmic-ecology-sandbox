@@ -8,6 +8,9 @@ const TRAIT_LIMITS = Object.freeze({
   thermal: [0.08, 0.92],
 });
 const GUILDS = new Set(['grazer', 'predator', 'apex']);
+const VISUAL_FORMS = new Set(['beetle', 'crawler', 'hopper', 'kite', 'glider', 'serpent', 'tripod', 'orb', 'crown']);
+const SPRITE_SIZE = 12;
+const SPRITE_PIXELS = SPRITE_SIZE * SPRITE_SIZE;
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const finite = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -113,7 +116,19 @@ function normalizeTraits(input = {}) {
 function normalizeVisual(input = {}) {
   const candidate = typeof input.color === 'string' ? input.color.replace('#', '') : Number(input.color).toString(16);
   const color = /^[0-9a-f]{6}$/i.test(candidate) ? `#${candidate.toLowerCase()}` : '#69d8ff';
-  return { color, form: ['kite', 'beetle', 'crown'].includes(input.form) ? input.form : 'kite' };
+  const form = VISUAL_FORMS.has(input.form) ? input.form : 'kite';
+  const sprite = normalizeSprite(input.sprite);
+  return sprite ? { color, form, sprite } : { color, form };
+}
+
+function normalizeSprite(input) {
+  if (!input || typeof input !== 'object') return null;
+  const width = Math.round(finite(input.width, SPRITE_SIZE));
+  const height = Math.round(finite(input.height, SPRITE_SIZE));
+  if (width !== SPRITE_SIZE || height !== SPRITE_SIZE) return null;
+  const pixels = String(input.pixels || '').replace(/[^012]/g, '').slice(0, SPRITE_PIXELS);
+  if (pixels.length !== SPRITE_PIXELS || !/[12]/.test(pixels)) return null;
+  return { width: SPRITE_SIZE, height: SPRITE_SIZE, pixels };
 }
 
 function cleanName(value) {
