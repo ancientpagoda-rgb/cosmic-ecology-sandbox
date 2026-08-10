@@ -178,6 +178,12 @@ fs.mkdirSync(outputDir, { recursive: true });
           apexEncounterSteps: snapshot.apexEncounterSteps,
           predatorEncounterEvents: snapshot.predatorEncounterEvents,
           apexEncounterEvents: snapshot.apexEncounterEvents,
+          predatorChaseAbandonments: snapshot.predatorChaseAbandonments,
+          apexChaseAbandonments: snapshot.apexChaseAbandonments,
+          grazerVigilanceSteps: snapshot.grazerVigilanceSteps,
+          grazerFleeEvents: snapshot.grazerFleeEvents,
+          predatorVigilanceSteps: snapshot.predatorVigilanceSteps,
+          predatorFleeEvents: snapshot.predatorFleeEvents,
           predatorRefugeMisses: snapshot.predatorRefugeMisses,
           apexRefugeMisses: snapshot.apexRefugeMisses,
           predatorEncounterFraction: snapshot.predatorEncounterFraction,
@@ -207,7 +213,7 @@ fs.mkdirSync(outputDir, { recursive: true });
     assert(result.invalid.length === 0, `Non-finite organism state appeared: ${JSON.stringify(result.invalid.slice(0, 5))}`);
     assert(result.final.living > 0, 'No living organisms remain at the end of the fresh-world endurance run.');
     assert(result.diagnostics.ok, `Endurance diagnostics failed: ${(result.diagnostics.failures || []).join(', ')}`);
-    assert(result.systems.encounter?.model === 'finite-local-predator-detection-with-vegetated-prey-refugia', 'Predator encounter ecology did not initialize.');
+    assert(result.systems.encounter?.model === 'local-encounter-finite-pursuit-and-prey-vigilance', 'Predator pursuit ecology did not initialize.');
     assert(pageErrors.length === 0, `Browser page errors: ${pageErrors.map(error => error.message).join(' | ')}`);
 
     console.log(JSON.stringify({
