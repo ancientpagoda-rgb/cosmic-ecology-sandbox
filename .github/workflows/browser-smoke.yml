@@ -13,14 +13,30 @@ permissions:
 jobs:
   browser-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Publish pending browser status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: 'pending',
+              context: 'browser/unified-runtime',
+              description: 'Living-planet browser diagnostics are running',
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            });
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - name: Install project dependencies
         run: npm ci
@@ -29,9 +45,7 @@ jobs:
         run: npm run audit:integration
 
       - name: Install Playwright Chromium
-        run: |
-          npm install --no-save --package-lock=false playwright@1.62.0
-          npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Build production site
         run: npm run build
@@ -51,21 +65,23 @@ jobs:
 
       - name: Verify iPhone sphere aspect
         id: iphone_sphere_test
+        continue-on-error: true
         env:
           REALITY_BASE_URL: http://127.0.0.1:4173/
           REALITY_IPHONE_ARTIFACT_DIR: artifacts/iphone-sphere-smoke
         run: node scripts/iphone-sphere-smoke.cjs
 
-      - name: Run unified runtime diagnostics
+      - name: Run current unified reality diagnostics
         id: unified_test
+        continue-on-error: true
         env:
           REALITY_BASE_URL: http://127.0.0.1:4173/
-          REALITY_UNIFIED_ARTIFACT_DIR: artifacts/unified-smoke
-          REALITY_REQUIRE_REBOUND: "0"
-        run: node scripts/unified-smoke.cjs
+          REALITY_CHECK_ARTIFACT_DIR: artifacts/unified-smoke
+        run: node scripts/reality-check.cjs
 
       - name: Verify Pixi simulation root
         id: root_renderer_test
+        continue-on-error: true
         env:
           REALITY_BASE_URL: http://127.0.0.1:4173/
           REALITY_ROOT_RENDERER_ARTIFACT_DIR: artifacts/root-renderer-smoke
@@ -73,6 +89,7 @@ jobs:
 
       - name: Enforce startup and Surface Mode budgets
         id: performance_test
+        continue-on-error: true
         env:
           REALITY_BASE_URL: http://127.0.0.1:4173/
           REALITY_PERFORMANCE_ARTIFACT_DIR: artifacts/performance-smoke
@@ -80,6 +97,7 @@ jobs:
 
       - name: Enter, move through, and exit surface mode
         id: surface_mode_test
+        continue-on-error: true
         env:
           REALITY_BASE_URL: http://127.0.0.1:4173/
           REALITY_SURFACE_MODE_ARTIFACT_DIR: artifacts/surface-mode-smoke
@@ -118,5 +136,6 @@ jobs:
               state: ok ? 'success' : 'failure',
               context: 'browser/unified-runtime',
               description: ok ? 'Living planet, presentation layers, surface mode, and iPhone checks passed' : 'A living-planet browser or visual check failed',
-              target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions`,
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             });
+            if (!ok) core.setFailed('One or more browser diagnostics failed.');
