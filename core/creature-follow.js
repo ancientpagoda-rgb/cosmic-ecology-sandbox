@@ -49,7 +49,8 @@ export function installCreatureFollow({ planet, runtime, inspector }) {
   const panel = document.getElementById('eidolon-creature-inspector');
   const header = panel?.querySelector('.eidolon-creature-inspector__header');
   const close = panel?.querySelector('.eidolon-creature-inspector__close');
-  if (!panel || !header || !close) throw new Error('Creature inspector panel is unavailable.');
+  const canvas = document.getElementById('lofiLivingCanvas');
+  if (!panel || !header || !close || !canvas) throw new Error('Creature follow interface is unavailable.');
 
   const button = document.createElement('button');
   button.id = CONTROL_ID;
@@ -60,7 +61,6 @@ export function installCreatureFollow({ planet, runtime, inspector }) {
   button.title = 'Keep the camera centered on this creature';
   header.insertBefore(button, close);
 
-  const canvas = document.getElementById('lofiLivingCanvas');
   let active = true;
   let following = false;
   let followedEntityId = null;
@@ -71,7 +71,9 @@ export function installCreatureFollow({ planet, runtime, inspector }) {
   let lastCamera = null;
 
   function currentSelectedId() {
-    const value = Number(inspector.getSnapshot?.().selectedEntityId);
+    const raw = inspector.getSnapshot?.().selectedEntityId;
+    if (raw == null) return null;
+    const value = Number(raw);
     return Number.isFinite(value) ? value : null;
   }
 
@@ -102,10 +104,9 @@ export function installCreatureFollow({ planet, runtime, inspector }) {
 
   function findPosition(id) {
     if (id == null) return null;
-    const position = planet.world.ecs.components.position?.get(id);
-    const living = planet.world.ecs.components.agent?.has(id)
-      || planet.world.ecs.components.predator?.has(id)
-      || planet.world.ecs.components.apex?.has(id);
+    const c = planet.world.ecs.components;
+    const position = c.position?.get(id);
+    const living = c.agent?.has(id) || c.predator?.has(id) || c.apex?.has(id);
     return living && position ? position : null;
   }
 
@@ -134,10 +135,20 @@ export function installCreatureFollow({ planet, runtime, inspector }) {
     return true;
   }
 
-  function cancelForManualInteraction() {
-    if (!following) return;
+  function cancelForManualInteraction(event) {
+    if (!following || !eventInsideGlobe(event)) return;
     manualCancellations += 1;
     setFollowing(false, 'manual-camera');
+  }
+
+  function eventInsideGlobe(event) {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('#eidolon-creature-inspector, #eidolon-time-controls, .eidolon-creature')) return false;
+    const x = Number(event.clientX);
+    const y = Number(event.clientY);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return target === canvas;
+    const rect = canvas.getBoundingClientRect();
+    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
   }
 
   function onSelected() {
@@ -153,8 +164,8 @@ export function installCreatureFollow({ planet, runtime, inspector }) {
   button.addEventListener('click', toggle);
   window.addEventListener('eidolon-creature-selected', onSelected);
   window.addEventListener('eidolon-creature-selection-cleared', onCleared);
-  canvas?.addEventListener('pointerdown', cancelForManualInteraction, true);
-  canvas?.addEventListener('wheel', cancelForManualInteraction, true);
+  document.addEventListener('pointerdown', cancelForManualInteraction, true);
+  document.addEventListener('wheel', cancelForManualInteraction, { capture: true, passive: true });
 
   const timer = window.setInterval(() => {
     if (!active) return;
@@ -165,8 +176,8 @@ export function installCreatureFollow({ planet, runtime, inspector }) {
 
   function getSnapshot() {
     return {
-      version: 1,
-      model: 'selected-ecs-entity-camera-follow-with-manual-override',
+      version: 2,
+      model: 'selected-ecs-entity-camera-follow-with-coordinate-manual-override',
       following,
       followedEntityId,
       followUpdates,
@@ -185,8 +196,8 @@ export function installCreatureFollow({ planet, runtime, inspector }) {
     button.removeEventListener('click', toggle);
     window.removeEventListener('eidolon-creature-selected', onSelected);
     window.removeEventListener('eidolon-creature-selection-cleared', onCleared);
-    canvas?.removeEventListener('pointerdown', cancelForManualInteraction, true);
-    canvas?.removeEventListener('wheel', cancelForManualInteraction, true);
+    document.removeEventListener('pointerdown', cancelForManualInteraction, true);
+    document.removeEventListener('wheel', cancelForManualInteraction, true);
     button.remove();
   }
 
