@@ -1,4 +1,5 @@
 import { createEidolonKernelAdapter } from './eidolon-kernel-adapter.js';
+import { installEcologicalTransactions } from './ecological-transactions.js';
 import { installEcologicalEnergyLedger } from './ecological-energy-ledger.js';
 import { installEcologicalNutrientCycle } from './ecological-nutrient-cycle.js';
 import { installRealityObserverBridge } from './reality-observer-bridge.js';
@@ -32,19 +33,26 @@ async function installRealityKernel() {
   if (!planet?.seasonalResources?.sample) throw new Error('Authoritative Eidolon resource field is unavailable after startup.');
   if (!runtime?.getCamera) throw new Error('Authoritative Eidolon presentation runtime is unavailable after startup.');
 
-  // Nutrients wrap the seasonal field first so soil availability can constrain
-  // the landscape productivity seen by the energy ledger. The nutrient cycle
-  // then attaches outside the energy wrapper, preserving one authoritative
-  // world.step while observing the energy ledger's spatial flow counters.
+  // Install exactly one mutation-capture layer around the authoritative world.
+  // Ledgers register transaction handlers and fixed-grid before-step hooks;
+  // neither ledger wraps world.step or scans the organism population anymore.
+  const ecologicalTransactions = installEcologicalTransactions({ world: planet.world });
+  planet.ecologicalTransactions = ecologicalTransactions;
+
+  // Nutrients wrap the seasonal field first, then energy wraps that result.
+  // Soil availability can therefore constrain the productivity seen by the
+  // energy ledger while both still share one transaction stream and clock.
   const ecologicalNutrients = installEcologicalNutrientCycle({
     world: planet.world,
     resourceField: planet.seasonalResources,
+    transactions: ecologicalTransactions,
   });
   planet.ecologicalNutrients = ecologicalNutrients;
 
   const ecologicalEnergy = installEcologicalEnergyLedger({
     world: planet.world,
     resourceField: planet.seasonalResources,
+    transactions: ecologicalTransactions,
   });
   planet.ecologicalEnergy = ecologicalEnergy;
   ecologicalNutrients.attachEnergyLedger(ecologicalEnergy);
@@ -56,9 +64,10 @@ async function installRealityKernel() {
   });
 
   const api = {
-    version: 4,
-    mode: 'observer-coupled-kernel-with-writable-energy-and-nutrients',
+    version: 5,
+    mode: 'observer-coupled-kernel-with-event-driven-ecology',
     kernel: adapter.kernel,
+    ecologicalTransactions,
     ecologicalEnergy,
     ecologicalNutrients,
     requestAt(options = {}) {
@@ -80,6 +89,7 @@ async function installRealityKernel() {
     snapshot: () => ({
       ...adapter.snapshot(),
       observation: api.observation?.snapshot?.() || null,
+      ecologicalTransactions: ecologicalTransactions.snapshot(),
       ecologicalEnergy: ecologicalEnergy.snapshot(),
       ecologicalNutrients: ecologicalNutrients.snapshot(),
     }),
@@ -100,6 +110,7 @@ async function installRealityKernel() {
       mode: api.mode,
       scales: api.getScales(),
       observation: api.observation.snapshot(),
+      ecologicalTransactions: api.ecologicalTransactions.snapshot(),
       ecologicalEnergy: api.ecologicalEnergy.snapshot(),
       ecologicalNutrients: api.ecologicalNutrients.snapshot(),
     },
