@@ -1,4 +1,5 @@
 import { createEidolonKernelAdapter } from './eidolon-kernel-adapter.js';
+import { installEcologicalEnergyLedger } from './ecological-energy-ledger.js';
 import { installRealityObserverBridge } from './reality-observer-bridge.js';
 
 function waitForAuthoritativeRuntime(timeoutMs = 30000) {
@@ -27,7 +28,14 @@ async function installRealityKernel() {
   const planet = window.realitySandboxPlanet;
   const runtime = window.realitySandboxUnified;
   if (!planet?.world) throw new Error('Authoritative Eidolon world is unavailable after startup.');
+  if (!planet?.seasonalResources?.sample) throw new Error('Authoritative Eidolon resource field is unavailable after startup.');
   if (!runtime?.getCamera) throw new Error('Authoritative Eidolon presentation runtime is unavailable after startup.');
+
+  const ecologicalEnergy = installEcologicalEnergyLedger({
+    world: planet.world,
+    resourceField: planet.seasonalResources,
+  });
+  planet.ecologicalEnergy = ecologicalEnergy;
 
   const adapter = createEidolonKernelAdapter({
     world: planet.world,
@@ -36,14 +44,27 @@ async function installRealityKernel() {
   });
 
   const api = {
-    version: 2,
-    mode: 'read-only-observer-coupled-adapter',
+    version: 3,
+    mode: 'observer-coupled-kernel-with-writable-ecology',
     kernel: adapter.kernel,
-    requestAt: options => adapter.requestAt(options),
+    ecologicalEnergy,
+    requestAt(options = {}) {
+      const result = adapter.requestAt(options);
+      return {
+        ...result,
+        ecologicalEnergy: Number.isFinite(options.x) && Number.isFinite(options.y)
+          ? ecologicalEnergy.sample(options.x, options.y).ecologicalEnergy
+          : null,
+      };
+    },
     releaseObserver: observerId => adapter.releaseObserver(observerId),
     refresh: () => adapter.refresh(),
     locate: (x, y) => adapter.locate(x, y),
-    snapshot: () => ({ ...adapter.snapshot(), observation: api.observation?.snapshot?.() || null }),
+    snapshot: () => ({
+      ...adapter.snapshot(),
+      observation: api.observation?.snapshot?.() || null,
+      ecologicalEnergy: ecologicalEnergy.snapshot(),
+    }),
     getScales: () => adapter.getScales(),
     observation: null,
   };
@@ -61,6 +82,7 @@ async function installRealityKernel() {
       mode: api.mode,
       scales: api.getScales(),
       observation: api.observation.snapshot(),
+      ecologicalEnergy: api.ecologicalEnergy.snapshot(),
     },
   }));
   return api;
