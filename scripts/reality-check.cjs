@@ -6,7 +6,7 @@ const baseUrl = process.env.REALITY_BASE_URL || 'http://127.0.0.1:4173/';
 const artifactDir = process.env.REALITY_CHECK_ARTIFACT_DIR || path.join(process.cwd(), 'artifacts', 'reality-check');
 fs.mkdirSync(artifactDir, { recursive: true });
 
-const approvedPresentationCanvases = new Set(['weatherPresentationCanvas', 'surfaceDetailCanvas', 'surfaceModeCanvas']);
+const approvedPresentationCanvases = new Set(['weatherPresentationCanvas', 'surfaceDetailCanvas', 'surfaceModeCanvas', 'lofiLivingCanvas']);
 const requiredSystems = [
   ['causalBirthLineage', 'realitySandboxCausalBirthLineage'],
   ['reproductiveIsolation', 'realitySandboxReproductiveIsolation'],
@@ -63,9 +63,12 @@ async function runProfile(browser, name, viewport, exerciseSimulation, isMobile 
       window.realitySandboxDebug?.ready &&
       window.realitySandboxUnified &&
       window.realitySandboxPlanet?.world?.ecs &&
-      window.realitySandboxCulturalTraditions
+      window.realitySandboxCulturalTraditions &&
+      window.realitySandboxWorldView?.model === 'single-three-scene-single-camera-spherical-lod' &&
+      window.realitySandboxSingleSphericalRenderer?.installed &&
+      document.getElementById('eidolonSingleWorldCanvas')
     ), null, { timeout: 120000 });
-    await page.waitForTimeout(700);
+    await page.waitForTimeout(450);
 
     const initial = await page.evaluate(({ requiredSystems, approved }) => {
       const visible = element => {
@@ -94,6 +97,7 @@ async function runProfile(browser, name, viewport, exerciseSimulation, isMobile 
         buildVersion: buildMatch ? Number(buildMatch[1]) : null,
         diagnostics: window.realitySandboxDebug.diagnostics(),
         camera: window.realitySandboxUnified.getCamera(),
+        worldView: window.realitySandboxWorldView.getSnapshot(),
         snapshot: window.realitySandboxUnified.getSnapshot(),
         visibleCanvases,
         visibleSimulationCanvases,
@@ -117,9 +121,12 @@ async function runProfile(browser, name, viewport, exerciseSimulation, isMobile 
 
     writeJson(path.join(name, 'initial.json'), initial);
     assert(initial.title.includes('Procedural Living Planet'), `${name}: unexpected title ${initial.title}`);
-    assert(initial.buildVersion >= 43, `${name}: build marker is stale or missing: ${initial.buildText}`);
+    assert(initial.buildVersion >= 76, `${name}: build marker is stale or missing: ${initial.buildText}`);
     assert(initial.diagnostics?.ok, `${name}: initial diagnostics failed: ${(initial.diagnostics?.failures || []).join(', ')}`);
-    assert(initial.visibleSimulationCanvases.length === 1 && initial.visibleSimulationCanvases[0].id === 'lofiLivingCanvas', `${name}: expected one visible simulation canvas: ${JSON.stringify(initial.visibleCanvases)}`);
+    assert(initial.worldView?.oneScene && initial.worldView?.oneCamera, `${name}: true one-scene/one-camera world view did not initialize`);
+    assert(initial.worldView?.rendererSwaps === 0 && initial.worldView?.canvasSwaps === 0, `${name}: renderer or canvas swapped during startup`);
+    assert(initial.visibleCanvases.length === 1 && initial.visibleCanvases[0].id === 'eidolonSingleWorldCanvas', `${name}: expected one visible world canvas: ${JSON.stringify(initial.visibleCanvases)}`);
+    assert(initial.visibleSimulationCanvases.length === 1 && initial.visibleSimulationCanvases[0].id === 'eidolonSingleWorldCanvas', `${name}: authoritative simulation canvas is wrong: ${JSON.stringify(initial.visibleCanvases)}`);
     assert(initial.hiddenUi.foundryHidden && initial.hiddenUi.pulseHidden, `${name}: intentionally hidden panels became visible`);
     assert(initial.qr.visible && initial.qr.href.includes('cosmic-ecology-sandbox'), `${name}: project QR is missing or points elsewhere`);
     for (const [system, state] of Object.entries(initial.systems)) {
@@ -143,9 +150,13 @@ async function runProfile(browser, name, viewport, exerciseSimulation, isMobile 
       await page.screenshot({ path: path.join(profileDir, 'after-long-run.png'), fullPage: true });
     }
 
-    const finalDiagnostics = await page.evaluate(() => window.realitySandboxDebug.diagnostics());
+    const finalDiagnostics = await page.evaluate(() => ({
+      diagnostics: window.realitySandboxDebug.diagnostics(),
+      worldView: window.realitySandboxWorldView.getSnapshot(),
+    }));
     writeJson(path.join(name, 'diagnostics.json'), finalDiagnostics);
-    assert(finalDiagnostics.ok, `${name}: final diagnostics failed: ${(finalDiagnostics.failures || []).join(', ')}`);
+    assert(finalDiagnostics.diagnostics.ok, `${name}: final diagnostics failed: ${(finalDiagnostics.diagnostics.failures || []).join(', ')}`);
+    assert(finalDiagnostics.worldView.rendererSwaps === 0 && finalDiagnostics.worldView.canvasSwaps === 0, `${name}: renderer/canvas swapped during test`);
     assert(pageErrors.length === 0, `${name}: page errors: ${pageErrors.map(item => item.message).join(' | ')}`);
 
     return {
@@ -155,6 +166,7 @@ async function runProfile(browser, name, viewport, exerciseSimulation, isMobile 
       livingCount: initial.livingCount,
       pageErrors: pageErrors.length,
       requestFailures: failedRequests.length,
+      worldView: finalDiagnostics.worldView,
     };
   } finally {
     writeJson(path.join(name, 'console.json'), consoleEntries);
@@ -165,35 +177,52 @@ async function runProfile(browser, name, viewport, exerciseSimulation, isMobile 
 }
 
 async function exerciseDesktopInteraction(page) {
-  const canvasBox = await page.locator('#lofiLivingCanvas').boundingBox();
-  assert(canvasBox && canvasBox.width > 0 && canvasBox.height > 0, 'desktop: canvas has no interactive bounds');
+  const canvasBox = await page.locator('#eidolonSingleWorldCanvas').boundingBox();
+  assert(canvasBox && canvasBox.width > 0 && canvasBox.height > 0, 'desktop: unified world canvas has no interactive bounds');
   const centerX = canvasBox.x + canvasBox.width * 0.5;
   const centerY = canvasBox.y + canvasBox.height * 0.5;
-  const before = await page.evaluate(() => window.realitySandboxUnified.getCamera());
+  const before = await page.evaluate(() => ({
+    camera: window.realitySandboxUnified.getCamera(),
+    view: window.realitySandboxWorldView.getSnapshot(),
+  }));
 
   await page.mouse.move(centerX, centerY);
   await page.mouse.wheel(0, -420);
   await page.waitForTimeout(120);
-  const zoomed = await page.evaluate(() => window.realitySandboxUnified.getCamera());
-  assert(zoomed.zoom > before.zoom, 'desktop: wheel zoom did not increase camera zoom');
+  const zoomed = await page.evaluate(() => ({
+    camera: window.realitySandboxUnified.getCamera(),
+    view: window.realitySandboxWorldView.getSnapshot(),
+  }));
+  assert(zoomed.view.altitude < before.view.altitude, `desktop: wheel did not descend (${before.view.altitude} -> ${zoomed.view.altitude})`);
+  assert(zoomed.camera.zoom > before.camera.zoom, 'desktop: continuous descent did not update compatibility camera zoom');
+  assert(zoomed.view.rendererSwaps === 0 && zoomed.view.canvasSwaps === 0, 'desktop: wheel descent swapped renderer/canvas');
 
   await page.mouse.move(centerX, centerY);
   await page.mouse.down();
   await page.mouse.move(centerX + 120, centerY + 55, { steps: 8 });
   await page.mouse.up();
   await page.waitForTimeout(80);
-  const dragged = await page.evaluate(() => window.realitySandboxUnified.getCamera());
-  assert(Math.abs(dragged.centerX - zoomed.centerX) > 0.0001 || Math.abs(dragged.centerY - zoomed.centerY) > 0.0001, 'desktop: drag did not rotate globe');
+  const dragged = await page.evaluate(() => ({
+    camera: window.realitySandboxUnified.getCamera(),
+    view: window.realitySandboxWorldView.getSnapshot(),
+  }));
+  assert(Math.abs(dragged.view.x - zoomed.view.x) > 0.01 || Math.abs(dragged.view.y - zoomed.view.y) > 0.01, 'desktop: drag did not move around spherical world');
+  assert(dragged.view.rendererSwaps === 0 && dragged.view.canvasSwaps === 0, 'desktop: drag swapped renderer/canvas');
 
   const regionBefore = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().selectedRegion);
   await page.mouse.click(canvasBox.x + canvasBox.width * 0.61, canvasBox.y + canvasBox.height * 0.53);
   await page.waitForTimeout(120);
   const regionAfter = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().selectedRegion);
-  assert(Number.isFinite(regionAfter?.temperature) && Number.isFinite(regionAfter?.soilMoisture), 'desktop: selected region has non-finite climate readings');
+  assert(Number.isFinite(regionAfter?.temperature) && Number.isFinite(regionAfter?.soilMoisture), 'desktop: selected-region compatibility state has non-finite climate readings');
 
   await page.keyboard.press('0');
-  const reset = await page.evaluate(() => window.realitySandboxUnified.getCamera());
-  assert(reset.zoom === 1 && reset.centerX === 0.5 && reset.centerY === 0.5, 'desktop: camera reset failed');
+  await page.waitForTimeout(80);
+  const reset = await page.evaluate(() => ({
+    camera: window.realitySandboxUnified.getCamera(),
+    view: window.realitySandboxWorldView.getSnapshot(),
+  }));
+  assert(Math.abs(reset.view.altitude - 300) < 0.01, `desktop: continuous camera reset did not restore orbital altitude (${reset.view.altitude})`);
+  assert(reset.view.rendererSwaps === 0 && reset.view.canvasSwaps === 0, 'desktop: reset swapped renderer/canvas');
 
   return { before, zoomed, dragged, reset, regionBefore, regionAfter };
 }
@@ -328,6 +357,7 @@ async function exerciseLongRun(page) {
       invalid,
       living: c.agent.size + c.predator.size + c.apex.size,
       species: window.realitySandboxPlanet.biosphere.getSpecies().filter(item => item.population > 0).length,
+      worldView: window.realitySandboxWorldView.getSnapshot(),
       systems: {
         reproductive: window.realitySandboxReproductiveIsolation.getSnapshot(),
         hybrid: window.realitySandboxHybridDynamics.getSnapshot(),
@@ -344,6 +374,7 @@ async function exerciseLongRun(page) {
   assert(result.invalid.length === 0, `long-run: non-finite organism state: ${JSON.stringify(result.invalid.slice(0, 5))}`);
   assert(result.living > 0, 'long-run: all life vanished without recovery');
   assert(result.species > 0, 'long-run: no living species remain');
+  assert(result.worldView.rendererSwaps === 0 && result.worldView.canvasSwaps === 0, 'long-run: single renderer invariant was lost');
   assert(result.diagnostics.ok, `long-run: diagnostics failed: ${(result.diagnostics.failures || []).join(', ')}`);
   return result;
 }
