@@ -1,4 +1,4 @@
-# Multiscale Reality Kernel v1 experiment
+# Multiscale Reality Kernel v2 experiment
 
 This branch adds a general multiscale orchestration kernel plus a read-only adapter around the existing Eidolon living planet. The public simulation still has one authoritative world, one fixed simulation clock, and one renderer; the kernel observes that state and materializes additional resolution only when an observer requests it.
 
@@ -45,6 +45,33 @@ With the current geographic interpretation the hierarchy is approximately:
 
 These are representation scales, not claims of physical measurement accuracy.
 
+## Camera and inspector coupling
+
+The existing Pixi camera and selected-region inspector now act as kernel observers. They do not step the kernel or change the simulation; they only change how much of the authoritative state is materialized in the multiscale tree.
+
+Camera resolution bands:
+
+```text
+zoom <= 1.25   planet-only overview
+zoom >  1.25   macro region
+zoom >= 3.5    local patch
+zoom >= 8.0    nearest actual ECS entity
+```
+
+The inspector is an explicit observer only after a real click/tap or programmatic selection. This keeps the normal 1x startup at a single planet node instead of eagerly allocating regional detail.
+
+Once the inspector is active, its resolution follows the viewing context:
+
+```text
+overview          selected macro region
+moderate/close    selected local patch
+very close        nearest actual ECS entity
+```
+
+Zooming back out releases the camera observer and coarsens an active inspector from entity/patch detail back to its macro region. Fine descendants remain archived rather than deleted, so returning to the same area can recover the same branch instead of inventing unrelated state.
+
+Mouse wheel zoom, pinch/drag camera movement, keyboard camera controls, click/tap selection, and the runtime's public `setCamera`, `resetCamera`, and `selectAtClientPoint` methods all feed the observer bridge. The bridge is event-driven and does not add a second simulation clock or continuous animation loop.
+
 ## Adaptive behavior
 
 Only the hierarchy needed by an observer is refined. If the observer moves to another macro region, the old region's patch/entity descendants are archived and remain inactive. Returning to patch-level resolution does not automatically reactivate entity-level detail.
@@ -58,8 +85,16 @@ After the authoritative world is ready:
 ```js
 await window.realitySandboxKernelReady;
 
-const result = window.realitySandboxRealityKernel.requestAt({
-  observerId: 'camera',
+const kernel = window.realitySandboxRealityKernel;
+console.log(kernel.observation.snapshot());
+console.log(kernel.snapshot());
+```
+
+Manual observations remain available:
+
+```js
+const result = kernel.requestAt({
+  observerId: 'microscope',
   x: 600,
   y: 360,
   spatialScale: 1,
@@ -73,10 +108,12 @@ console.log(result.node);
 Useful calls:
 
 ```js
-realitySandboxRealityKernel.getScales();
-realitySandboxRealityKernel.snapshot();
-realitySandboxRealityKernel.refresh();
-realitySandboxRealityKernel.releaseObserver('camera');
+kernel.getScales();
+kernel.snapshot();
+kernel.refresh();
+kernel.observation.syncCamera();
+kernel.observation.syncInspector();
+kernel.releaseObserver('microscope');
 ```
 
 ## General kernel scale test
@@ -104,19 +141,32 @@ This is not a claim that Eidolon now performs molecular dynamics, stellar evolut
 
 ```bash
 npm run check:kernel
+npm run check:kernel-browser
 ```
 
-This runs:
+The headless kernel suite runs:
 
 ```text
 scripts/multiscale-kernel-check.mjs
 scripts/eidolon-kernel-adapter-check.mjs
+scripts/reality-observer-level-check.mjs
 ```
 
-The first checks deterministic refinement, temporal scheduling, collapse/restore behavior, computation-budget degradation, and rejection of a deliberately non-conservative refinement. The second checks lazy planet -> region -> patch -> real-entity resolution, live reads from the authoritative ECS, observer movement, and preservation of archived fine branches.
+It checks deterministic refinement, temporal scheduling, collapse/restore behavior, computation-budget degradation, rejection of non-conservative refinement, lazy planet -> region -> patch -> real-entity resolution, live ECS reads, observer movement, archived fine branches, and the zoom-to-resolution contract.
 
-The pull-request browser workflow also runs `npm run check:kernel` before building and executing the existing living-planet browser diagnostics.
+The Chromium check drives the real public runtime through:
+
+```text
+1x overview
+ -> 2x region
+ -> 4x patch
+ -> 9x actual ECS entity
+ -> selected inspector patch
+ -> zoom out / coarsen
+```
+
+It also verifies that existing Eidolon runtime diagnostics remain green. The pull-request browser workflow gates on this check before declaring the browser status successful.
 
 ## Next experiment
 
-The next step should connect the existing camera or selected-region inspector to `requestAt()` so visible zoom/inspection becomes an actual simulation-resolution request. That remains read-only initially. Only after that behavior is stable should one scale become writable/authoritative under the kernel scheduler.
+The next meaningful step is to expose the active kernel resolution in the inspector/debug UI and then choose one narrow process for the first writable cross-scale coupling. A good candidate is a local ecological resource/energy ledger, because it can be reconciled against existing organism and forage state without pretending that the current sandbox already has full physical mass-energy conservation.
