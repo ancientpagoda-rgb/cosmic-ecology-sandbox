@@ -30,18 +30,23 @@ function assert(condition, message) {
     assert(initial.observation?.inspector?.active === false, 'default inspector must not refine reality before selection');
     assert(initial.observers.length === 0, `initial kernel should have no active observers: ${JSON.stringify(initial.observers)}`);
     assert(initial.kernel.nodes.length === 1, `initial kernel should contain only the planet node, got ${initial.kernel.nodes.length}`);
+    assert(initial.ecologicalTransactions?.eventDriven === true, 'event-driven ecological transaction layer was not installed');
+    assert(initial.ecologicalTransactions?.scanFreePopulationAccounting === true, 'population accounting still reports whole-population reconciliation');
+    for (const type of ['GRAZE', 'PREDATE', 'DIE', 'REPRODUCE', 'DECOMPOSE', 'UPTAKE']) {
+      assert(initial.ecologicalTransactions?.types?.[type] === type, `missing ${type} ecological transaction type`);
+    }
     assert(initial.ecologicalEnergy?.writable === true, 'writable ecological energy contract was not installed');
+    assert(initial.ecologicalEnergy?.eventDriven === true, 'ecological energy ledger is not transaction-driven');
+    assert(initial.ecologicalEnergy?.populationScanFree === true, 'ecological energy ledger still reports population scans');
     assert(initial.ecologicalEnergy?.physicalUnitClaim === false, 'model ecological-energy units must not be presented as physical SI energy');
     assert(initial.ecologicalEnergy?.stock?.capacity > 0, 'ecological energy ledger has no productive landscape capacity');
     assert(initial.ecologicalNutrients?.writable === true, 'writable ecological nutrient cycle was not installed');
+    assert(initial.ecologicalNutrients?.eventDriven === true, 'ecological nutrient cycle is not transaction-driven');
+    assert(initial.ecologicalNutrients?.populationScanFree === true, 'ecological nutrient cycle still reports population scans');
     assert(initial.ecologicalNutrients?.physicalUnitClaim === false, 'model nutrient units must not be presented as physical chemical units');
     assert(initial.ecologicalNutrients?.reservoirs?.total > 0, 'ecological nutrient cycle has no initialized nutrient matter');
     assert(Math.abs(initial.ecologicalNutrients?.conservation?.drift || 0) < 1e-8, `nutrient cycle drifted at startup: ${JSON.stringify(initial.ecologicalNutrients?.conservation)}`);
 
-    // Freeze the authoritative world while selecting and traversing one entity's
-    // scale hierarchy. Otherwise a live organism can cross a patch boundary
-    // between the 2x/4x/9x assertions, which is valid simulation behavior but
-    // makes this observer-coupling test nondeterministic.
     const target = await page.evaluate(() => {
       window.realitySandboxDebug.pause();
       if (!window.realitySandboxDebug.isPaused()) throw new Error('Unable to pause Eidolon for kernel camera test.');
@@ -108,13 +113,20 @@ function assert(condition, message) {
       ok: true,
       pausedDuringTraversal: true,
       initialNodes: initial.kernel.nodes.length,
+      ecologicalTransactions: {
+        eventDriven: initial.ecologicalTransactions.eventDriven,
+        scanFreePopulationAccounting: initial.ecologicalTransactions.scanFreePopulationAccounting,
+        counts: initial.ecologicalTransactions.counts,
+      },
       ecologicalEnergy: {
         writable: initial.ecologicalEnergy.writable,
+        eventDriven: initial.ecologicalEnergy.eventDriven,
         unit: initial.ecologicalEnergy.unit,
         stockAvailability: initial.ecologicalEnergy.stock.availability,
       },
       ecologicalNutrients: {
         writable: initial.ecologicalNutrients.writable,
+        eventDriven: initial.ecologicalNutrients.eventDriven,
         unit: initial.ecologicalNutrients.unit,
         reservoirs: initial.ecologicalNutrients.reservoirs,
         conservation: initial.ecologicalNutrients.conservation,
