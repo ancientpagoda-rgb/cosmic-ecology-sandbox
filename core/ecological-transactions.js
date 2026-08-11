@@ -1,3 +1,5 @@
+import { createTransactionJournal } from '../packages/multiscale-reality-kernel/src/transactions.js';
+
 const EPSILON = 1e-12;
 
 export const REALITY_TRANSACTION_TYPES = Object.freeze({
@@ -25,11 +27,11 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
     throw new Error('Reality transactions require the authoritative Eidolon world.');
   }
 
-  const handlers = new Map();
-  const beforeStepHooks = [];
-  const afterStepHooks = [];
-  const recent = [];
-  const counts = Object.fromEntries(Object.values(REALITY_TRANSACTION_TYPES).map(type => [type, 0]));
+  const journal = createTransactionJournal({
+    types: REALITY_TRANSACTION_TYPES,
+    historyLimit,
+    getTick: () => world.tick,
+  });
   const guildMaps = {
     grazer: world.ecs.components.agent,
     predator: world.ecs.components.predator,
@@ -39,7 +41,6 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
   const originalDestroyEntity = world.ecs.destroyEntity;
   const originalSetMethods = new Map();
   let activeBatch = null;
-  let sequence = 0;
   let destroyed = false;
   let suppressCapture = 0;
 
@@ -48,64 +49,13 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
     return pos ? { x: finite(pos.x), y: finite(pos.y) } : { x: 0, y: 0 };
   }
 
-  function handlerList(type) {
-    return (handlers.get(type) || []).slice().sort((a, b) => b.priority - a.priority || a.order - b.order);
-  }
-
-  function appendRecord(event) {
-    const record = {
-      sequence: ++sequence,
-      tick: world.tick,
-      type: event.type,
-      payload: { ...event.payload },
-      result: { ...event.result },
-    };
-    recent.push(record);
-    if (recent.length > historyLimit) recent.splice(0, recent.length - historyLimit);
-    counts[event.type] = (counts[event.type] || 0) + 1;
-    if (activeBatch) activeBatch.records.push(record);
-    return record;
-  }
-
   function transact(type, payload = {}, initialResult = {}) {
-    if (!Object.values(REALITY_TRANSACTION_TYPES).includes(type)) throw new Error(`Unknown reality transaction type: ${type}`);
-    const event = { type, payload: { ...payload }, result: { ...initialResult }, tick: world.tick };
     suppressCapture += 1;
     try {
-      for (const registration of handlerList(type)) registration.handler(event);
+      return journal.transact(type, payload, initialResult);
     } finally {
       suppressCapture -= 1;
     }
-    appendRecord(event);
-    return event;
-  }
-
-  function register(type, handler, priority = 0) {
-    if (!Object.values(REALITY_TRANSACTION_TYPES).includes(type)) throw new Error(`Unknown reality transaction type: ${type}`);
-    if (typeof handler !== 'function') throw new Error('Reality transaction handler must be a function.');
-    const list = handlers.get(type) || [];
-    const registration = { handler, priority, order: sequence++ };
-    list.push(registration);
-    handlers.set(type, list);
-    return () => {
-      const current = handlers.get(type) || [];
-      const index = current.indexOf(registration);
-      if (index >= 0) current.splice(index, 1);
-    };
-  }
-
-  function addStepHook(collection, handler, priority = 0) {
-    const registration = { handler, priority, order: sequence++ };
-    collection.push(registration);
-    return () => {
-      const index = collection.indexOf(registration);
-      if (index >= 0) collection.splice(index, 1);
-    };
-  }
-
-  function runHooks(collection, dt) {
-    const sorted = collection.slice().sort((a, b) => b.priority - a.priority || a.order - b.order);
-    for (const hook of sorted) hook.handler({ world, dt, transactions: api });
   }
 
   function pendingRemoval(guild) {
@@ -127,10 +77,10 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
   }
 
   function wrapOrganism(id, guild, entity) {
-    if (!entity || typeof entity !== 'object' || entity.__ecologicalTransactionProxy) return entity;
+    if (!entity || typeof entity !== 'object' || entity.__realityTransactionProxy) return entity;
     const proxy = new Proxy(entity, {
       get(target, property, receiver) {
-        if (property === '__ecologicalTransactionProxy') return true;
+        if (property === '__realityTransactionProxy' || property === '__ecologicalTransactionProxy') return true;
         return Reflect.get(target, property, receiver);
       },
       set(target, property, value, receiver) {
@@ -185,7 +135,8 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
             }, { childEnergy: Math.max(0, finite(child?.energy)) });
             if (child && Number.isFinite(event.result.childEnergy)) {
               suppressCapture += 1;
-              try { child.energy = Math.max(0, event.result.childEnergy); } finally { suppressCapture -= 1; }
+              try { child.energy = Math.max(0, event.result.childEnergy); }
+              finally { suppressCapture -= 1; }
             }
           }
         }
@@ -253,13 +204,12 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
       births: [],
       removals: [],
       energyMutations: [],
-      records: [],
     };
     try {
-      runHooks(beforeStepHooks, dt);
+      journal.runBeforeStep({ world, dt, transactions: api });
       const result = originalStep.call(world, dt);
       flushDeaths();
-      runHooks(afterStepHooks, dt);
+      journal.runAfterStep({ world, dt, transactions: api });
       return result;
     } finally {
       activeBatch = null;
@@ -269,16 +219,19 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
   world.step = wrappedStep;
 
   function snapshot() {
+    const base = journal.snapshot();
     return {
-      version: 2,
+      version: 3,
       eventDriven: true,
       scanFreePopulationAccounting: true,
+      genericJournalPackage: 'multiscale-reality-kernel',
       domains: ['ecology', 'hydrology'],
       types: { ...REALITY_TRANSACTION_TYPES },
-      counts: { ...counts },
-      recent: recent.slice(-64).map(record => ({ ...record, payload: { ...record.payload }, result: { ...record.result } })),
-      handlers: Object.fromEntries([...handlers.entries()].map(([type, list]) => [type, list.length])),
-      hooks: { beforeStep: beforeStepHooks.length, afterStep: afterStepHooks.length },
+      counts: base.counts,
+      recent: base.recent,
+      handlers: base.handlers,
+      hooks: base.hooks,
+      recordSequence: base.recordSequence,
     };
   }
 
@@ -288,21 +241,19 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
     if (world.step === wrappedStep) world.step = originalStep;
     if (world.ecs.destroyEntity === capturedDestroyEntity) world.ecs.destroyEntity = originalDestroyEntity;
     for (const [map, originalSet] of originalSetMethods.entries()) map.set = originalSet;
-    handlers.clear();
-    beforeStepHooks.length = 0;
-    afterStepHooks.length = 0;
+    journal.destroy();
     if (world.ecologicalTransactions === api) world.ecologicalTransactions = null;
     if (world.realityTransactions === api) world.realityTransactions = null;
   }
 
   const api = {
-    version: 2,
+    version: 3,
     eventDriven: true,
     types: REALITY_TRANSACTION_TYPES,
     transact,
-    register,
-    beforeStep: (handler, priority = 0) => addStepHook(beforeStepHooks, handler, priority),
-    afterStep: (handler, priority = 0) => addStepHook(afterStepHooks, handler, priority),
+    register: (type, handler, priority = 0) => journal.register(type, handler, priority),
+    beforeStep: (handler, priority = 0) => journal.beforeStep(handler, priority),
+    afterStep: (handler, priority = 0) => journal.afterStep(handler, priority),
     snapshot,
     destroy,
   };
