@@ -87,41 +87,22 @@ world.step()
 
 This replaces the previous correctness-first pattern of snapshotting every organism before a step and comparing the entire population afterward.
 
-`scanFreePopulationAccounting: true` therefore means **no whole-population before/after reconciliation scan per tick**. The bounded 18×10 landscape grid still updates for primary production, soil state, and decomposition; its cost does not grow with organism population.
+`scanFreePopulationAccounting: true` means **no whole-population before/after reconciliation scan per tick**. The bounded 18×10 landscape grid still updates for primary production, soil state, and decomposition; its cost does not grow with organism population.
 
 The current Eidolon adapter discovers transactions from ECS mutations so the legacy world model does not need to know about the generic kernel. That capture adapter is Eidolon-specific. A future generic transaction package should expose the journal/handler API and direct `transact()` contract, while each host simulation supplies its own event source or calls `transact()` directly.
 
 ### Transaction semantics
 
-- `GRAZE` is emitted when a grazer attempts to increase stored energy. The energy ledger first debits finite coarse forage stock and can reduce the allowed gain before it reaches the organism. The nutrient ledger receives the same finalized transfer and moves vegetation nutrient into grazer biomass plus detrital waste.
+- `GRAZE` fires when a grazer attempts to increase stored energy. The energy ledger first debits finite coarse forage stock and can reduce the allowed gain before it reaches the organism. The nutrient ledger receives the same finalized transfer and moves vegetation nutrient into grazer biomass plus detrital waste.
 - `PREDATE` pairs prey destruction with the immediately consuming predator/apex energy gain. The energy ledger limits retained energy by prey energy and trophic efficiency. The nutrient ledger transfers tracked prey nutrients into consumer biomass and detritus.
 - `REPRODUCE` pairs a new same-guild entity with the parent energy transfer. Offspring energy cannot exceed the energy actually transferred by the parent. Tracked body nutrients are divided between parent and offspring rather than created.
-- `DIE` returns tracked organism nutrients to local detritus. The same transaction type also represents coarse vegetation turnover with `guild: vegetation`.
+- `DIE` returns tracked organism nutrients to local detritus. The same transaction type represents coarse vegetation turnover with `guild: vegetation`.
 - `DECOMPOSE` mineralizes local detritus into soil nutrient.
 - `UPTAKE` moves soil nutrient into vegetation and can limit requested primary-production energy when nutrients are insufficient.
 
 ## Writable ecological energy
 
 `core/ecological-energy-ledger.js` uses **model ecological-energy units**, not joules. `physicalUnitClaim` is false.
-
-```text
-seasonal climate / water
-          |
-          v
- finite vegetation energy
-          |
-        GRAZE
-          v
-       grazer
-          |
-       PREDATE
-          v
-      predator
-          |
-       PREDATE
-          v
-        apex
-```
 
 A grazer cannot retain landscape-derived energy unless the corresponding coarse forage cell loses stock. Exhausted cells stop feeding organisms. Primary production replenishes stock only through an `UPTAKE` transaction. Predator/apex gains are bounded by energy actually removed with prey, and reproduction cannot create additional stored energy.
 
@@ -165,32 +146,6 @@ console.log(kernel.ecologicalEnergy.snapshot());
 console.log(kernel.ecologicalNutrients.snapshot());
 ```
 
-A manual observation returns local energy and nutrient state:
-
-```js
-const result = kernel.requestAt({
-  observerId: 'microscope',
-  x: 600,
-  y: 360,
-  spatialScale: 1,
-  temporalScale: 0.06,
-});
-```
-
-Useful calls:
-
-```js
-kernel.getScales();
-kernel.snapshot();
-kernel.refresh();
-kernel.observation.syncCamera();
-kernel.observation.syncInspector();
-kernel.ecologicalTransactions.snapshot();
-kernel.ecologicalEnergy.getCell(600, 360);
-kernel.ecologicalNutrients.getCell(600, 360);
-kernel.releaseObserver('microscope');
-```
-
 ## Checks
 
 ```bash
@@ -198,7 +153,7 @@ npm run check:kernel
 npm run check:kernel-browser
 ```
 
-The kernel suite includes:
+The headless kernel suite includes:
 
 ```text
 scripts/multiscale-kernel-check.mjs
@@ -253,7 +208,7 @@ browser integration tests
 renderers and UI
 ```
 
-The **journal/handler mechanism** can eventually move to the generic repository; the code that knows `grazer`, `predator`, `apex`, Eidolon's ECS maps, or forage cells should not.
+The journal/handler mechanism can eventually move to the generic repository; the code that knows `grazer`, `predator`, `apex`, Eidolon's ECS maps, or forage cells should not.
 
 After one more non-ecological cross-scale contract proves the same APIs can serve a different domain, extract the stable generic core into its own repository/package and consume it here as a normal dependency rather than a Git submodule.
 
