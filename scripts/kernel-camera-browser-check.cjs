@@ -30,11 +30,22 @@ function assert(condition, message) {
     assert(initial.observation?.inspector?.active === false, 'default inspector must not refine reality before selection');
     assert(initial.observers.length === 0, `initial kernel should have no active observers: ${JSON.stringify(initial.observers)}`);
     assert(initial.kernel.nodes.length === 1, `initial kernel should contain only the planet node, got ${initial.kernel.nodes.length}`);
-    assert(initial.ecologicalTransactions?.eventDriven === true, 'event-driven ecological transaction layer was not installed');
-    assert(initial.ecologicalTransactions?.scanFreePopulationAccounting === true, 'population accounting still reports whole-population reconciliation');
-    for (const type of ['GRAZE', 'PREDATE', 'DIE', 'REPRODUCE', 'DECOMPOSE', 'UPTAKE']) {
-      assert(initial.ecologicalTransactions?.types?.[type] === type, `missing ${type} ecological transaction type`);
+
+    assert(initial.realityTransactions?.eventDriven === true, 'shared reality transaction layer was not installed');
+    assert(initial.realityTransactions?.scanFreePopulationAccounting === true, 'population accounting still reports whole-population reconciliation');
+    assert(initial.realityTransactions?.domains?.includes('hydrology'), 'shared transaction layer does not advertise hydrology');
+    for (const type of ['GRAZE', 'PREDATE', 'DIE', 'REPRODUCE', 'DECOMPOSE', 'UPTAKE', 'PRECIPITATE', 'FLOW', 'ERODE', 'DEPOSIT', 'EVAPORATE']) {
+      assert(initial.realityTransactions?.types?.[type] === type, `missing ${type} reality transaction type`);
     }
+
+    assert(initial.hydrologyErosion?.writable === true, 'writable hydrology erosion contract was not installed');
+    assert(initial.hydrologyErosion?.eventDriven === true, 'hydrology erosion contract is not transaction-driven');
+    assert(initial.hydrologyErosion?.waterAccounting?.conservationClaim === false, 'open reduced-order water solver must not claim closed mass conservation');
+    assert(initial.hydrologyErosion?.sediment?.conservationClaim === true, 'sediment contract must claim and test its own conservation boundary');
+    assert(initial.hydrologyErosion?.sediment?.baseline > 0, 'sediment reservoirs were not initialized');
+    assert(Math.abs(initial.hydrologyErosion?.sediment?.drift || 0) < 1e-8, `sediment drifted at startup: ${JSON.stringify(initial.hydrologyErosion?.sediment)}`);
+
+    assert(initial.ecologicalTransactions?.eventDriven === true, 'backward-compatible ecological transaction alias was not installed');
     assert(initial.ecologicalEnergy?.writable === true, 'writable ecological energy contract was not installed');
     assert(initial.ecologicalEnergy?.eventDriven === true, 'ecological energy ledger is not transaction-driven');
     assert(initial.ecologicalEnergy?.populationScanFree === true, 'ecological energy ledger still reports population scans');
@@ -113,10 +124,16 @@ function assert(condition, message) {
       ok: true,
       pausedDuringTraversal: true,
       initialNodes: initial.kernel.nodes.length,
-      ecologicalTransactions: {
-        eventDriven: initial.ecologicalTransactions.eventDriven,
-        scanFreePopulationAccounting: initial.ecologicalTransactions.scanFreePopulationAccounting,
-        counts: initial.ecologicalTransactions.counts,
+      realityTransactions: {
+        eventDriven: initial.realityTransactions.eventDriven,
+        domains: initial.realityTransactions.domains,
+        counts: initial.realityTransactions.counts,
+      },
+      hydrologyErosion: {
+        writable: initial.hydrologyErosion.writable,
+        macroSteps: initial.hydrologyErosion.macroSteps,
+        waterAccounting: initial.hydrologyErosion.waterAccounting,
+        sediment: initial.hydrologyErosion.sediment,
       },
       ecologicalEnergy: {
         writable: initial.ecologicalEnergy.writable,
