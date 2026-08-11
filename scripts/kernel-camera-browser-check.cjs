@@ -32,6 +32,7 @@ function assert(condition, message) {
     assert(initial.kernel.nodes.length === 1, `initial kernel should contain only the planet node, got ${initial.kernel.nodes.length}`);
 
     assert(initial.realityTransactions?.eventDriven === true, 'shared reality transaction layer was not installed');
+    assert(initial.realityTransactions?.genericJournalPackage === 'multiscale-reality-kernel', 'production runtime is not consuming the extracted generic transaction package');
     assert(initial.realityTransactions?.scanFreePopulationAccounting === true, 'population accounting still reports whole-population reconciliation');
     assert(initial.realityTransactions?.domains?.includes('hydrology'), 'shared transaction layer does not advertise hydrology');
     for (const type of ['GRAZE', 'PREDATE', 'DIE', 'REPRODUCE', 'DECOMPOSE', 'UPTAKE', 'PRECIPITATE', 'FLOW', 'ERODE', 'DEPOSIT', 'EVAPORATE']) {
@@ -126,6 +127,7 @@ function assert(condition, message) {
       initialNodes: initial.kernel.nodes.length,
       realityTransactions: {
         eventDriven: initial.realityTransactions.eventDriven,
+        genericJournalPackage: initial.realityTransactions.genericJournalPackage,
         domains: initial.realityTransactions.domains,
         counts: initial.realityTransactions.counts,
       },
