@@ -62,6 +62,7 @@ export function installRealityObserverBridge({ runtime, world, kernelApi, canvas
   const listeners = [];
   const methodHooks = [];
   let destroyed = false;
+  let inspectorActivated = false;
   let lastCamera = runtime.getCamera();
   let lastInspection = runtime.inspectSelected();
 
@@ -103,9 +104,11 @@ export function installRealityObserverBridge({ runtime, world, kernelApi, canvas
     return requestObserver(CAMERA_OBSERVER, level, x, y);
   }
 
-  function syncInspector() {
+  function syncInspector({ activate = false } = {}) {
+    if (activate) inspectorActivated = true;
     const inspection = runtime.inspectSelected();
     lastInspection = inspection;
+    if (!inspectorActivated) return null;
     if (!Number.isFinite(inspection?.x) || !Number.isFinite(inspection?.y)) return null;
     const level = inspectorLevelForZoom(runtime.getCamera().zoom);
     return requestObserver(INSPECTOR_OBSERVER, level, inspection.x, inspection.y);
@@ -123,10 +126,14 @@ export function installRealityObserverBridge({ runtime, world, kernelApi, canvas
   }
 
   // The living runtime registered its handlers before this bridge is installed,
-  // so these listeners observe camera/selection state after each user mutation.
+  // so these listeners observe camera state after each user mutation.
   for (const type of ['wheel', 'pointermove', 'pointerup', 'pointercancel', 'dblclick', 'keydown']) {
     listen(canvas, type, () => syncAll());
   }
+  // A real click/tap is the point at which the default inspector becomes an
+  // explicit observation. Browser click fires after the runtime's pointer-up
+  // selection handler has updated selectedPoint.
+  listen(canvas, 'click', () => syncInspector({ activate: true }));
 
   function hookRuntimeMethod(name, sync) {
     const original = runtime[name];
@@ -145,11 +152,11 @@ export function installRealityObserverBridge({ runtime, world, kernelApi, canvas
   // Programmatic camera/inspection controls do not emit DOM input events.
   hookRuntimeMethod('setCamera', syncAll);
   hookRuntimeMethod('resetCamera', syncAll);
-  hookRuntimeMethod('selectAtClientPoint', syncInspector);
+  hookRuntimeMethod('selectAtClientPoint', () => syncInspector({ activate: true }));
 
-  // Preserve the zero-cost overview rule at startup: the camera at 1x remains
-  // unresolved, while the visible inspector holds only one macro region.
-  syncAll();
+  // At the normal 1× overview the camera remains planet-only and the default
+  // center-point inspector is not treated as an observation until selected.
+  syncCamera();
 
   const api = {
     version: 1,
@@ -168,10 +175,11 @@ export function installRealityObserverBridge({ runtime, world, kernelApi, canvas
         version: 1,
         camera: { ...lastCamera, level: levelForZoom(lastCamera?.zoom) },
         inspector: {
+          active: inspectorActivated,
           x: lastInspection?.x ?? null,
           y: lastInspection?.y ?? null,
           title: lastInspection?.title ?? null,
-          level: inspectorLevelForZoom(lastCamera?.zoom),
+          level: inspectorActivated ? inspectorLevelForZoom(lastCamera?.zoom) : 'inactive',
         },
         observers: Object.fromEntries([...observerState.entries()].map(([id, state]) => [id, {
           level: state.level,
