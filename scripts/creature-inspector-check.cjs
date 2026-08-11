@@ -30,7 +30,7 @@ fs.mkdirSync(outputDir, { recursive: true });
       window.realitySandboxCreatureInspector &&
       window.realitySandboxCreatureFollow &&
       window.realitySandboxPauseControl &&
-      document.querySelector('.eidolon-creature[data-entity-id]') &&
+      document.querySelector('.eidolon-unified-creatures .eidolon-creature[data-entity-id]') &&
       document.getElementById('eidolon-creature-follow')
     ), null, { timeout: 120000 });
     await page.waitForTimeout(300);
@@ -41,13 +41,13 @@ fs.mkdirSync(outputDir, { recursive: true });
     }
 
     const target = await page.evaluate(() => {
-      const nodes = [...document.querySelectorAll('.eidolon-creature[data-entity-id]')];
+      const nodes = [...document.querySelectorAll('.eidolon-unified-creatures .eidolon-creature[data-entity-id]')];
       const grazer = nodes.find(node => node.getAttribute('data-role') === 'grazer') || nodes[0];
       return { id: Number(grazer?.getAttribute('data-entity-id')), role: grazer?.getAttribute('data-role') || null };
     });
-    assert(Number.isFinite(target.id), 'No inspectable creature entity ID was rendered.');
+    assert(Number.isFinite(target.id), 'No inspectable unified creature entity ID was rendered.');
 
-    await page.locator(`.eidolon-creature[data-entity-id="${target.id}"]`).click({ force: true });
+    await page.locator(`.eidolon-unified-creatures .eidolon-creature[data-entity-id="${target.id}"]`).click({ force: true });
     await page.waitForTimeout(220);
     const selected = await snapshot(page);
     assert(selected.visible, 'Creature inspector did not become visible after clicking a creature.');
@@ -118,7 +118,7 @@ fs.mkdirSync(outputDir, { recursive: true });
 
     const result = {
       ok: true,
-      model: 'exact-rendered-glyph-to-ecs-individual-inspection-and-camera-follow',
+      model: 'visible-unified-glyph-to-ecs-individual-inspection-and-camera-follow',
       target,
       selected,
       stepped,
