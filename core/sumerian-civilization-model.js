@@ -57,6 +57,7 @@ function makeCities() {
     population: seed.population,
     grain: seed.population * 1.15,
     institutionalGrain: seed.population * 0.24,
+    seedReserve: seed.population * 0.10,
     canalHealth: seed.canal,
     administration: seed.administration,
     templeComplexity: seed.temple,
@@ -203,11 +204,20 @@ export function createSumerianCivilizationSimulation({
     const fields = fieldsByCity.get(city.id) || [];
     const populationBefore = city.population;
     const labor = city.population * 0.34;
-    const maintenanceNeed = Math.max(30, city.population * (0.012 + city.canalHealth * 0.006));
-    const maintenancePaid = Math.min(city.grain * 0.035, maintenanceNeed);
-    city.grain = Math.max(0, city.grain - maintenancePaid);
-    const maintenanceRatio = maintenanceNeed > 0 ? maintenancePaid / maintenanceNeed : 1;
-    city.canalHealth = clamp(city.canalHealth - 0.010 * dt + maintenanceRatio * 0.018 * dt - state.climateStress * 0.002, 0.12, 0.98);
+
+    // Canal upkeep is primarily a labor-capacity problem with grain supporting
+    // organized work crews. It must not become an absorbing zero-food ->
+    // zero-maintenance -> zero-water state.
+    const maintenanceNeed = Math.max(5, city.population * (0.006 + city.canalHealth * 0.003));
+    const laborMaintenance = city.population * (0.0045 + city.administration * 0.006 + city.templeComplexity * 0.0015);
+    const grainSupport = Math.min(city.grain * 0.012, maintenanceNeed * 0.25);
+    city.grain = Math.max(0, city.grain - grainSupport);
+    const maintenanceRatio = clamp((laborMaintenance + grainSupport) / maintenanceNeed, 0, 1.25);
+    city.canalHealth = clamp(
+      city.canalHealth - 0.0045 * dt + maintenanceRatio * 0.0065 * dt - state.climateStress * 0.001,
+      0.20,
+      0.98,
+    );
 
     const laborAreaLimit = labor * (0.54 + city.administration * 0.22);
     const canalAreaLimit = fields.reduce((sum, field) => {
@@ -216,8 +226,12 @@ export function createSumerianCivilizationSimulation({
     }, 0);
     const potentialArea = Math.min(laborAreaLimit, canalAreaLimit);
     const seedRequested = potentialArea * 0.060;
-    const seedUsed = Math.min(city.grain * 0.19, seedRequested);
-    city.grain -= seedUsed;
+
+    // Seed barley is a protected productive stock. At most 75% of the reserve
+    // is exposed in one sowing season, preventing a single bad year from
+    // destroying the simulation's capacity to plant forever.
+    const seedUsed = Math.min(city.seedReserve * 0.75, seedRequested);
+    city.seedReserve = Math.max(0, city.seedReserve - seedUsed);
     const sowFraction = seedRequested > 0 ? seedUsed / seedRequested : 0;
 
     transact(SUMER_TRANSACTION_TYPES.SOW, {
@@ -225,6 +239,7 @@ export function createSumerianCivilizationSimulation({
       requestedSeed: seedRequested,
       seedUsed,
       potentialArea,
+      seedReserveAfterSowing: city.seedReserve,
     }, { sowFraction });
 
     let totalArea = 0;
@@ -275,22 +290,28 @@ export function createSumerianCivilizationSimulation({
       cultivatedArea: totalArea,
     }, { waterDelivery: totalIrrigation });
 
-    city.grain += totalHarvest;
+    // Reconstitute productive seed stock before exposing the harvest to tax or
+    // consumption. This preserves a causal seed stock without inventing grain.
+    const seedTarget = Math.max(seedUsed * 1.15, city.population * 0.075);
+    const seedRetained = Math.min(totalHarvest * 0.12, Math.max(0, seedTarget - city.seedReserve));
+    city.seedReserve += seedRetained;
+    const edibleHarvest = Math.max(0, totalHarvest - seedRetained);
+    city.grain += edibleHarvest;
     transact(SUMER_TRANSACTION_TYPES.HARVEST, {
       cityId: city.id,
       cultivatedArea: totalArea,
       meanSalinity: city.meanSalinity,
       riverPulse,
-    }, { grainProduced: totalHarvest });
+    }, { grainProduced: totalHarvest, seedRetained, edibleGrain: edibleHarvest });
 
     const taxRate = clamp(0.07 + city.administration * 0.11 + city.templeComplexity * 0.035, 0.06, 0.21);
-    const tax = Math.min(city.grain, totalHarvest * taxRate);
+    const tax = Math.min(city.grain, edibleHarvest * taxRate);
     city.grain -= tax;
     city.institutionalGrain += tax;
     transact(SUMER_TRANSACTION_TYPES.TAX, {
       cityId: city.id,
       rate: taxRate,
-      harvest: totalHarvest,
+      harvest: edibleHarvest,
     }, { grainTransferred: tax });
 
     const rationNeed = city.population * 0.82;
@@ -584,7 +605,7 @@ export function createSumerianCivilizationSimulation({
 
   function snapshot() {
     const totalPopulation = cities.reduce((sum, city) => sum + city.population, 0);
-    const totalGrain = cities.reduce((sum, city) => sum + city.grain + city.institutionalGrain, 0);
+    const totalGrain = cities.reduce((sum, city) => sum + city.grain + city.institutionalGrain + city.seedReserve, 0);
     const weightedSalinity = cities.reduce((sum, city) => sum + city.meanSalinity * city.cultivatedArea, 0)
       / Math.max(1, cities.reduce((sum, city) => sum + city.cultivatedArea, 0));
     return {
@@ -623,6 +644,7 @@ export function createSumerianCivilizationSimulation({
         population: city.population,
         grain: city.grain,
         institutionalGrain: city.institutionalGrain,
+        seedReserve: city.seedReserve,
         foodRatio: city.foodRatio,
         foodYears: city.foodYears,
         canalHealth: city.canalHealth,
