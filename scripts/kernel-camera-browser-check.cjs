@@ -30,6 +30,9 @@ function assert(condition, message) {
     assert(initial.observation?.inspector?.active === false, 'default inspector must not refine reality before selection');
     assert(initial.observers.length === 0, `initial kernel should have no active observers: ${JSON.stringify(initial.observers)}`);
     assert(initial.kernel.nodes.length === 1, `initial kernel should contain only the planet node, got ${initial.kernel.nodes.length}`);
+    assert(initial.ecologicalEnergy?.writable === true, 'writable ecological energy contract was not installed');
+    assert(initial.ecologicalEnergy?.physicalUnitClaim === false, 'model ecological-energy units must not be presented as physical SI energy');
+    assert(initial.ecologicalEnergy?.stock?.capacity > 0, 'ecological energy ledger has no productive landscape capacity');
 
     // Freeze the authoritative world while selecting and traversing one entity's
     // scale hierarchy. Otherwise a live organism can cross a patch boundary
@@ -101,6 +104,11 @@ function assert(condition, message) {
       ok: true,
       pausedDuringTraversal: true,
       initialNodes: initial.kernel.nodes.length,
+      ecologicalEnergy: {
+        writable: initial.ecologicalEnergy.writable,
+        unit: initial.ecologicalEnergy.unit,
+        stockAvailability: initial.ecologicalEnergy.stock.availability,
+      },
       targetEntity: target.id,
       transitions: {
         overview: initial.observation.camera.level,
