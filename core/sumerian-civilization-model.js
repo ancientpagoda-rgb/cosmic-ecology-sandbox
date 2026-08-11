@@ -240,13 +240,13 @@ export function createSumerianCivilizationSimulation({
       const irrigation = clamp((0.20 + riverPulse * 0.62) * city.canalHealth * canalReach + floodContribution, 0, 1.25);
       const drainage = clamp(field.floodplain * 0.45 + city.canalHealth * 0.20, 0, 0.72);
       field.moisture = clamp(field.moisture * 0.42 + irrigation * 0.47 + riverPulse * 0.09, 0.08, 1.15);
+      const saltLoad = irrigation * (0.00065 + field.y * 0.00080);
+      const drainageFlush = drainage * riverPulse * (0.00135 + city.canalHealth * 0.00045);
+      const fallowFlush = Math.max(0, 0.52 - irrigation) * 0.00140;
       field.salinity = clamp(
-        field.salinity
-          + irrigation * (0.0024 + field.y * 0.0027)
-          - drainage * riverPulse * 0.0024
-          - Math.max(0, 0.58 - irrigation) * 0.0008,
+        field.salinity + saltLoad - drainageFlush - fallowFlush,
         0.02,
-        0.82,
+        0.72,
       );
       const cultivated = field.area * sowFraction * clamp(0.42 + canalReach * 0.72, 0.15, 1);
       const salinityPenalty = clamp(1 - field.salinity * 0.92, 0.18, 1);
@@ -458,7 +458,13 @@ export function createSumerianCivilizationSimulation({
         if (d > 0.34) continue;
         const scarcityA = clamp(0.92 - a.foodYears, 0, 0.8);
         const scarcityB = clamp(0.92 - b.foodYears, 0, 0.8);
-        const pressure = (scarcityA + scarcityB) * 0.10 + (a.military + b.military) * 0.010 + Math.max(0, 0.23 - d) * 0.018;
+        const lootPerPerson = (a.grain + b.grain) / Math.max(1, a.population + b.population);
+        const lootOpportunity = clamp(lootPerPerson / 0.70, 0.05, 1);
+        const pressure = (
+          (scarcityA + scarcityB) * 0.025
+          + (a.military + b.military) * 0.004
+          + Math.max(0, 0.23 - d) * 0.006
+        ) * lootOpportunity;
         const roll = deterministicRandom(seed, 'raid', state.yearIndex, a.id, b.id);
         if (roll >= pressure) continue;
         const attacker = (scarcityA + a.military * 0.18) >= (scarcityB + b.military * 0.18) ? a : b;
@@ -472,7 +478,7 @@ export function createSumerianCivilizationSimulation({
         const loot = Math.min(loser.grain * 0.045, winner.population * 0.018);
         loser.grain -= loot;
         winner.grain += loot;
-        const casualties = Math.min(loser.population * 0.0045, 8 + deterministicRandom(seed, 'casualties', state.yearIndex, a.id, b.id) * 55);
+        const casualties = Math.min(loser.population * 0.0025, 5 + deterministicRandom(seed, 'casualties', state.yearIndex, a.id, b.id) * 28);
         loser.population = Math.max(300, loser.population - casualties);
         winner.prestige = clamp(winner.prestige + 0.025, 0, 5);
         loser.prestige = clamp(loser.prestige - 0.012, 0, 5);
