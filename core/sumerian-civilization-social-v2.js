@@ -76,6 +76,10 @@ export function createSumerianCivilizationSimulation(options = {}) {
   }, 50);
 
   const detachAfter = base.transactions.afterStep(() => {
+    // The aggregate model has already advanced yearIndex. Process people who
+    // crossed the adulthood boundary during that year before any operation
+    // computes their class from the new clock value.
+    social.beginYear();
     const completedTick = Math.max(0, base.state.yearIndex - 1);
     processAggregateMigrationAndConflict(completedTick);
     for (const city of base.cities) {
