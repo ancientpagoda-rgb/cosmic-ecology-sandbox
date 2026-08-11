@@ -26,6 +26,20 @@ function compact(snapshot) {
   };
 }
 
+function calibrationSummary(snapshot) {
+  return snapshot.cities.map(city => ({
+    city: city.name,
+    population: Math.round(city.population),
+    harvest: Math.round(city.harvest),
+    grain: Math.round(city.grain + city.institutionalGrain),
+    foodRatio: Number(city.foodRatio.toFixed(3)),
+    foodYears: Number(city.foodYears.toFixed(3)),
+    canal: Number(city.canalHealth.toFixed(3)),
+    salinity: Number(city.meanSalinity.toFixed(3)),
+    cultivatedArea: Math.round(city.cultivatedArea),
+  }));
+}
+
 const simulation = createSumerianCivilizationSimulation({ seed: 'sumer-check-734221' });
 const initial = simulation.snapshot();
 assert.equal(initial.mode, 'historically-constrained-emergent');
@@ -49,7 +63,10 @@ for (const type of ['IRRIGATE', 'SOW', 'HARVEST', 'RATION', 'TAX', 'BUILD', 'REC
 simulation.advance(475);
 const middle = simulation.snapshot();
 assert.equal(middle.yearBCE, 3000);
-assert(middle.totals.population > 12_000, `urban system collapsed too far by 3000 BCE: ${middle.totals.population}`);
+assert(
+  middle.totals.population > 12_000,
+  `urban system collapsed too far by 3000 BCE: total=${middle.totals.population}; cities=${JSON.stringify(calibrationSummary(middle))}`,
+);
 assert(middle.totals.population < 5_000_000, `population runaway: ${middle.totals.population}`);
 assert(Number.isFinite(middle.totals.grain) && middle.totals.grain >= 0);
 assert(Number.isFinite(middle.totals.meanSalinity));
@@ -88,6 +105,7 @@ console.log(JSON.stringify({
   initialYearBCE: initial.yearBCE,
   middleYearBCE: middle.yearBCE,
   middlePopulation: Math.round(middle.totals.population),
+  middleCities: calibrationSummary(middle),
   finalYearBCE: final.yearBCE,
   finalPopulation: Math.round(final.totals.population),
   viableFinalCities: final.cities.filter(city => city.population > 600).map(city => ({ name: city.name, population: Math.round(city.population) })),
