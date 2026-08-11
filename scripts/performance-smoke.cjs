@@ -72,17 +72,23 @@ fs.mkdirSync(artifactDir, { recursive: true });
       fallbackOpacity: Number(getComputedStyle(document.getElementById('surfaceModeCanvas')).opacity),
     }));
 
-    // Dispatching these cancellable events exercises the same production
-    // recovery path deterministically, without depending on a GPU driver.
-    await page.evaluate(() => document.getElementById('surfaceGpuCanvas').dispatchEvent(new Event('webglcontextlost', { cancelable: true })));
-    await page.waitForFunction(() => {
-      const canvas = document.getElementById('surfaceModeCanvas');
-      return document.documentElement.dataset.surfaceGpu === 'sphere-v37-context-lost' && Number(getComputedStyle(canvas).opacity) > 0;
-    }, null, { timeout: 3000 });
-    const fallbackAfterContextLoss = await page.evaluate(() => ({
-      surfaceGpu: document.documentElement.dataset.surfaceGpu,
-      fallbackOpacity: getComputedStyle(document.getElementById('surfaceModeCanvas')).opacity,
-    }));
+    // This is a synthetic DOM event, so its production listener runs
+    // synchronously inside dispatchEvent(). Capture the resulting state in the
+    // same browser task instead of polling later and turning a recovery-contract
+    // assertion into a scheduler/timing test.
+    const fallbackAfterContextLoss = await page.evaluate(() => {
+      const gpuCanvas = document.getElementById('surfaceGpuCanvas');
+      const fallbackCanvas = document.getElementById('surfaceModeCanvas');
+      const dispatched = gpuCanvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+      return {
+        dispatched,
+        surfaceGpu: document.documentElement.dataset.surfaceGpu,
+        fallbackOpacity: Number(getComputedStyle(fallbackCanvas).opacity),
+        fallbackInlineOpacity: fallbackCanvas.style.opacity,
+        hasShowFallback: typeof window.realitySandboxSurfaceMode?.showFallback === 'function',
+        contextLost: Boolean(window.realitySandboxSurfaceSphereV37?.getStats?.().contextLost),
+      };
+    });
 
     await page.evaluate(() => document.getElementById('surfaceGpuCanvas').dispatchEvent(new Event('webglcontextrestored')));
     await page.waitForFunction(() => window.realitySandboxPresentationDiagnostics?.().surfaceGpu?.active === true, null, { timeout: 5000 });
@@ -94,7 +100,13 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(fallbackMs <= SURFACE_FALLBACK_BUDGET_MS, `Surface fallback exceeded ${SURFACE_FALLBACK_BUDGET_MS}ms (${fallbackMs.toFixed(1)}ms).`);
     assert(gpuMs <= SURFACE_GPU_BUDGET_MS, `Surface GPU readiness exceeded ${SURFACE_GPU_BUDGET_MS}ms (${gpuMs.toFixed(1)}ms).`);
     assert(gpuHandoff.gpuCanvasVisible && gpuHandoff.fallbackOpacity === 0, 'Surface GPU did not complete its visible handoff after rendering.');
-    assert(fallbackAfterContextLoss.surfaceGpu === 'sphere-v37-context-lost' && Number(fallbackAfterContextLoss.fallbackOpacity) > 0, 'Surface fallback did not return after simulated context loss.');
+    assert(
+      fallbackAfterContextLoss.surfaceGpu === 'sphere-v37-context-lost' &&
+      fallbackAfterContextLoss.fallbackOpacity > 0 &&
+      fallbackAfterContextLoss.hasShowFallback &&
+      fallbackAfterContextLoss.contextLost,
+      `Surface fallback did not return synchronously after simulated context loss: ${JSON.stringify(fallbackAfterContextLoss)}`,
+    );
     assert(pageErrors.length === 0, `Performance smoke produced browser errors: ${pageErrors.join(' | ')}`);
   } finally {
     await browser.close();

@@ -44,6 +44,9 @@ jobs:
       - name: Run integration audit
         run: npm run audit:integration
 
+      - name: Verify multiscale reality kernel
+        run: npm run check:kernel
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
@@ -62,6 +65,13 @@ jobs:
           done
           cat /tmp/reality-preview.log
           exit 1
+
+      - name: Verify camera-driven reality refinement
+        id: kernel_camera_test
+        continue-on-error: true
+        env:
+          REALITY_BASE_URL: http://127.0.0.1:4173/
+        run: npm run check:kernel-browser
 
       - name: Verify iPhone sphere aspect
         id: iphone_sphere_test
@@ -123,19 +133,20 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const kernelCameraOk = '${{ steps.kernel_camera_test.outcome }}' === 'success';
             const unifiedOk = '${{ steps.unified_test.outcome }}' === 'success';
             const rootRendererOk = '${{ steps.root_renderer_test.outcome }}' === 'success';
             const iphoneSphereOk = '${{ steps.iphone_sphere_test.outcome }}' === 'success';
             const surfaceModeOk = '${{ steps.surface_mode_test.outcome }}' === 'success';
             const performanceOk = '${{ steps.performance_test.outcome }}' === 'success';
-            const ok = unifiedOk && rootRendererOk && iphoneSphereOk && surfaceModeOk && performanceOk;
+            const ok = kernelCameraOk && unifiedOk && rootRendererOk && iphoneSphereOk && surfaceModeOk && performanceOk;
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
               state: ok ? 'success' : 'failure',
               context: 'browser/unified-runtime',
-              description: ok ? 'Living planet, presentation layers, surface mode, and iPhone checks passed' : 'A living-planet browser or visual check failed',
+              description: ok ? 'Living planet, reality refinement, surface mode, and iPhone checks passed' : 'A living-planet browser, reality-refinement, or visual check failed',
               target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             });
             if (!ok) core.setFailed('One or more browser diagnostics failed.');
