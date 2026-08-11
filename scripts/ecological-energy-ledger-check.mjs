@@ -4,24 +4,28 @@ import { installEcologicalEnergyLedger } from '../core/ecological-energy-ledger.
 function makeFixture() {
   const position = new Map([[1, { x: 50, y: 50 }]]);
   const agent = new Map([[1, { energy: 1, grazeClock: 1 }]]);
+  const predator = new Map();
+  const apex = new Map();
   const field = {
     sample() {
       return { food: 1, fertility: 1, moisture: 1, temperature: 0.5 };
     },
   };
   const world = {
+    tick: 1,
     width: 100,
     height: 100,
-    ecs: { components: { position, agent } },
+    ecs: { components: { position, agent, predator, apex } },
     forageField: field,
     step(dt) {
+      world.tick += 1;
       const grazer = agent.get(1);
       if (!grazer) return;
       const food = field.sample(50, 50).food;
       grazer.energy += food * dt * 0.052;
     },
   };
-  return { world, field, agent };
+  return { world, field, agent, predator, apex, position };
 }
 
 const { world, field, agent } = makeFixture();
@@ -78,10 +82,37 @@ const recovered = recoveryLedger.snapshot();
 assert(recovered.stock.total > 0, 'primary production did not restore coarse stock');
 assert(recovered.flowTotals.primaryProduction > 0, 'primary production flow was not recorded');
 
+const trophic = makeFixture();
+trophic.agent.clear();
+trophic.predator.set(10, { energy: 3 });
+trophic.position.set(10, { x: 30, y: 30 });
+trophic.world.step = () => {
+  trophic.world.tick += 1;
+  const parent = trophic.predator.get(10);
+  parent.energy *= 0.5;
+  trophic.predator.set(11, { energy: 2 });
+  trophic.position.set(11, { x: 31, y: 30 });
+};
+const trophicLedger = installEcologicalEnergyLedger({
+  world: trophic.world,
+  resourceField: trophic.field,
+  columns: 1,
+  rows: 1,
+  recoveryRate: 0,
+});
+const predatorEnergyBefore = [...trophic.predator.values()].reduce((sum, entity) => sum + entity.energy, 0);
+trophic.world.step(1);
+const predatorEnergyAfter = [...trophic.predator.values()].reduce((sum, entity) => sum + entity.energy, 0);
+const trophicSnapshot = trophicLedger.snapshot();
+assert(predatorEnergyAfter <= predatorEnergyBefore + 1e-12, `predator reproduction created energy: ${predatorEnergyBefore} -> ${predatorEnergyAfter}`);
+assert(trophicSnapshot.flowTotals.trophicRejectedCreation > 0, 'ledger did not reject trophic energy creation');
+
 console.log(JSON.stringify({
   ok: true,
   initialStock: initial.stock.total,
   depletedStock: depleted.stock.total,
   recoveredStock: recovered.stock.total,
-  flows: depleted.flowTotals,
+  predatorEnergyBefore,
+  predatorEnergyAfter,
+  flows: trophicSnapshot.flowTotals,
 }, null, 2));
