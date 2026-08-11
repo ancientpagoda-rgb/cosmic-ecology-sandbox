@@ -4,8 +4,8 @@ on:
   pull_request:
     paths:
       - 'sumer.html'
-      - 'core/sumerian-civilization-*.js'
-      - 'scripts/sumerian-civilization-*'
+      - 'core/sumerian-*.js'
+      - 'scripts/sumerian-*'
       - 'packages/multiscale-reality-kernel/**'
       - 'vite.config.js'
       - 'package.json'
