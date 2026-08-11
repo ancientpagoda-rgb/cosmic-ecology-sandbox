@@ -7,29 +7,13 @@ const DEFAULT_PREDATOR_TRANSFER_EFFICIENCY = 0.72;
 const DEFAULT_APEX_TRANSFER_EFFICIENCY = 0.68;
 const EPSILON = 1e-12;
 
-function clamp(value, minimum, maximum) {
-  return Math.max(minimum, Math.min(maximum, value));
-}
-
-function finite(value, fallback = 0) {
-  return Number.isFinite(value) ? value : fallback;
-}
-
-function sumEnergy(map) {
-  let total = 0;
-  for (const entity of map?.values?.() || []) total += Math.max(0, finite(entity?.energy));
-  return total;
-}
-
-function snapshotEnergyMap(map) {
-  const snapshot = new Map();
-  for (const [id, entity] of map?.entries?.() || []) snapshot.set(id, Math.max(0, finite(entity?.energy)));
-  return snapshot;
-}
+const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
+const finite = (value, fallback = 0) => Number.isFinite(value) ? value : fallback;
 
 export function installEcologicalEnergyLedger({
   world,
   resourceField,
+  transactions = world?.ecologicalTransactions,
   columns = DEFAULT_COLUMNS,
   rows = DEFAULT_ROWS,
   capacityScale = DEFAULT_CAPACITY_SCALE,
@@ -38,11 +22,14 @@ export function installEcologicalEnergyLedger({
   predatorTransferEfficiency = DEFAULT_PREDATOR_TRANSFER_EFFICIENCY,
   apexTransferEfficiency = DEFAULT_APEX_TRANSFER_EFFICIENCY,
 } = {}) {
-  if (!world?.ecs?.components?.agent || !world?.ecs?.components?.position || typeof world.step !== 'function') {
+  if (!world?.ecs?.components?.agent || !world?.ecs?.components?.position) {
     throw new Error('Ecological energy ledger requires the authoritative Eidolon world.');
   }
   if (!resourceField || typeof resourceField.sample !== 'function') {
     throw new Error('Ecological energy ledger requires the authoritative seasonal resource field.');
+  }
+  if (!transactions?.register || !transactions?.beforeStep || !transactions?.transact) {
+    throw new Error('Ecological energy ledger requires the ecological transaction layer.');
   }
   if (!(columns > 0 && rows > 0 && capacityScale > 0 && recoveryRate >= 0 && assimilationEfficiency > 0 && assimilationEfficiency <= 1)) {
     throw new Error('Invalid ecological energy ledger configuration.');
@@ -51,7 +38,6 @@ export function installEcologicalEnergyLedger({
     throw new Error('Invalid trophic transfer efficiency.');
   }
 
-  const originalStep = world.step;
   const originalSample = resourceField.sample.bind(resourceField);
   const cells = Array.from({ length: columns * rows }, (_, index) => ({
     index,
@@ -65,10 +51,10 @@ export function installEcologicalEnergyLedger({
     primaryIn: 0,
     seasonalTurnover: 0,
   }));
-
+  const unregister = [];
   let destroyed = false;
-  let wrappedStepActive = false;
   let stepCount = 0;
+
   const totals = {
     primaryProduction: 0,
     grazingWithdrawal: 0,
@@ -82,6 +68,7 @@ export function installEcologicalEnergyLedger({
     trophicRejectedCreation: 0,
     trophicWaste: 0,
     seasonalTurnover: 0,
+    reproductionTransferred: 0,
   };
 
   function cellCoordinates(index) {
@@ -102,8 +89,8 @@ export function installEcologicalEnergyLedger({
 
   function refreshCellCapacity(cell) {
     const point = cellCoordinates(cell.index);
-    const base = originalSample(point.x, point.y);
-    const productivity = clamp(finite(base?.food), 0, 1);
+    const base = originalSample(point.x, point.y) || {};
+    const productivity = clamp(finite(base.food), 0, 1);
     const nextCapacity = productivity * capacityScale;
 
     if (!cell.initialized) {
@@ -111,6 +98,13 @@ export function installEcologicalEnergyLedger({
       cell.initialized = true;
     } else if (cell.stock > nextCapacity) {
       const turnover = cell.stock - nextCapacity;
+      transactions.transact(transactions.types.DIE, {
+        guild: 'vegetation',
+        x: point.x,
+        y: point.y,
+        storedEnergy: turnover,
+        cause: 'seasonal-turnover',
+      }, {});
       cell.stock = nextCapacity;
       cell.seasonalTurnover += turnover;
       totals.seasonalTurnover += turnover;
@@ -123,25 +117,6 @@ export function installEcologicalEnergyLedger({
 
   function initializeCells() {
     for (const cell of cells) refreshCellCapacity(cell);
-  }
-
-  function replenish(dt) {
-    if (!(dt > 0)) return 0;
-    let added = 0;
-    for (const cell of cells) {
-      refreshCellCapacity(cell);
-      if (cell.capacity <= 0 || cell.stock >= cell.capacity) continue;
-      const growth = Math.min(
-        cell.capacity - cell.stock,
-        cell.productivity * recoveryRate * dt,
-      );
-      if (growth <= 0) continue;
-      cell.stock += growth;
-      cell.primaryIn += growth;
-      totals.primaryProduction += growth;
-      added += growth;
-    }
-    return added;
   }
 
   function availability(cell) {
@@ -158,6 +133,7 @@ export function installEcologicalEnergyLedger({
       food: clamp(finite(base.food) * fraction, 0, 1),
       ecologicalEnergy: {
         unit: 'model-ecological-energy',
+        physicalUnitClaim: false,
         stock: cell.stock,
         capacity: cell.capacity,
         availability: fraction,
@@ -177,133 +153,80 @@ export function installEcologicalEnergyLedger({
     return { requested: amount, taken, cell };
   }
 
-  function snapshotBeforeStep() {
-    const { agent, predator, apex, position } = world.ecs.components;
-    const grazers = new Map();
-    for (const [id, grazer] of agent.entries()) {
-      const pos = position.get(id);
-      if (!pos) continue;
-      grazers.set(id, { energy: Math.max(0, finite(grazer.energy)), x: pos.x, y: pos.y });
+  function replenish(dt) {
+    if (!(dt > 0)) return 0;
+    let added = 0;
+    for (const cell of cells) {
+      refreshCellCapacity(cell);
+      if (cell.capacity <= 0 || cell.stock >= cell.capacity) continue;
+      const requested = Math.min(cell.capacity - cell.stock, cell.productivity * recoveryRate * dt);
+      if (requested <= EPSILON) continue;
+      const point = cellCoordinates(cell.index);
+      const uptake = transactions.transact(transactions.types.UPTAKE, {
+        x: point.x,
+        y: point.y,
+        requestedEnergy: requested,
+      }, { allowedEnergy: requested });
+      const growth = Math.min(requested, Math.max(0, finite(uptake.result.allowedEnergy, requested)));
+      if (growth <= EPSILON) continue;
+      cell.stock += growth;
+      cell.primaryIn += growth;
+      totals.primaryProduction += growth;
+      added += growth;
     }
-    return {
-      tick: world.tick,
-      grazers,
-      predator: snapshotEnergyMap(predator),
-      apex: snapshotEnergyMap(apex),
-    };
+    return added;
   }
 
-  function reconcileGrazing(before) {
-    const { agent, position } = world.ecs.components;
-    for (const [id, previous] of before.grazers.entries()) {
-      const grazer = agent.get(id);
-      const pos = position.get(id);
-      if (!grazer || !pos) continue;
+  unregister.push(transactions.register(transactions.types.GRAZE, event => {
+    const requestedGain = Math.max(0, finite(event.payload.requestedGain));
+    const requestedWithdrawal = requestedGain / assimilationEfficiency;
+    const transfer = withdraw(event.payload.x, event.payload.y, requestedWithdrawal);
+    const allowedGain = Math.min(requestedGain, transfer.taken * assimilationEfficiency);
+    event.result.allowedGain = Math.min(Math.max(0, finite(event.result.allowedGain, requestedGain)), allowedGain);
+    totals.assimilatedToGrazers += event.result.allowedGain;
+    totals.unassimilated += Math.max(0, transfer.taken - event.result.allowedGain);
+    totals.deniedAssimilation += Math.max(0, requestedGain - event.result.allowedGain);
+    event.result.forageWithdrawn = transfer.taken;
+    event.result.assimilationEfficiency = assimilationEfficiency;
+  }, 100));
 
-      const gain = finite(grazer.energy) - previous.energy;
-      if (gain <= EPSILON) continue;
-
-      const requestedWithdrawal = gain / assimilationEfficiency;
-      const transfer = withdraw(pos.x, pos.y, requestedWithdrawal);
-      const allowedGain = transfer.taken * assimilationEfficiency;
-      const deniedGain = Math.max(0, gain - allowedGain);
-
-      if (deniedGain > EPSILON) {
-        grazer.energy = Math.max(0, finite(grazer.energy) - deniedGain);
-        totals.deniedAssimilation += deniedGain;
-      }
-      totals.assimilatedToGrazers += allowedGain;
-      totals.unassimilated += Math.max(0, transfer.taken - allowedGain);
+  unregister.push(transactions.register(transactions.types.PREDATE, event => {
+    const requestedGain = Math.max(0, finite(event.payload.requestedGain));
+    const preyEnergy = Math.max(0, finite(event.payload.preyEnergy));
+    const isApex = event.payload.consumerGuild === 'apex';
+    const efficiency = isApex ? apexTransferEfficiency : predatorTransferEfficiency;
+    const available = preyEnergy * efficiency;
+    const allowedGain = Math.min(requestedGain, available);
+    event.result.allowedGain = Math.min(Math.max(0, finite(event.result.allowedGain, requestedGain)), allowedGain);
+    event.result.transferEfficiency = efficiency;
+    event.result.preyEnergyAvailable = preyEnergy;
+    if (isApex) {
+      totals.apexPreyEnergyAvailable += preyEnergy;
+      totals.apexEnergyRetained += event.result.allowedGain;
+    } else {
+      totals.predatorPreyEnergyAvailable += preyEnergy;
+      totals.predatorEnergyRetained += event.result.allowedGain;
     }
-  }
+    totals.trophicRejectedCreation += Math.max(0, requestedGain - event.result.allowedGain);
+    totals.trophicWaste += Math.max(0, preyEnergy - event.result.allowedGain);
+  }, 100));
 
-  function removedEnergy(beforeMap, currentMap) {
-    let total = 0;
-    for (const [id, energy] of beforeMap.entries()) {
-      if (!currentMap?.has?.(id)) total += energy;
-    }
-    return total;
-  }
+  unregister.push(transactions.register(transactions.types.REPRODUCE, event => {
+    const transferred = Math.max(0, finite(event.payload.parentEnergyTransferred));
+    const requestedChild = Math.max(0, finite(event.payload.childEnergy));
+    const allowedChild = Math.min(requestedChild, transferred);
+    event.result.childEnergy = Math.min(Math.max(0, finite(event.result.childEnergy, requestedChild)), allowedChild);
+    totals.reproductionTransferred += event.result.childEnergy;
+    totals.trophicRejectedCreation += Math.max(0, requestedChild - event.result.childEnergy);
+  }, 100));
 
-  function trimExcessEnergy(currentMap, beforeMap, excess) {
-    let remaining = Math.max(0, excess);
-    if (remaining <= EPSILON || !currentMap) return 0;
+  unregister.push(transactions.beforeStep(({ dt }) => {
+    replenish(dt);
+    stepCount += 1;
+  }, 20));
 
-    const newIds = [];
-    const existingIds = [];
-    for (const id of currentMap.keys()) {
-      if (beforeMap.has(id)) existingIds.push(id);
-      else newIds.push(id);
-    }
-
-    let removed = 0;
-    for (const id of [...newIds, ...existingIds]) {
-      if (remaining <= EPSILON) break;
-      const entity = currentMap.get(id);
-      if (!entity) continue;
-      const energy = Math.max(0, finite(entity.energy));
-      const reduction = Math.min(energy, remaining);
-      entity.energy = energy - reduction;
-      remaining -= reduction;
-      removed += reduction;
-    }
-    return removed;
-  }
-
-  function reconcileTrophicLevels(before) {
-    const { agent, predator, apex } = world.ecs.components;
-    const predatorMap = predator || new Map();
-    const apexMap = apex || new Map();
-
-    const grazerEnergyRemoved = removedEnergy(
-      new Map([...before.grazers].map(([id, state]) => [id, state.energy])),
-      agent,
-    );
-    const predatorBeforeTotal = [...before.predator.values()].reduce((sum, energy) => sum + energy, 0);
-    const predatorAfterTotal = sumEnergy(predatorMap);
-    const predatorAvailable = grazerEnergyRemoved * predatorTransferEfficiency;
-    const predatorCeiling = predatorBeforeTotal + predatorAvailable;
-    const predatorExcess = Math.max(0, predatorAfterTotal - predatorCeiling);
-    const predatorRejected = trimExcessEnergy(predatorMap, before.predator, predatorExcess);
-    const predatorRetained = Math.max(0, Math.min(predatorAvailable, sumEnergy(predatorMap) - predatorBeforeTotal));
-
-    totals.predatorPreyEnergyAvailable += grazerEnergyRemoved;
-    totals.predatorEnergyRetained += predatorRetained;
-    totals.trophicRejectedCreation += predatorRejected;
-    totals.trophicWaste += Math.max(0, grazerEnergyRemoved - predatorRetained);
-
-    const predatorEnergyRemoved = removedEnergy(before.predator, predatorMap);
-    const apexBeforeTotal = [...before.apex.values()].reduce((sum, energy) => sum + energy, 0);
-    const apexAfterTotal = sumEnergy(apexMap);
-    const apexAvailable = predatorEnergyRemoved * apexTransferEfficiency;
-    const apexCeiling = apexBeforeTotal + apexAvailable;
-    const apexExcess = Math.max(0, apexAfterTotal - apexCeiling);
-    const apexRejected = trimExcessEnergy(apexMap, before.apex, apexExcess);
-    const apexRetained = Math.max(0, Math.min(apexAvailable, sumEnergy(apexMap) - apexBeforeTotal));
-
-    totals.apexPreyEnergyAvailable += predatorEnergyRemoved;
-    totals.apexEnergyRetained += apexRetained;
-    totals.trophicRejectedCreation += apexRejected;
-    totals.trophicWaste += Math.max(0, predatorEnergyRemoved - apexRetained);
-  }
-
-  function wrappedStep(dt) {
-    if (destroyed || wrappedStepActive) return originalStep.call(world, dt);
-    wrappedStepActive = true;
-    try {
-      replenish(dt);
-      const before = snapshotBeforeStep();
-      const result = originalStep.call(world, dt);
-      if (!(world.tick === 0 && before.tick > 0)) {
-        reconcileGrazing(before);
-        reconcileTrophicLevels(before);
-      }
-      stepCount += 1;
-      return result;
-    } finally {
-      wrappedStepActive = false;
-    }
-  }
+  initializeCells();
+  resourceField.sample = sample;
 
   function getCell(x, y) {
     const cell = locate(x, y);
@@ -323,15 +246,16 @@ export function installEcologicalEnergyLedger({
   function snapshot() {
     const totalStock = cells.reduce((sum, cell) => sum + cell.stock, 0);
     const totalCapacity = cells.reduce((sum, cell) => sum + cell.capacity, 0);
-    const activeCells = cells.filter(cell => cell.capacity > EPSILON).length;
     return {
-      version: 2,
+      version: 3,
       writable: true,
+      eventDriven: true,
+      populationScanFree: true,
       unit: 'model-ecological-energy',
       physicalUnitClaim: false,
-      scope: 'coarse forage stock <-> individual grazer energy plus trophic anti-creation reconciliation',
+      scope: 'transaction-driven landscape forage <-> grazer <-> predator <-> apex energy accounting',
       stepCount,
-      grid: { columns, rows, activeCells },
+      grid: { columns, rows, activeCells: cells.filter(cell => cell.capacity > EPSILON).length },
       stock: {
         total: totalStock,
         capacity: totalCapacity,
@@ -351,17 +275,14 @@ export function installEcologicalEnergyLedger({
   function destroy() {
     if (destroyed) return;
     destroyed = true;
-    if (world.step === wrappedStep) world.step = originalStep;
+    for (const remove of unregister.splice(0)) remove();
     if (resourceField.sample === sample) resourceField.sample = originalSample;
   }
 
-  initializeCells();
-  resourceField.sample = sample;
-  world.step = wrappedStep;
-
   return {
-    version: 2,
+    version: 3,
     writable: true,
+    eventDriven: true,
     unit: 'model-ecological-energy',
     sample,
     getCell,
