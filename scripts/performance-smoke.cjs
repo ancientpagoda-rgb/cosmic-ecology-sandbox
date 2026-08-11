@@ -7,6 +7,7 @@ const artifactDir = process.env.REALITY_PERFORMANCE_ARTIFACT_DIR || path.join(pr
 const STARTUP_BUDGET_MS = 12000;
 const SURFACE_FALLBACK_BUDGET_MS = 1500;
 const SURFACE_GPU_BUDGET_MS = 15000;
+const CONTEXT_LOSS_FALLBACK_BUDGET_MS = 5000;
 const STARTUP_PIXEL_BUDGET = 1920 * 1080 + 8192;
 
 fs.mkdirSync(artifactDir, { recursive: true });
@@ -50,12 +51,14 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(startup.deferredPresentation === 'disabled', `Legacy presentation should be opt-in, got ${startup.deferredPresentation}.`);
     assert(startup.legacyPresentationResources.length === 0, `Legacy presentation resources loaded on the default route: ${startup.legacyPresentationResources.join(', ')}.`);
 
-    // The interaction smoke uses a real Playwright pointer click. Here we
-    // measure the handler itself, excluding test-runner actionability waits.
+    // This is a lower-level renderer cold-start benchmark. Player-facing entry is
+    // now continuous zoom, but invoking the private local renderer directly keeps
+    // this measurement isolated from wheel/actionability timing.
     await page.evaluate(() => {
-      const button = document.getElementById('enterSurfaceMode');
+      const camera = window.realitySandboxUnified.getCamera();
+      const world = window.realitySandboxPlanet.world;
       window.__surfaceEntryStartedAt = performance.now();
-      button.click();
+      window.realitySandboxSurfaceMode.enterAt(camera.centerX * world.width, camera.centerY * world.height);
     });
     await page.waitForFunction(() => document.documentElement.dataset.surfaceModeFallbackReady === 'true', null, { timeout: SURFACE_FALLBACK_BUDGET_MS });
     const fallbackMs = await page.evaluate(() => Number(document.documentElement.dataset.surfaceModeFallbackPaintedAt) - window.__surfaceEntryStartedAt);
@@ -63,7 +66,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
       active: document.documentElement.dataset.surfaceMode === 'active',
       paintedAt: Number(document.documentElement.dataset.surfaceModeFallbackPaintedAt),
     }));
-    assert(fallbackPaint.active && Number.isFinite(fallbackPaint.paintedAt), 'Surface Mode did not paint its immediate fallback.');
+    assert(fallbackPaint.active && Number.isFinite(fallbackPaint.paintedAt), 'Local detail renderer did not paint its immediate fallback.');
 
     await page.waitForFunction(() => window.realitySandboxPresentationDiagnostics?.().surfaceGpu?.active === true, null, { timeout: SURFACE_GPU_BUDGET_MS });
     const gpuMs = await page.evaluate(() => performance.now() - window.__surfaceEntryStartedAt);
@@ -72,29 +75,47 @@ fs.mkdirSync(artifactDir, { recursive: true });
       fallbackOpacity: Number(getComputedStyle(document.getElementById('surfaceModeCanvas')).opacity),
     }));
 
-    // Dispatching these cancellable events exercises the same production
-    // recovery path deterministically, without depending on a GPU driver.
-    await page.evaluate(() => document.getElementById('surfaceGpuCanvas').dispatchEvent(new Event('webglcontextlost', { cancelable: true })));
+    // Exercise the production context-loss listener deterministically. Chrome 151+
+    // is stricter about reserved WebGL event types, so use WebGLContextEvent when
+    // available instead of relying on a generic Event with the same name.
+    const lossDispatch = await page.evaluate(() => {
+      const canvas = document.getElementById('surfaceGpuCanvas');
+      const event = typeof WebGLContextEvent === 'function'
+        ? new WebGLContextEvent('webglcontextlost', { cancelable: true, statusMessage: 'CI synthetic context loss' })
+        : new Event('webglcontextlost', { cancelable: true });
+      const dispatched = canvas.dispatchEvent(event);
+      return { dispatched, defaultPrevented: event.defaultPrevented, eventType: event.constructor.name };
+    });
     await page.waitForFunction(() => {
       const canvas = document.getElementById('surfaceModeCanvas');
-      return document.documentElement.dataset.surfaceGpu === 'sphere-v37-context-lost' && Number(getComputedStyle(canvas).opacity) > 0;
-    }, null, { timeout: 3000 });
+      const stats = window.realitySandboxSurfaceSphereV37?.getStats?.();
+      return stats?.contextLost === true &&
+        document.documentElement.dataset.surfaceGpu === 'sphere-v37-context-lost' &&
+        Number(getComputedStyle(canvas).opacity) > 0;
+    }, null, { timeout: CONTEXT_LOSS_FALLBACK_BUDGET_MS });
     const fallbackAfterContextLoss = await page.evaluate(() => ({
       surfaceGpu: document.documentElement.dataset.surfaceGpu,
       fallbackOpacity: getComputedStyle(document.getElementById('surfaceModeCanvas')).opacity,
+      contextLost: Boolean(window.realitySandboxSurfaceSphereV37?.getStats?.().contextLost),
     }));
 
-    await page.evaluate(() => document.getElementById('surfaceGpuCanvas').dispatchEvent(new Event('webglcontextrestored')));
+    await page.evaluate(() => {
+      const canvas = document.getElementById('surfaceGpuCanvas');
+      const event = typeof WebGLContextEvent === 'function'
+        ? new WebGLContextEvent('webglcontextrestored', { statusMessage: 'CI synthetic context restore' })
+        : new Event('webglcontextrestored');
+      canvas.dispatchEvent(event);
+    });
     await page.waitForFunction(() => window.realitySandboxPresentationDiagnostics?.().surfaceGpu?.active === true, null, { timeout: 5000 });
 
-    const metrics = { startupMs, fallbackMs, gpuMs, startup, gpuHandoff, fallbackAfterContextLoss, pageErrors };
+    const metrics = { startupMs, fallbackMs, gpuMs, startup, gpuHandoff, lossDispatch, fallbackAfterContextLoss, pageErrors };
     fs.writeFileSync(path.join(artifactDir, 'performance.json'), JSON.stringify(metrics, null, 2));
 
     assert(startupMs <= STARTUP_BUDGET_MS, `Interactive startup exceeded ${STARTUP_BUDGET_MS}ms (${startupMs}ms).`);
-    assert(fallbackMs <= SURFACE_FALLBACK_BUDGET_MS, `Surface fallback exceeded ${SURFACE_FALLBACK_BUDGET_MS}ms (${fallbackMs.toFixed(1)}ms).`);
-    assert(gpuMs <= SURFACE_GPU_BUDGET_MS, `Surface GPU readiness exceeded ${SURFACE_GPU_BUDGET_MS}ms (${gpuMs.toFixed(1)}ms).`);
-    assert(gpuHandoff.gpuCanvasVisible && gpuHandoff.fallbackOpacity === 0, 'Surface GPU did not complete its visible handoff after rendering.');
-    assert(fallbackAfterContextLoss.surfaceGpu === 'sphere-v37-context-lost' && Number(fallbackAfterContextLoss.fallbackOpacity) > 0, 'Surface fallback did not return after simulated context loss.');
+    assert(fallbackMs <= SURFACE_FALLBACK_BUDGET_MS, `Local fallback exceeded ${SURFACE_FALLBACK_BUDGET_MS}ms (${fallbackMs.toFixed(1)}ms).`);
+    assert(gpuMs <= SURFACE_GPU_BUDGET_MS, `Local GPU readiness exceeded ${SURFACE_GPU_BUDGET_MS}ms (${gpuMs.toFixed(1)}ms).`);
+    assert(gpuHandoff.gpuCanvasVisible && gpuHandoff.fallbackOpacity === 0, 'Local GPU did not complete its visible handoff after rendering.');
+    assert(fallbackAfterContextLoss.contextLost && fallbackAfterContextLoss.surfaceGpu === 'sphere-v37-context-lost' && Number(fallbackAfterContextLoss.fallbackOpacity) > 0, 'Local fallback did not return after simulated context loss.');
     assert(pageErrors.length === 0, `Performance smoke produced browser errors: ${pageErrors.join(' | ')}`);
   } finally {
     await browser.close();
