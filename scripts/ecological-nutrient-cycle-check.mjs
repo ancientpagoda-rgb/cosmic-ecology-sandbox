@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { installEcologicalTransactions } from '../core/ecological-transactions.js';
 import { installEcologicalEnergyLedger } from '../core/ecological-energy-ledger.js';
 import { installEcologicalNutrientCycle } from '../core/ecological-nutrient-cycle.js';
 
@@ -36,21 +37,24 @@ function makeWorld({ grazers = [], predators = [], apex = [], step } = {}) {
     apexMap.set(item.id, { energy: item.energy ?? 3 });
   }
 
-  const world = {
-    tick: 1,
-    width: 100,
-    height: 100,
-    ecs: { components: { position, agent, predator, apex: apexMap } },
-    step: null,
+  const components = { position, agent, predator, apex: apexMap };
+  const ecs = {
+    components,
+    destroyEntity(id) {
+      for (const map of Object.values(components)) map.delete(id);
+    },
   };
-  world.step = step ? dt => step({ world, position, agent, predator, apex: apexMap, dt }) : dt => { world.tick += 1; };
+  const world = { tick: 1, width: 100, height: 100, ecs, step: null };
+  world.step = step ? dt => step({ world, position, agent, predator, apex: apexMap, dt }) : () => { world.tick += 1; };
   return { world, position, agent, predator, apex: apexMap };
 }
 
 function installPair(world, field, energyOptions = {}) {
+  const transactions = installEcologicalTransactions({ world });
   const nutrients = installEcologicalNutrientCycle({
     world,
     resourceField: field,
+    transactions,
     columns: 1,
     rows: 1,
     nutrientPerForageEnergy: 0.08,
@@ -59,6 +63,7 @@ function installPair(world, field, energyOptions = {}) {
   const energy = installEcologicalEnergyLedger({
     world,
     resourceField: field,
+    transactions,
     columns: 1,
     rows: 1,
     capacityScale: 0.4,
@@ -67,12 +72,9 @@ function installPair(world, field, energyOptions = {}) {
     ...energyOptions,
   });
   nutrients.attachEnergyLedger(energy);
-  return { nutrients, energy };
+  return { nutrients, energy, transactions };
 }
 
-// Grazing must move vegetation nutrients into both grazer biomass and detritus,
-// then decomposition must mineralize detritus back into the soil without
-// changing total nutrient matter.
 {
   const field = makeField();
   const fixture = makeWorld({
@@ -84,8 +86,10 @@ function installPair(world, field, energyOptions = {}) {
       grazer.energy += field.sample(50, 50).food * dt * 0.052;
     },
   });
-  const { nutrients } = installPair(fixture.world, field);
+  const { nutrients, transactions } = installPair(fixture.world, field);
   const baseline = nutrients.snapshot();
+  assert.equal(baseline.eventDriven, true);
+  assert.equal(baseline.populationScanFree, true);
   assertConserved(baseline, 'grazing baseline');
 
   fixture.world.step(1);
@@ -93,6 +97,7 @@ function installPair(world, field, energyOptions = {}) {
   assert(grazed.flowTotals.vegetationToBiota > 0, 'grazing did not move vegetation nutrients into mobile biota');
   assert(grazed.flowTotals.vegetationToDetritus > 0, 'grazing waste did not enter detritus');
   assert(grazed.reservoirs.detritus > 0, 'grazing produced no detritus reservoir');
+  assert(transactions.snapshot().counts.GRAZE > 0, 'grazing was not represented by explicit transactions');
   assertConserved(grazed, 'after grazing');
 
   const soilBefore = grazed.reservoirs.soil;
@@ -102,50 +107,71 @@ function installPair(world, field, energyOptions = {}) {
   assert(decomposed.reservoirs.soil > soilBefore, 'decomposition did not return mineral nutrients to soil');
   assert(decomposed.reservoirs.detritus < detritusBefore, 'decomposition did not consume detritus');
   assert(decomposed.flowTotals.mineralization > 0, 'decomposition flow was not recorded');
+  assert(transactions.snapshot().counts.DECOMPOSE > 0, 'decomposition did not emit DECOMPOSE transactions');
   assertConserved(decomposed, 'after decomposition');
 }
 
-// Predation must transfer only part of prey nutrient matter to the predator;
-// the remainder must become spatial detritus rather than disappear.
 {
   const field = makeField();
   const fixture = makeWorld({
     grazers: [{ id: 1, energy: 1, x: 50, y: 50 }],
     predators: [{ id: 2, energy: 2, x: 51, y: 50 }],
-    step: ({ world, position, agent, predator }) => {
+    step: ({ world, predator }) => {
       world.tick += 1;
-      agent.delete(1);
-      position.delete(1);
+      world.ecs.destroyEntity(1);
       predator.get(2).energy += 1;
     },
   });
-  const { nutrients } = installPair(fixture.world, field);
+  const { nutrients, transactions } = installPair(fixture.world, field);
   const baseline = nutrients.snapshot();
   fixture.world.step(1);
   const afterPredation = nutrients.snapshot();
   assert(afterPredation.flowTotals.biotaToBiota > 0, 'predation did not transfer prey nutrients to predator biomass');
   assert(afterPredation.flowTotals.biotaToDetritus > 0, 'predation waste did not become detritus');
   assert(afterPredation.reservoirs.detritus > baseline.reservoirs.detritus, 'predation did not increase detritus');
+  assert.equal(transactions.snapshot().counts.PREDATE, 1, 'predation was not one explicit PREDATE transaction');
   assertConserved(afterPredation, 'after predation');
 }
 
-// Primary production is powered by the existing ecological-energy model but
-// must draw nutrient matter from soil into vegetation rather than creating it.
 {
   const field = makeField();
   const fixture = makeWorld();
-  const { nutrients, energy } = installPair(fixture.world, field, { recoveryRate: 0.02 });
+  const { nutrients, energy, transactions } = installPair(fixture.world, field, { recoveryRate: 0.02 });
   energy.withdraw(50, 50, 0.4);
   const beforeGrowth = nutrients.snapshot();
   fixture.world.step(1);
   const afterGrowth = nutrients.snapshot();
   assert(afterGrowth.flowTotals.soilToVegetation > beforeGrowth.flowTotals.soilToVegetation, 'primary production did not take nutrients from soil');
   assert(afterGrowth.reservoirs.vegetation > beforeGrowth.reservoirs.vegetation, 'primary production did not restore vegetation nutrients');
+  assert(transactions.snapshot().counts.UPTAKE > 0, 'primary production did not emit UPTAKE transactions');
   assertConserved(afterGrowth, 'after primary production');
+}
+
+{
+  const field = makeField();
+  const fixture = makeWorld({
+    predators: [{ id: 2, energy: 3, x: 50, y: 50 }],
+    step: ({ world, position, predator }) => {
+      world.tick += 1;
+      position.set(4, { x: 51, y: 50 });
+      predator.set(4, { energy: 2 });
+      predator.get(2).energy *= 0.5;
+    },
+  });
+  const { nutrients, transactions } = installPair(fixture.world, field);
+  const before = nutrients.snapshot();
+  fixture.world.step(1);
+  const after = nutrients.snapshot();
+  assert.equal(transactions.snapshot().counts.REPRODUCE, 1, 'reproduction was not an explicit REPRODUCE transaction');
+  assert(after.flowTotals.reproductionTransferred > 0, 'reproduction did not transfer tracked body nutrients to offspring');
+  assertConserved(before, 'before reproduction');
+  assertConserved(after, 'after reproduction');
 }
 
 console.log(JSON.stringify({
   ok: true,
+  eventDriven: true,
+  populationScanFree: true,
   contract: 'soil minerals <-> vegetation nutrients -> mobile biota -> detritus -> soil minerals',
   unit: 'model-nutrient',
   physicalUnitClaim: false,
