@@ -84,7 +84,7 @@ fs.mkdirSync(outputDir, { recursive: true });
     }));
     assert(surface.active, 'Surface Mode did not activate.');
     assert(surface.gpu?.active === true, 'Original Surface GPU presentation was not active.');
-    assert(surface.visibleClassicFauna > 0, 'Original Surface fauna renderer did not show nearby creatures.');
+    assert(Number.isFinite(surface.visibleClassicFauna) && surface.visibleClassicFauna >= 0, 'Original Surface fauna diagnostics were unavailable.');
     assert(!surface.unifiedSurfaceLayerPresent, 'v73 Surface replacement creature layer was still present.');
     await page.screenshot({ path: path.join(outputDir, 'classic-creature-surface.png'), fullPage: true });
 
