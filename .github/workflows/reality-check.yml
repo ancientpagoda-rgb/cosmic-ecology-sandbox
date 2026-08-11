@@ -46,6 +46,9 @@ jobs:
       - name: Verify multiscale reality kernel
         run: npm run check:kernel
 
+      - name: Verify Sumer civilization model
+        run: npm run check:sumer
+
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
