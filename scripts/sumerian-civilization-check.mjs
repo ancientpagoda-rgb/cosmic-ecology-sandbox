@@ -49,7 +49,7 @@ for (const type of ['IRRIGATE', 'SOW', 'HARVEST', 'RATION', 'TAX', 'BUILD', 'REC
 simulation.advance(475);
 const middle = simulation.snapshot();
 assert.equal(middle.yearBCE, 3000);
-assert(middle.totals.population > 0 && Number.isFinite(middle.totals.population));
+assert(middle.totals.population > 12_000, `urban system collapsed too far by 3000 BCE: ${middle.totals.population}`);
 assert(middle.totals.population < 5_000_000, `population runaway: ${middle.totals.population}`);
 assert(Number.isFinite(middle.totals.grain) && middle.totals.grain >= 0);
 assert(Number.isFinite(middle.totals.meanSalinity));
@@ -74,19 +74,23 @@ assert.notDeepEqual(compact(sameA.snapshot()), compact(different.snapshot()), 'd
 simulation.advance(1000);
 const final = simulation.snapshot();
 assert.equal(final.yearBCE, 2000);
+assert(final.totals.population > 7_000, `civilization-wide collapse reached calibration floor: ${final.totals.population}`);
+assert(final.cities.filter(city => city.population > 600).length >= 3, 'fewer than three viable urban centers remained at scenario end');
 assert(final.transactions.counts.IRRIGATE >= 7 * 1000, 'annual irrigation transactions unexpectedly sparse');
 assert(final.transactions.counts.HARVEST >= 7 * 1000, 'annual harvest transactions unexpectedly sparse');
 assert(final.transactions.counts.RATION >= 7 * 1000, 'annual ration transactions unexpectedly sparse');
 assert(final.transactions.counts.RECORD > 0, 'administrative record production never emerged');
 assert(final.totals.tradeVolume >= 0);
-assert(final.totals.raids >= 0);
+assert(final.totals.raids >= 0 && final.totals.raids < 900, `raid feedback became runaway: ${final.totals.raids}`);
 
 console.log(JSON.stringify({
   ok: true,
   initialYearBCE: initial.yearBCE,
   middleYearBCE: middle.yearBCE,
+  middlePopulation: Math.round(middle.totals.population),
   finalYearBCE: final.yearBCE,
   finalPopulation: Math.round(final.totals.population),
+  viableFinalCities: final.cities.filter(city => city.population > 600).map(city => ({ name: city.name, population: Math.round(city.population) })),
   finalHegemon: final.politics.hegemonName,
   transactionCounts: final.transactions.counts,
   tradeVolume: final.totals.tradeVolume,
