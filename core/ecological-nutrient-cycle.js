@@ -18,6 +18,7 @@ function sumMapValues(map) {
 export function installEcologicalNutrientCycle({
   world,
   resourceField,
+  transactions = world?.ecologicalTransactions,
   columns = DEFAULT_COLUMNS,
   rows = DEFAULT_ROWS,
   soilCapacityScale = DEFAULT_SOIL_CAPACITY_SCALE,
@@ -30,6 +31,9 @@ export function installEcologicalNutrientCycle({
   }
   if (!resourceField || typeof resourceField.sample !== 'function') {
     throw new Error('Ecological nutrient cycle requires the authoritative seasonal resource field.');
+  }
+  if (!transactions?.register || !transactions?.beforeStep || !transactions?.transact) {
+    throw new Error('Ecological nutrient cycle requires the ecological transaction layer.');
   }
   if (!(columns > 0 && rows > 0 && soilCapacityScale > 0 && nutrientPerForageEnergy > 0 && decompositionRate >= 0)) {
     throw new Error('Invalid ecological nutrient-cycle configuration.');
@@ -56,12 +60,10 @@ export function installEcologicalNutrientCycle({
     turnoverToDetritus: 0,
   }));
   const biota = new Map();
-
-  let attached = false;
+  const unregister = [];
   let destroyed = false;
-  let wrappedStepActive = false;
-  let originalStep = null;
   let energyLedger = null;
+  let vegetationInitialized = false;
   let baselineTotal = null;
   let stepCount = 0;
 
@@ -76,6 +78,7 @@ export function installEcologicalNutrientCycle({
     initialVegetationNutrients: 0,
     initialBiotaNutrients: 0,
     nutrientLimitedProduction: 0,
+    reproductionTransferred: 0,
   };
 
   function cellCoordinates(index) {
@@ -170,6 +173,126 @@ export function installEcologicalNutrientCycle({
     return added;
   }
 
+  function totalNutrients() {
+    return cells.reduce((sum, cell) => sum + cell.soil + cell.vegetation + cell.detritus, 0) + sumMapValues(biota);
+  }
+
+  function initializeVegetationFromEnergy() {
+    if (vegetationInitialized || !energyLedger?.getCell) return;
+    for (const cell of cells) {
+      const point = cellCoordinates(cell.index);
+      const energyCell = energyLedger.getCell(point.x, point.y);
+      const desired = Math.max(0, finite(energyCell.stock)) * nutrientPerForageEnergy;
+      const transfer = Math.min(cell.soil, desired);
+      cell.soil -= transfer;
+      cell.vegetation += transfer;
+      totals.initialVegetationNutrients += transfer;
+    }
+    vegetationInitialized = true;
+    baselineTotal = totalNutrients();
+  }
+
+  unregister.push(transactions.register(transactions.types.UPTAKE, event => {
+    const requestedEnergy = Math.max(0, finite(event.payload.requestedEnergy));
+    if (requestedEnergy <= EPSILON) return;
+    const cell = locate(event.payload.x, event.payload.y);
+    const requestedNutrient = requestedEnergy * nutrientPerForageEnergy;
+    const moved = Math.min(cell.soil, requestedNutrient);
+    const allowedEnergy = moved / nutrientPerForageEnergy;
+    cell.soil -= moved;
+    cell.vegetation += moved;
+    cell.plantUptake += moved;
+    totals.soilToVegetation += moved;
+    totals.nutrientLimitedProduction += Math.max(0, requestedEnergy - allowedEnergy);
+    event.result.allowedEnergy = Math.min(Math.max(0, finite(event.result.allowedEnergy, requestedEnergy)), allowedEnergy);
+    event.result.nutrientTransferred = moved;
+  }, 80));
+
+  unregister.push(transactions.register(transactions.types.GRAZE, event => {
+    const withdrawnEnergy = Math.max(0, finite(event.result.forageWithdrawn));
+    if (withdrawnEnergy <= EPSILON) return;
+    const cell = locate(event.payload.x, event.payload.y);
+    const moved = Math.min(cell.vegetation, withdrawnEnergy * nutrientPerForageEnergy);
+    if (moved <= EPSILON) return;
+    const efficiency = clamp(finite(event.result.assimilationEfficiency, 0), 0, 1);
+    const assimilated = moved * efficiency;
+    const waste = moved - assimilated;
+    cell.vegetation -= moved;
+    cell.detritus += waste;
+    biota.set(event.payload.consumerId, (biota.get(event.payload.consumerId) || 0) + assimilated);
+    cell.grazingToBiota += assimilated;
+    cell.grazingToDetritus += waste;
+    totals.vegetationToBiota += assimilated;
+    totals.vegetationToDetritus += waste;
+    event.result.nutrientToConsumer = assimilated;
+    event.result.nutrientToDetritus = waste;
+  }, 50));
+
+  unregister.push(transactions.register(transactions.types.PREDATE, event => {
+    const preyAmount = Math.max(0, biota.get(event.payload.preyId) || 0);
+    biota.delete(event.payload.preyId);
+    if (preyAmount <= EPSILON) return;
+    const preyEnergy = Math.max(EPSILON, finite(event.payload.preyEnergy));
+    const allowedGain = Math.max(0, finite(event.result.allowedGain));
+    const transferEfficiency = clamp(finite(event.result.transferEfficiency, 0), 0, 1);
+    const retainedFraction = clamp(Math.min(transferEfficiency, allowedGain / preyEnergy), 0, 1);
+    const retained = preyAmount * retainedFraction;
+    const waste = preyAmount - retained;
+    biota.set(event.payload.consumerId, (biota.get(event.payload.consumerId) || 0) + retained);
+    const cell = locate(event.payload.x, event.payload.y);
+    cell.detritus += waste;
+    totals.biotaToBiota += retained;
+    totals.biotaToDetritus += waste;
+    event.result.nutrientToConsumer = retained;
+    event.result.nutrientToDetritus = waste;
+  }, 50));
+
+  unregister.push(transactions.register(transactions.types.REPRODUCE, event => {
+    const parentAmount = Math.max(0, biota.get(event.payload.parentId) || 0);
+    if (parentAmount <= EPSILON) return;
+    const parentEnergyAfter = Math.max(0, finite(event.payload.parentEnergyAfter));
+    const childEnergy = Math.max(0, finite(event.result.childEnergy, event.payload.childEnergy));
+    const denominator = parentEnergyAfter + childEnergy;
+    if (denominator <= EPSILON) return;
+    const childShare = clamp(childEnergy / denominator, 0, 1);
+    const transferred = parentAmount * childShare;
+    biota.set(event.payload.parentId, parentAmount - transferred);
+    biota.set(event.payload.childId, (biota.get(event.payload.childId) || 0) + transferred);
+    totals.reproductionTransferred += transferred;
+    event.result.nutrientToChild = transferred;
+  }, 50));
+
+  unregister.push(transactions.register(transactions.types.DIE, event => {
+    const cell = locate(event.payload.x, event.payload.y);
+    if (event.payload.guild === 'vegetation') {
+      const requested = Math.max(0, finite(event.payload.storedEnergy)) * nutrientPerForageEnergy;
+      const moved = Math.min(cell.vegetation, requested);
+      cell.vegetation -= moved;
+      cell.detritus += moved;
+      cell.turnoverToDetritus += moved;
+      totals.seasonalTurnoverToDetritus += moved;
+      event.result.nutrientToDetritus = moved;
+      return;
+    }
+    const amount = Math.max(0, biota.get(event.payload.entityId) || 0);
+    biota.delete(event.payload.entityId);
+    if (amount <= EPSILON) return;
+    cell.detritus += amount;
+    totals.biotaToDetritus += amount;
+    event.result.nutrientToDetritus = amount;
+  }, 50));
+
+  unregister.push(transactions.register(transactions.types.DECOMPOSE, event => {
+    const cell = locate(event.payload.x, event.payload.y);
+    const requested = Math.max(0, finite(event.payload.requestedNutrient));
+    const moved = Math.min(cell.detritus, requested);
+    cell.detritus -= moved;
+    cell.soil += moved;
+    cell.mineralized += moved;
+    totals.mineralization += moved;
+    event.result.mineralized = moved;
+  }, 50));
+
   function decompose(dt) {
     if (!(dt > 0)) return 0;
     let mineralized = 0;
@@ -179,256 +302,34 @@ export function installEcologicalNutrientCycle({
       const thermalFit = clamp(1 - Math.abs(cell.temperature - 0.62) * 1.35, 0.12, 1);
       const environment = clamp(0.18 + cell.moisture * 0.52 + thermalFit * 0.30, 0.08, 1);
       const fraction = 1 - Math.exp(-decompositionRate * environment * dt);
-      const amount = Math.min(cell.detritus, cell.detritus * fraction);
-      if (amount <= EPSILON) continue;
-      cell.detritus -= amount;
-      cell.soil += amount;
-      cell.mineralized += amount;
-      totals.mineralization += amount;
-      mineralized += amount;
+      const requested = Math.min(cell.detritus, cell.detritus * fraction);
+      if (requested <= EPSILON) continue;
+      const point = cellCoordinates(cell.index);
+      const event = transactions.transact(transactions.types.DECOMPOSE, {
+        x: point.x,
+        y: point.y,
+        requestedNutrient: requested,
+      }, { mineralized: 0 });
+      mineralized += Math.max(0, finite(event.result.mineralized));
     }
     return mineralized;
   }
 
-  function snapshotEntityGroup(collection) {
-    const position = world.ecs.components.position;
-    const result = new Map();
-    for (const [id, entity] of collection?.entries?.() || []) {
-      const pos = position.get(id);
-      if (!pos) continue;
-      result.set(id, { id, x: pos.x, y: pos.y, energy: Math.max(0, finite(entity?.energy)) });
-    }
-    return result;
-  }
-
-  function snapshotEntities() {
-    const { agent, predator, apex } = world.ecs.components;
-    return {
-      grazer: snapshotEntityGroup(agent),
-      predator: snapshotEntityGroup(predator),
-      apex: snapshotEntityGroup(apex),
-    };
-  }
-
-  function currentCollection(guild) {
-    if (guild === 'grazer') return world.ecs.components.agent;
-    return world.ecs.components[guild];
-  }
-
-  function positiveEnergyGains(before, guild) {
-    const collection = currentCollection(guild);
-    const position = world.ecs.components.position;
-    const gains = [];
-    for (const [id, entity] of collection?.entries?.() || []) {
-      const previous = before.get(id)?.energy || 0;
-      const gain = Math.max(0, finite(entity?.energy) - previous);
-      if (gain <= EPSILON) continue;
-      const pos = position.get(id);
-      if (!pos) continue;
-      gains.push({ id, gain, x: pos.x, y: pos.y });
-    }
-    return gains;
-  }
-
-  function removedStates(before, guild) {
-    const collection = currentCollection(guild);
-    const removed = [];
-    for (const [id, state] of before.entries()) {
-      if (!collection?.has?.(id)) removed.push(state);
-    }
-    return removed;
-  }
-
-  function snapshotEnergyCells() {
-    return cells.map(cell => {
-      const point = cellCoordinates(cell.index);
-      const energyCell = energyLedger.getCell(point.x, point.y);
-      return {
-        primaryIn: finite(energyCell.primaryIn),
-        grazingOut: finite(energyCell.grazingOut),
-        seasonalTurnover: finite(energyCell.seasonalTurnover),
-        stock: finite(energyCell.stock),
-      };
-    });
-  }
-
-  function initializeVegetationFromEnergy() {
-    const energyCells = snapshotEnergyCells();
-    for (let index = 0; index < cells.length; index += 1) {
-      const cell = cells[index];
-      const desired = Math.max(0, energyCells[index].stock) * nutrientPerForageEnergy;
-      const transfer = Math.min(cell.soil, desired);
-      cell.soil -= transfer;
-      cell.vegetation += transfer;
-      totals.initialVegetationNutrients += transfer;
-    }
-  }
-
-  function reconcilePrimaryAndTurnover(beforeCells, afterCells) {
-    for (let index = 0; index < cells.length; index += 1) {
-      const cell = cells[index];
-      const primaryEnergy = Math.max(0, afterCells[index].primaryIn - beforeCells[index].primaryIn);
-      if (primaryEnergy > EPSILON) {
-        const required = primaryEnergy * nutrientPerForageEnergy;
-        const transferred = Math.min(cell.soil, required);
-        cell.soil -= transferred;
-        cell.vegetation += transferred;
-        cell.plantUptake += transferred;
-        totals.soilToVegetation += transferred;
-        if (transferred + EPSILON < required) {
-          totals.nutrientLimitedProduction += (required - transferred) / nutrientPerForageEnergy;
-        }
-      }
-
-      const turnoverEnergy = Math.max(0, afterCells[index].seasonalTurnover - beforeCells[index].seasonalTurnover);
-      if (turnoverEnergy > EPSILON) {
-        const requested = turnoverEnergy * nutrientPerForageEnergy;
-        const moved = Math.min(cell.vegetation, requested);
-        cell.vegetation -= moved;
-        cell.detritus += moved;
-        cell.turnoverToDetritus += moved;
-        totals.seasonalTurnoverToDetritus += moved;
-      }
-    }
-  }
-
-  function allocateToConsumers(consumers, amount) {
-    const totalGain = consumers.reduce((sum, consumer) => sum + consumer.gain, 0);
-    if (amount <= EPSILON || totalGain <= EPSILON) return 0;
-    let allocated = 0;
-    for (let index = 0; index < consumers.length; index += 1) {
-      const consumer = consumers[index];
-      const share = index === consumers.length - 1 ? amount - allocated : amount * (consumer.gain / totalGain);
-      if (share <= EPSILON) continue;
-      biota.set(consumer.id, (biota.get(consumer.id) || 0) + share);
-      allocated += share;
-    }
-    return allocated;
-  }
-
-  function reconcileGrazing(beforeEntities, beforeCells, afterCells, assimilationEfficiency) {
-    const gains = positiveEnergyGains(beforeEntities.grazer, 'grazer');
-    const gainsByCell = new Map();
-    for (const gain of gains) {
-      const cell = locate(gain.x, gain.y);
-      const list = gainsByCell.get(cell.index) || [];
-      list.push(gain);
-      gainsByCell.set(cell.index, list);
-    }
-
-    for (let index = 0; index < cells.length; index += 1) {
-      const grazingEnergy = Math.max(0, afterCells[index].grazingOut - beforeCells[index].grazingOut);
-      if (grazingEnergy <= EPSILON) continue;
-      const cell = cells[index];
-      const moved = Math.min(cell.vegetation, grazingEnergy * nutrientPerForageEnergy);
-      if (moved <= EPSILON) continue;
-      cell.vegetation -= moved;
-
-      const consumers = gainsByCell.get(index) || [];
-      const assimilable = consumers.length ? moved * clamp(assimilationEfficiency, 0, 1) : 0;
-      const assimilated = allocateToConsumers(consumers, assimilable);
-      const waste = moved - assimilated;
-      cell.detritus += waste;
-      cell.grazingToBiota += assimilated;
-      cell.grazingToDetritus += waste;
-      totals.vegetationToBiota += assimilated;
-      totals.vegetationToDetritus += waste;
-    }
-  }
-
-  function transferRemoved(preyStates, consumers, efficiency) {
-    if (!preyStates.length) return;
-    let totalNutrient = 0;
-    const preyNutrients = [];
-    for (const prey of preyStates) {
-      const amount = Math.max(0, biota.get(prey.id) || 0);
-      biota.delete(prey.id);
-      totalNutrient += amount;
-      preyNutrients.push({ prey, amount });
-    }
-    if (totalNutrient <= EPSILON) return;
-
-    const retainedTarget = totalNutrient * clamp(finite(efficiency), 0, 1);
-    const retained = allocateToConsumers(consumers, retainedTarget);
-    const retainedFraction = totalNutrient > EPSILON ? retained / totalNutrient : 0;
-    totals.biotaToBiota += retained;
-
-    for (const { prey, amount } of preyNutrients) {
-      const waste = amount * (1 - retainedFraction);
-      if (waste <= EPSILON) continue;
-      const cell = locate(prey.x, prey.y);
-      cell.detritus += waste;
-      totals.biotaToDetritus += waste;
-    }
-  }
-
-  function releaseRemoved(preyStates) {
-    for (const prey of preyStates) {
-      const amount = Math.max(0, biota.get(prey.id) || 0);
-      biota.delete(prey.id);
-      if (amount <= EPSILON) continue;
-      const cell = locate(prey.x, prey.y);
-      cell.detritus += amount;
-      totals.biotaToDetritus += amount;
-    }
-  }
-
-  function reconcileTrophicFlows(beforeEntities, efficiencies) {
-    transferRemoved(
-      removedStates(beforeEntities.grazer, 'grazer'),
-      positiveEnergyGains(beforeEntities.predator, 'predator'),
-      efficiencies.predatorTransfer,
-    );
-    transferRemoved(
-      removedStates(beforeEntities.predator, 'predator'),
-      positiveEnergyGains(beforeEntities.apex, 'apex'),
-      efficiencies.apexTransfer,
-    );
-    releaseRemoved(removedStates(beforeEntities.apex, 'apex'));
-  }
-
-  function reconcileAfterStep(beforeEntities, beforeCells) {
-    const afterCells = snapshotEnergyCells();
-    const energySnapshot = energyLedger.snapshot();
-    const efficiencies = energySnapshot.efficiencies || {};
-    reconcilePrimaryAndTurnover(beforeCells, afterCells);
-    reconcileGrazing(beforeEntities, beforeCells, afterCells, efficiencies.grazerAssimilation);
-    reconcileTrophicFlows(beforeEntities, efficiencies);
-  }
-
-  function wrappedStep(dt) {
-    if (destroyed || wrappedStepActive) return originalStep.call(world, dt);
-    wrappedStepActive = true;
-    try {
-      const beforeEntities = snapshotEntities();
-      const beforeCells = snapshotEnergyCells();
-      decompose(dt);
-      const result = originalStep.call(world, dt);
-      reconcileAfterStep(beforeEntities, beforeCells);
-      stepCount += 1;
-      return result;
-    } finally {
-      wrappedStepActive = false;
-    }
-  }
+  unregister.push(transactions.beforeStep(({ dt }) => {
+    decompose(dt);
+    stepCount += 1;
+  }, 40));
 
   function attachEnergyLedger(ledger) {
-    if (attached) return api;
-    if (!ledger?.getCell || !ledger?.snapshot || typeof world.step !== 'function') {
-      throw new Error('Ecological nutrient cycle requires the installed ecological energy ledger.');
-    }
+    if (!ledger?.getCell || !ledger?.snapshot) throw new Error('Ecological nutrient cycle requires the installed ecological energy ledger.');
     energyLedger = ledger;
-    originalStep = world.step;
     initializeVegetationFromEnergy();
-    baselineTotal = totalNutrients();
-    world.step = wrappedStep;
-    attached = true;
     return api;
   }
 
-  function totalNutrients() {
-    return cells.reduce((sum, cell) => sum + cell.soil + cell.vegetation + cell.detritus, 0) + sumMapValues(biota);
-  }
+  initializeCells();
+  seedInitialBiota();
+  resourceField.sample = sample;
 
   function getCell(x, y) {
     const cell = locate(x, y);
@@ -455,12 +356,14 @@ export function installEcologicalNutrientCycle({
     const mobileBiota = sumMapValues(biota);
     const total = soil + vegetation + detritus + mobileBiota;
     return {
-      version: 1,
+      version: 2,
       writable: true,
+      eventDriven: true,
+      populationScanFree: true,
       unit: 'model-nutrient',
       physicalUnitClaim: false,
-      scope: 'soil minerals <-> vegetation nutrients -> mobile biota -> detritus -> soil minerals',
-      attachedToEnergyLedger: attached,
+      scope: 'transaction-driven soil minerals <-> vegetation -> mobile biota -> detritus -> soil minerals',
+      attachedToEnergyLedger: Boolean(energyLedger),
       stepCount,
       grid: { columns, rows, activeCells: cells.filter(cell => cell.soilCapacity > EPSILON).length },
       reservoirs: { soil, vegetation, mobileBiota, detritus, total },
@@ -473,17 +376,14 @@ export function installEcologicalNutrientCycle({
   function destroy() {
     if (destroyed) return;
     destroyed = true;
-    if (attached && world.step === wrappedStep) world.step = originalStep;
+    for (const remove of unregister.splice(0)) remove();
     if (resourceField.sample === sample) resourceField.sample = originalSample;
   }
 
-  initializeCells();
-  seedInitialBiota();
-  resourceField.sample = sample;
-
   const api = {
-    version: 1,
+    version: 2,
     writable: true,
+    eventDriven: true,
     unit: 'model-nutrient',
     sample,
     getCell,
