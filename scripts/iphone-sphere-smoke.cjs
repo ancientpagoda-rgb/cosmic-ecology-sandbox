@@ -20,7 +20,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
   page.on('pageerror', error => pageErrors.push(error.message));
   try {
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
-    await page.waitForFunction(() => Boolean(window.realitySandboxDebug?.ready), null, { timeout: 120000 });
+    await page.waitForFunction(() => Boolean(window.realitySandboxDebug?.ready && window.realitySandboxWorldView), null, { timeout: 120000 });
     await page.waitForTimeout(700);
     const before = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().selectedRegion);
     await page.touchscreen.tap(viewport.width * 0.56, viewport.height * 0.48);
@@ -49,6 +49,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
         statDefinitions: document.querySelectorAll('.planet-stat[title][tabindex="0"]').length,
         snapshot: window.realitySandboxUnified.getSnapshot(),
         after: window.realitySandboxUnified.getSnapshot().selectedRegion,
+        worldView: window.realitySandboxWorldView.getSnapshot(),
       };
     });
     fs.writeFileSync(path.join(artifactDir, 'iphone-living-planet.json'), JSON.stringify({ ok: null, viewport, metrics, pageErrors }, null, 2));
@@ -64,8 +65,16 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(metrics.statDefinitions === 8, 'Mobile statistics lost their definitions.');
     assert(Math.abs(metrics.after.longitude - before.longitude) > 0.5 || Math.abs(metrics.after.latitude - before.latitude) > 0.5, 'Touch inspection did not select a region.');
     assert(metrics.snapshot.presentation.drawnEntities > 0 && pageErrors.length === 0, `Mobile scene is empty or errored: ${pageErrors.join(' | ')}`);
+    assert(metrics.worldView.model === 'single-authoritative-location-altitude-continuous-lod-view' && !metrics.worldView.legacyModeControlsVisible, 'iPhone did not use the single continuous world view.');
 
-    await page.locator('#enterSurfaceMode').tap();
+    // The player no longer taps a separate mode button. This lower-level mobile
+    // diagnostic opens the local renderer directly so its touch controls can be
+    // tested independently; the continuous zoom handoff is covered elsewhere.
+    await page.evaluate(() => {
+      const world = window.realitySandboxPlanet.world;
+      const camera = window.realitySandboxUnified.getCamera();
+      window.realitySandboxSurfaceMode.enterAt(camera.centerX * world.width, camera.centerY * world.height);
+    });
     await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'active' &&
       window.realitySandboxPresentationDiagnostics?.().surfaceGpu?.active === true &&
       document.documentElement.dataset.surfaceMobileControls === 'active', null, { timeout: 20000 });
@@ -73,9 +82,6 @@ fs.mkdirSync(artifactDir, { recursive: true });
     await page.evaluate(() => {
       const stick = document.querySelector('#surfaceMobileControls [aria-label="Movement joystick"]');
       const rect = stick.getBoundingClientRect();
-      // Playwright-created touch events are synthetic and cannot own browser
-      // pointer capture. The production control handles real touch capture;
-      // bypass it here so this test exercises the joystick's movement logic.
       stick.setPointerCapture = () => {};
       const event = (type, x, y) => stick.dispatchEvent(new PointerEvent(type, {
         pointerId: 44, pointerType: 'touch', clientX: x, clientY: y, bubbles: true, cancelable: true,
@@ -88,9 +94,9 @@ fs.mkdirSync(artifactDir, { recursive: true });
       player: window.realitySandboxSurfaceMode.getPlayer(),
       controlsVisible: getComputedStyle(document.getElementById('surfaceMobileControls')).display !== 'none',
     }));
-    assert(surfaceAfter.controlsVisible, 'Surface Mode did not show touch controls on iPhone.');
-    assert(Math.hypot(surfaceAfter.player.x - surfaceBefore.x, surfaceAfter.player.y - surfaceBefore.y) > 0.5, 'The iPhone Surface joystick did not move the player.');
-    await page.evaluate(() => window.realitySandboxSurfaceMode.exit());
+    assert(surfaceAfter.controlsVisible, 'Local LOD did not show touch controls on iPhone.');
+    assert(Math.hypot(surfaceAfter.player.x - surfaceBefore.x, surfaceAfter.player.y - surfaceBefore.y) > 0.5, 'The iPhone local-view joystick did not move the player.');
+    await page.evaluate(() => window.realitySandboxWorldView.jumpOutward());
     await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'inactive', null, { timeout: 10000 });
 
     fs.writeFileSync(path.join(artifactDir, 'iphone-living-planet.json'), JSON.stringify({ ok: true, viewport, metrics, pageErrors }, null, 2));
