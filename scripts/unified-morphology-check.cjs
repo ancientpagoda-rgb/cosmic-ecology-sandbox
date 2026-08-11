@@ -87,9 +87,16 @@ fs.mkdirSync(outputDir, { recursive: true });
 
     const near = await page.evaluate(entityId => {
       const phenotype = window.realitySandboxCreaturePhenotypes.get(entityId);
+      const layerNode = document.getElementById('surfaceModeLayer');
       const anchor = document.querySelector(`.eidolon-surface-creatures [data-surface-entity-id="${entityId}"]`);
       const node = anchor?.querySelector(`.eidolon-creature[data-entity-id="${entityId}"]`);
       const fills = node ? [...node.querySelectorAll('[fill]')].map(n => n.getAttribute('fill')) : [];
+      const layerRect = layerNode?.getBoundingClientRect();
+      const anchorRect = anchor?.getBoundingClientRect();
+      const centerY = anchorRect ? anchorRect.top + anchorRect.height * 0.5 : NaN;
+      const normalizedY = layerRect && Number.isFinite(centerY) && layerRect.height > 0
+        ? (centerY - layerRect.top) / layerRect.height
+        : NaN;
       return {
         found: Boolean(node),
         phenotype,
@@ -101,6 +108,14 @@ fs.mkdirSync(outputDir, { recursive: true });
         surfaceCount: document.querySelectorAll('.eidolon-surface-creatures [data-surface-entity-id]').length,
         lod: window.realitySandboxUnifiedCreatureLOD.getSnapshot(),
         player: window.realitySandboxSurfaceMode.getPlayer(),
+        groundPlacement: {
+          layerTop: layerRect?.top ?? null,
+          layerHeight: layerRect?.height ?? null,
+          creatureTop: anchorRect?.top ?? null,
+          creatureHeight: anchorRect?.height ?? null,
+          centerY: Number.isFinite(centerY) ? centerY : null,
+          normalizedY: Number.isFinite(normalizedY) ? normalizedY : null,
+        },
       };
     }, target.id);
 
@@ -112,6 +127,9 @@ fs.mkdirSync(outputDir, { recursive: true });
     assert(near.fills.includes(far.phenotype.color) || far.phenotype.sprite, 'Surface glyph did not preserve phenotype body color.');
     assert(near.lod.phenotypeMismatches === 0, `Unified LOD reported ${near.lod.phenotypeMismatches} phenotype mismatches.`);
     assert(near.lod.displayCap == null, 'Surface phenotype layer introduced a display-count cap.');
+    assert(Number.isFinite(near.groundPlacement.normalizedY), 'Surface creature grounding could not be measured.');
+    assert(near.groundPlacement.normalizedY > 0.52 && near.groundPlacement.normalizedY < 0.95,
+      `Near creature was not grounded in the lower Surface view (${near.groundPlacement.normalizedY}).`);
     await page.screenshot({ path: path.join(outputDir, 'same-creature-surface.png'), fullPage: true });
 
     await page.evaluate(() => window.realitySandboxSurfaceMode.exit());
@@ -120,7 +138,7 @@ fs.mkdirSync(outputDir, { recursive: true });
 
     const result = {
       ok: true,
-      model: 'one-authoritative-phenotype-two-render-lods',
+      model: 'one-authoritative-phenotype-two-render-lods-grounded-surface',
       target,
       far,
       near,
