@@ -1,0 +1,73 @@
+const { chromium } = require('playwright');
+
+const root = process.env.REALITY_BASE_URL || 'http://127.0.0.1:4173/';
+const baseUrl = new URL('sumer.html?seed=sumer-browser-check', root).toString();
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+(async () => {
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--disable-dev-shm-usage', '--no-sandbox'],
+  });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 820 } });
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+
+  try {
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
+    await page.waitForFunction(() => Boolean(window.sumerianCivilizationReady && window.sumerianCivilization), null, { timeout: 120000 });
+    await page.evaluate(() => window.sumerianCivilizationReady);
+
+    const initial = await page.evaluate(() => window.sumerianCivilization.getSnapshot());
+    assert(initial.mode === 'historically-constrained-emergent', `unexpected Sumer mode: ${initial.mode}`);
+    assert(initial.exactHistoricalReplay === false, 'Sumer experiment must not claim exact historical replay');
+    assert(initial.syntheticInitialPopulations === true, 'synthetic population boundary is missing');
+    assert(initial.yearBCE === 3500, `unexpected initial year ${initial.yearBCE}`);
+    assert(initial.cities.length === 7, `expected seven initial city-state anchors, got ${initial.cities.length}`);
+    assert(initial.kernel.nodes.length === 8, `unexpected kernel node count: ${initial.kernel.nodes.length}`);
+
+    const after50 = await page.evaluate(() => {
+      window.sumerianCivilization.advance(50);
+      window.sumerianCivilization.selectCity('lagash');
+      return window.sumerianCivilization.getSnapshot();
+    });
+    assert(after50.yearBCE === 3450, `50-year advance produced ${after50.yearBCE}`);
+    for (const type of ['IRRIGATE', 'SOW', 'HARVEST', 'RATION', 'TAX', 'BUILD', 'RECORD']) {
+      assert(after50.transactions.counts[type] > 0, `${type} missing from browser Sumer run`);
+    }
+    assert(after50.kernel.observers.some(observer => observer.observerId === 'sumer-viewer'), 'city selection did not create kernel observer');
+    assert(after50.totals.population > 0 && Number.isFinite(after50.totals.population), 'invalid population after 50 years');
+
+    const canvas = await page.locator('#sumerCanvas').boundingBox();
+    assert(canvas && canvas.width > 500 && canvas.height > 300, `Sumer canvas did not render: ${JSON.stringify(canvas)}`);
+    const selected = await page.locator('#sumerSelected').textContent();
+    assert(/Lagash/i.test(selected || ''), `Lagash selection not reflected in UI: ${selected}`);
+
+    const after250 = await page.evaluate(() => {
+      window.sumerianCivilization.advance(200);
+      return window.sumerianCivilization.getSnapshot();
+    });
+    assert(after250.yearBCE === 3250, `250-year browser run produced ${after250.yearBCE}`);
+    assert(after250.totals.population > 0 && after250.totals.population < 5_000_000, `population out of bounds: ${after250.totals.population}`);
+    assert(Number.isFinite(after250.totals.meanSalinity), 'mean salinity became invalid');
+    assert(pageErrors.length === 0, `page errors: ${pageErrors.join(' | ')}`);
+
+    console.log(JSON.stringify({
+      ok: true,
+      url: baseUrl,
+      initialYearBCE: initial.yearBCE,
+      finalYearBCE: after250.yearBCE,
+      population: Math.round(after250.totals.population),
+      hegemon: after250.politics.hegemonName,
+      transactionCounts: after250.transactions.counts,
+    }, null, 2));
+  } finally {
+    await browser.close();
+  }
+})().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});
