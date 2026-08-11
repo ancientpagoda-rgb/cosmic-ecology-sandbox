@@ -89,6 +89,8 @@ This replaces the previous correctness-first pattern of snapshotting every organ
 
 `scanFreePopulationAccounting: true` therefore means **no whole-population before/after reconciliation scan per tick**. The bounded 18×10 landscape grid still updates for primary production, soil state, and decomposition; its cost does not grow with organism population.
 
+The current Eidolon adapter discovers transactions from ECS mutations so the legacy world model does not need to know about the generic kernel. That capture adapter is Eidolon-specific. A future generic transaction package should expose the journal/handler API, while each host simulation supplies its own event source or calls `transact()` directly.
+
 ### Transaction semantics
 
 - `GRAZE` is emitted when a grazer attempts to increase stored energy. The energy ledger first debits finite coarse forage stock and can reduce the allowed gain before it reaches the organism. The nutrient ledger receives the same finalized transfer and moves vegetation nutrient into grazer biomass plus detrital waste.
