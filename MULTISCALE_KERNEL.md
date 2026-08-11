@@ -1,12 +1,13 @@
-# Multiscale Reality Kernel v5 experiment
+# Multiscale Reality Kernel v6 experiment
 
 This branch adds a general multiscale orchestration kernel around the existing Eidolon living planet. The public simulation still has one authoritative world, one fixed simulation clock, and one renderer.
 
-v5 has three connected capabilities:
+v6 now demonstrates four connected capabilities:
 
 1. observer-driven spatial/temporal resolution,
 2. writable ecological energy and nutrient contracts,
-3. an event-driven ecological transaction layer that removes per-tick whole-population reconciliation scans.
+3. scan-free organism accounting through explicit transactions,
+4. a non-ecological hydrology/erosion contract using the **same transaction API**.
 
 ## Core multiscale behavior
 
@@ -49,37 +50,40 @@ zoom >= 8.0    nearest actual ECS entity when one exists
 
 An empty close-up patch remains a patch. The kernel never fabricates an organism merely to satisfy requested detail.
 
-## v5 ecological transactions
+## Shared reality transactions
 
-`core/ecological-transactions.js` is the new mutation boundary between organism-scale actions and coarse ecological ledgers.
-
-The authoritative transaction vocabulary is:
+`core/ecological-transactions.js` began as an ecological event adapter. In v6 its generic API is unchanged but its vocabulary now spans two domains. `ECOLOGICAL_TRANSACTION_TYPES` remains a compatibility alias; the canonical vocabulary is `REALITY_TRANSACTION_TYPES`.
 
 ```text
-GRAZE
-PREDATE
-DIE
-REPRODUCE
-DECOMPOSE
-UPTAKE
+Ecology
+  GRAZE
+  PREDATE
+  DIE
+  REPRODUCE
+  DECOMPOSE
+  UPTAKE
+
+Hydrology / geomorphology
+  PRECIPITATE
+  FLOW
+  ERODE
+  DEPOSIT
+  EVAPORATE
 ```
 
-Creature energy mutations and entity destruction are captured at the ECS mutation boundary during the existing authoritative `world.step()`. The transaction layer assigns deterministic sequence numbers and invokes registered conservation handlers in priority order.
+The common API remains:
 
-This replaces the previous correctness-first pattern of snapshotting every organism before a step and comparing the entire population afterward.
+```text
+transact(type, payload, result)
+register(type, handler, priority)
+beforeStep(handler, priority)
+afterStep(handler, priority)
+snapshot()
+```
 
-`scanFreePopulationAccounting: true` means **no whole-population before/after reconciliation scan per tick**. The bounded 18×10 landscape grid still updates for primary production, soil state, and decomposition; its cost does not grow with organism population.
+Transactions receive deterministic sequence numbers and are journaled in one ordered stream. Organism-scale events are discovered through the Eidolon ECS mutation adapter; hydrology publishes directly from its domain contract. This separation is important: the generic journal does not need to know what a grazer, river, or sediment cell is.
 
-The current Eidolon adapter discovers transactions from ECS mutations so the legacy world model does not need to know about the generic kernel. That capture adapter is Eidolon-specific. A future generic transaction package should expose the journal/handler API and direct `transact()` contract, while each host simulation supplies its own event source or calls `transact()` directly.
-
-### Transaction semantics
-
-- `GRAZE`: finite forage is debited before a grazer's requested energy gain is retained; the same finalized transfer moves vegetation nutrient into biomass and detrital waste.
-- `PREDATE`: prey destruction is paired with the consuming predator/apex gain; retained energy and nutrients are bounded by the prey transfer.
-- `REPRODUCE`: offspring energy cannot exceed energy actually transferred by the parent; tracked body nutrients are partitioned between parent and offspring.
-- `DIE`: tracked organism nutrient returns to local detritus; vegetation turnover uses the same transaction with `guild: vegetation`.
-- `DECOMPOSE`: local detritus mineralizes into soil nutrient.
-- `UPTAKE`: soil nutrient enters vegetation and can limit requested primary production.
+`scanFreePopulationAccounting: true` means no whole-population before/after reconciliation scan per tick. Fixed environmental grids still update at bounded cost independent of organism population.
 
 ## Writable ecological energy
 
@@ -113,7 +117,81 @@ soil minerals
 
 Initial soil and existing biomass are explicit initial conditions. Existing coarse forage receives an initial nutrient allocation from soil. Thereafter nutrient matter moves between the four reservoirs rather than being created by primary production.
 
-Warm/moist cells mineralize detritus faster than cold/dry cells. Nutrient availability feeds back into vegetation productivity, and total model nutrient matter is checked for conservation drift.
+## v6 hydrology / erosion contract
+
+The existing `core/water-cycle.js` remains the authoritative dynamic water model. It already evolves a 180×90 grid of vapor, cloud, precipitation, snowpack, soil moisture, surface water, runoff, floods, droughts, rivers, lakes, and tides.
+
+`core/hydrology-erosion-contract.js` does **not** create another water simulation. It wraps that existing water-cycle object and samples it on a bounded 60×30 geomorphic grid every 0.48 simulated seconds.
+
+```text
+existing dynamic water cycle
+           |
+     PRECIPITATE
+           v
+       runoff / flow
+           |
+         ERODE
+           v
+  suspended sediment
+           |
+          FLOW
+           v
+        DEPOSIT
+           |
+           v
+  floodplain / basin sediment
+```
+
+### Sediment conservation
+
+The contract owns three explicit **model-sediment** reservoirs:
+
+```text
+erodible terrain
+      |
+    ERODE
+      v
+suspended sediment
+      |
+ FLOW / transport
+      v
+ deposited sediment
+```
+
+Erosion, transport, and deposition move sediment between those reservoirs without creating or destroying it. `snapshot().sediment.drift` checks the total against the initialized baseline.
+
+### Water accounting boundary
+
+Hydrology transactions also journal modeled `PRECIPITATE`, `FLOW`, and `EVAPORATE` fluxes, but v6 deliberately sets:
+
+```text
+waterAccounting.conservationClaim = false
+```
+
+The pre-existing browser water solver is an open reduced-order model with semi-Lagrangian numerical damping and implicit ocean moisture source terms. Those fluxes are useful causal diagnostics, but v6 does **not** misrepresent them as a closed global water-mass budget.
+
+This distinction is intentional: sediment is a closed writable conservation contract in v6; water is not yet.
+
+### Hydrology -> ecology feedback
+
+The hydrology contract wraps `waterCycle.sample()` with local erosion and sediment state. The existing seasonal resource field now reads that state:
+
+- recent deposition modestly increases coarse vegetation fertility,
+- active erosion modestly reduces near-term fertility.
+
+That creates a real causal path:
+
+```text
+weather / runoff
+      -> erosion
+      -> sediment transport
+      -> deposition
+      -> substrate fertility
+      -> vegetation productivity
+      -> ecology
+```
+
+The coefficients remain model-level approximations, not soil-chemistry measurements.
 
 ## Browser API
 
@@ -122,10 +200,13 @@ await window.realitySandboxKernelReady;
 const kernel = window.realitySandboxRealityKernel;
 
 console.log(kernel.snapshot());
-console.log(kernel.ecologicalTransactions.snapshot());
+console.log(kernel.realityTransactions.snapshot());
+console.log(kernel.hydrologyErosion.snapshot());
 console.log(kernel.ecologicalEnergy.snapshot());
 console.log(kernel.ecologicalNutrients.snapshot());
 ```
+
+A point observation now returns local hydrology/sediment state as well as ecological state.
 
 ## Checks
 
@@ -134,19 +215,36 @@ npm run check:kernel
 npm run check:kernel-browser
 ```
 
-The headless suite includes `ecological-transactions-check.mjs`, energy-ledger checks, nutrient-cycle checks, the generic multiscale tests, adapter tests, and observer tests. It verifies all six transaction types, conservation behavior, reproduction transfer, nutrient inheritance, grazing/predation flows, decomposition, uptake, and nutrient conservation drift.
+The headless suite covers:
 
-The Chromium test verifies the transaction layer and both writable ledgers in the production build, then drives the public runtime through planet -> region -> patch -> actual ECS entity -> inspector -> coarsening while retaining the existing iPhone, renderer, performance, Surface Mode, and runtime diagnostics.
+```text
+multiscale kernel invariants
+Eidolon adapter / observer resolution
+ecological transaction classification
+energy transfer
+nutrient conservation
+real water-cycle-driven erosion / sediment transport / deposition
+hydrology transaction journaling
+sediment conservation drift
+```
+
+`hydrology-erosion-contract-check.mjs` runs the real existing water cycle in headless mode, attaches the shared transaction bus, advances multiple hydrology solves, verifies all five hydrology event types, verifies that sediment actually changes reservoirs, and rejects conservation drift.
+
+The Chromium test verifies the shared cross-domain transaction layer, sediment contract, ecological ledgers, and camera-driven reality refinement in the production build while retaining the existing iPhone, unified-runtime, renderer, performance, WebGL-recovery, Surface Mode, and long-run diagnostics.
 
 ## Fidelity boundary
 
-This is not a claim that Eidolon performs molecular dynamics, stellar evolution, complete thermodynamics, or elemental biogeochemistry. Energy and nutrients deliberately use separate model units. Cross-scale authority expands only when units, conservation rules, handoff semantics, and tests are explicit.
+This is not a claim that Eidolon performs molecular dynamics, complete thermodynamics, Navier-Stokes fluid dynamics, or elemental geochemistry. Energy, nutrients, water flux, and sediment deliberately use separate model units unless and until a physically defensible conversion is introduced.
 
-## Repository boundary
+Cross-scale authority expands only where units, conservation rules, handoff semantics, and tests are explicit.
 
-The generic orchestration core is now clearly reusable enough to deserve its own repository, but the split should occur at a stable API boundary.
+## Repository boundary: extraction criterion met
 
-A future repository should contain generic machinery only:
+v5 intentionally waited for a non-ecological contract before deciding whether the generic core deserved its own repository. v6 provides that evidence: hydrology/erosion uses the same kernel and transaction API without requiring an ecology-specific scheduler or journal redesign.
+
+The generic core is therefore ready to be extracted at the next clean checkpoint.
+
+A dedicated repository/package should contain only domain-neutral machinery:
 
 ```text
 multiscale-reality-kernel/
@@ -161,15 +259,28 @@ multiscale-reality-kernel/
     transactions/
       deterministic transaction journal
       handler ordering
-      generic transfer contracts
+      generic transaction registration / dispatch
   tests/
   package.json
 ```
 
-This Eidolon repository should keep the Eidolon adapter, camera/inspector bridge, ECS mutation capture adapter, ecological ledgers, browser tests, renderers, and UI.
+This Eidolon repository should keep:
 
-After one more non-ecological cross-scale contract proves the same APIs can serve a different domain, extract the stable generic core into its own repository/package and consume it here as a normal dependency rather than a Git submodule.
+```text
+Eidolon kernel adapter
+camera / inspector bridge
+ECS organism-mutation capture
+hydrology / erosion adapter and sediment model
+ecological energy ledger
+ecological nutrient cycle
+browser integration tests
+renderers and UI
+```
+
+Use a normal package or Git dependency rather than a Git submodule.
 
 ## Next experiment
 
-The strongest next test is a **different physical domain**, not another ecology-only layer. A good candidate is local hydrology/erosion: coarse watershed water and sediment reservoirs could refine into local river/terrain processes and exchange explicit `PRECIPITATE`, `FLOW`, `ERODE`, `DEPOSIT`, and `EVAPORATE` transactions. If the same kernel and transaction contracts survive that without ecology-specific changes, the case for splitting the generic kernel into its own repository becomes much stronger.
+After the v6 branch is checkpointed, the best architectural move is to extract the generic kernel + generic transaction journal into its own repository/package while preserving this branch as the integration reference implementation.
+
+After extraction, the next scientific extension could close the **water** budget itself: replace implicit ocean source/numerical moisture loss with explicit atmosphere/ocean/soil/surface reservoirs and conservation-tested phase/transport transactions.
