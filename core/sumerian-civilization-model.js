@@ -322,7 +322,8 @@ export function createSumerianCivilizationSimulation({
 
     city.pendingMigrants = 0;
     if (city.foodRatio < 0.76) {
-      city.pendingMigrants = Math.min(city.population * 0.035, city.population * (0.76 - city.foodRatio) * 0.09);
+      const desiredMigrants = Math.min(city.population * 0.035, city.population * (0.76 - city.foodRatio) * 0.09);
+      city.pendingMigrants = Math.min(Math.max(0, city.population - 300), desiredMigrants);
       city.population -= city.pendingMigrants;
       city.migrationPressure = clamp((0.76 - city.foodRatio) * 2.2, 0, 1);
     } else {
