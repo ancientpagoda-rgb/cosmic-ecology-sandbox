@@ -13,14 +13,14 @@ export default defineConfig({
     sourcemap: false,
     assetsDir: 'assets',
     rollupOptions: {
-      // Pages is the product artifact. Sumer is an explicitly linked parallel
-      // experiment powered by the reusable reality kernel; the living-planet
-      // root remains the v76 single-scene world view.
+      // Pages is the product artifact, not the experiment archive. Vite's dev
+      // server can still open every root-level lab HTML file directly. The
+      // Sumer page is an explicit experiment entry carried by its draft PR.
       input: {
         main: resolve(process.cwd(), 'index.html'),
         origins: resolve(process.cwd(), 'origins.html'),
-        realityEngineV69: resolve(process.cwd(), 'reality-engine-v6-9.html'),
         sumer: resolve(process.cwd(), 'sumer.html'),
+        realityEngineV69: resolve(process.cwd(), 'reality-engine-v6-9.html'),
       },
     },
   },
