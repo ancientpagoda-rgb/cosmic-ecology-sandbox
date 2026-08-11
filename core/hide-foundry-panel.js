@@ -9,6 +9,16 @@ const PANELS = [
     datasetKey: 'planetPulsePanel',
     globalKey: 'realitySandboxPlanetPulseHidden',
   },
+  {
+    selector: '#enterSurfaceMode',
+    datasetKey: 'legacySurfaceEnter',
+    globalKey: 'realitySandboxLegacySurfaceEnterHidden',
+  },
+  {
+    selector: '#surfaceModeHud button',
+    datasetKey: 'legacySurfaceExit',
+    globalKey: 'realitySandboxLegacySurfaceExitHidden',
+  },
 ];
 
 function hidePanel({ selector, datasetKey, globalKey }) {
