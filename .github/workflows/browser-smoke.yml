@@ -28,7 +28,7 @@ jobs:
               sha: context.sha,
               state: 'pending',
               context: 'browser/unified-runtime',
-              description: 'Living-planet browser diagnostics are running',
+              description: 'Single-world browser diagnostics are running',
               target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             });
 
@@ -63,15 +63,7 @@ jobs:
           cat /tmp/reality-preview.log
           exit 1
 
-      - name: Verify iPhone sphere aspect
-        id: iphone_sphere_test
-        continue-on-error: true
-        env:
-          REALITY_BASE_URL: http://127.0.0.1:4173/
-          REALITY_IPHONE_ARTIFACT_DIR: artifacts/iphone-sphere-smoke
-        run: node scripts/iphone-sphere-smoke.cjs
-
-      - name: Run current unified reality diagnostics
+      - name: Run desktop, ultrawide, and mobile reality diagnostics
         id: unified_test
         continue-on-error: true
         env:
@@ -79,29 +71,21 @@ jobs:
           REALITY_CHECK_ARTIFACT_DIR: artifacts/unified-smoke
         run: node scripts/reality-check.cjs
 
-      - name: Verify Pixi simulation root
-        id: root_renderer_test
+      - name: Verify one scene and camera from ground to globe
+        id: continuity_test
         continue-on-error: true
         env:
           REALITY_BASE_URL: http://127.0.0.1:4173/
-          REALITY_ROOT_RENDERER_ARTIFACT_DIR: artifacts/root-renderer-smoke
-        run: node scripts/root-renderer-smoke.cjs
+          REALITY_CHECK_ARTIFACT_DIR: artifacts/continuous-world-view
+        run: node scripts/continuous-world-view-check.cjs
 
-      - name: Enforce startup and Surface Mode budgets
+      - name: Enforce single-world rendering performance
         id: performance_test
         continue-on-error: true
         env:
           REALITY_BASE_URL: http://127.0.0.1:4173/
-          REALITY_PERFORMANCE_ARTIFACT_DIR: artifacts/performance-smoke
-        run: node scripts/performance-smoke.cjs
-
-      - name: Enter, move through, and exit surface mode
-        id: surface_mode_test
-        continue-on-error: true
-        env:
-          REALITY_BASE_URL: http://127.0.0.1:4173/
-          REALITY_SURFACE_MODE_ARTIFACT_DIR: artifacts/surface-mode-smoke
-        run: node scripts/surface-mode-smoke.cjs
+          REALITY_PERFORMANCE_ARTIFACT_DIR: artifacts/single-world-performance
+        run: node scripts/single-world-performance-check.cjs
 
       - name: Upload browser diagnostics
         if: always()
@@ -110,10 +94,8 @@ jobs:
           name: reality-browser-diagnostics-${{ github.sha }}
           path: |
             artifacts/unified-smoke
-            artifacts/root-renderer-smoke
-            artifacts/iphone-sphere-smoke
-            artifacts/surface-mode-smoke
-            artifacts/performance-smoke
+            artifacts/continuous-world-view
+            artifacts/single-world-performance
             /tmp/reality-preview.log
           if-no-files-found: warn
           retention-days: 30
@@ -124,18 +106,16 @@ jobs:
         with:
           script: |
             const unifiedOk = '${{ steps.unified_test.outcome }}' === 'success';
-            const rootRendererOk = '${{ steps.root_renderer_test.outcome }}' === 'success';
-            const iphoneSphereOk = '${{ steps.iphone_sphere_test.outcome }}' === 'success';
-            const surfaceModeOk = '${{ steps.surface_mode_test.outcome }}' === 'success';
+            const continuityOk = '${{ steps.continuity_test.outcome }}' === 'success';
             const performanceOk = '${{ steps.performance_test.outcome }}' === 'success';
-            const ok = unifiedOk && rootRendererOk && iphoneSphereOk && surfaceModeOk && performanceOk;
+            const ok = unifiedOk && continuityOk && performanceOk;
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
               state: ok ? 'success' : 'failure',
               context: 'browser/unified-runtime',
-              description: ok ? 'Living planet, presentation layers, surface mode, and iPhone checks passed' : 'A living-planet browser or visual check failed',
+              description: ok ? 'One-scene world, mobile, continuity, and performance checks passed' : 'A single-world browser diagnostic failed',
               target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             });
-            if (!ok) core.setFailed('One or more browser diagnostics failed.');
+            if (!ok) core.setFailed('One or more single-world browser diagnostics failed.');
