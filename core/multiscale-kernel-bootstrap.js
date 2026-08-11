@@ -1,12 +1,30 @@
 import { createEidolonKernelAdapter } from './eidolon-kernel-adapter.js';
 
+function waitForAuthoritativeRuntime(timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    const started = performance.now();
+    function check() {
+      const ready = window.realitySandboxReady;
+      if (ready && typeof ready.then === 'function') {
+        resolve(ready);
+        return;
+      }
+      if (performance.now() - started >= timeoutMs) {
+        reject(new Error('Timed out waiting for the authoritative Eidolon runtime.'));
+        return;
+      }
+      setTimeout(check, 10);
+    }
+    check();
+  });
+}
+
 async function installRealityKernel() {
-  const ready = window.realitySandboxReady;
-  if (!ready || typeof ready.then !== 'function') return null;
+  const ready = await waitForAuthoritativeRuntime();
   await ready;
 
   const planet = window.realitySandboxPlanet;
-  if (!planet?.world) return null;
+  if (!planet?.world) throw new Error('Authoritative Eidolon world is unavailable after startup.');
 
   const adapter = createEidolonKernelAdapter({
     world: planet.world,
@@ -37,15 +55,7 @@ async function installRealityKernel() {
   return api;
 }
 
-function start() {
-  window.realitySandboxKernelReady = installRealityKernel().catch(error => {
-    console.warn('[reality-kernel] adapter failed to initialize', error);
-    return null;
-  });
-}
-
-if (document.readyState === 'loading') {
-  window.addEventListener('DOMContentLoaded', start, { once: true });
-} else {
-  start();
-}
+window.realitySandboxKernelReady = installRealityKernel().catch(error => {
+  console.warn('[reality-kernel] adapter failed to initialize', error);
+  return null;
+});
