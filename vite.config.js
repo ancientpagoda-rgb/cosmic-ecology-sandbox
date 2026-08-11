@@ -13,6 +13,9 @@ export default defineConfig({
     sourcemap: false,
     assetsDir: 'assets',
     rollupOptions: {
+      // Pages is the product artifact. Sumer is an explicitly linked parallel
+      // experiment powered by the reusable reality kernel; the living-planet
+      // root remains the v76 single-scene world view.
       input: {
         main: resolve(process.cwd(), 'index.html'),
         origins: resolve(process.cwd(), 'origins.html'),
