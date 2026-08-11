@@ -1,26 +1,35 @@
 const EPSILON = 1e-12;
 
-export const ECOLOGICAL_TRANSACTION_TYPES = Object.freeze({
+export const REALITY_TRANSACTION_TYPES = Object.freeze({
   GRAZE: 'GRAZE',
   PREDATE: 'PREDATE',
   DIE: 'DIE',
   REPRODUCE: 'REPRODUCE',
   DECOMPOSE: 'DECOMPOSE',
   UPTAKE: 'UPTAKE',
+  PRECIPITATE: 'PRECIPITATE',
+  FLOW: 'FLOW',
+  ERODE: 'ERODE',
+  DEPOSIT: 'DEPOSIT',
+  EVAPORATE: 'EVAPORATE',
 });
+
+// Backward-compatible name for the ecology ledgers while the transaction bus
+// expands to non-ecological cross-scale contracts.
+export const ECOLOGICAL_TRANSACTION_TYPES = REALITY_TRANSACTION_TYPES;
 
 const finite = (value, fallback = 0) => Number.isFinite(value) ? value : fallback;
 
 export function installEcologicalTransactions({ world, historyLimit = 256 } = {}) {
   if (!world?.ecs?.components || typeof world.step !== 'function' || typeof world.ecs.destroyEntity !== 'function') {
-    throw new Error('Ecological transactions require the authoritative Eidolon world.');
+    throw new Error('Reality transactions require the authoritative Eidolon world.');
   }
 
   const handlers = new Map();
   const beforeStepHooks = [];
   const afterStepHooks = [];
   const recent = [];
-  const counts = Object.fromEntries(Object.values(ECOLOGICAL_TRANSACTION_TYPES).map(type => [type, 0]));
+  const counts = Object.fromEntries(Object.values(REALITY_TRANSACTION_TYPES).map(type => [type, 0]));
   const guildMaps = {
     grazer: world.ecs.components.agent,
     predator: world.ecs.components.predator,
@@ -59,7 +68,7 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
   }
 
   function transact(type, payload = {}, initialResult = {}) {
-    if (!Object.values(ECOLOGICAL_TRANSACTION_TYPES).includes(type)) throw new Error(`Unknown ecological transaction type: ${type}`);
+    if (!Object.values(REALITY_TRANSACTION_TYPES).includes(type)) throw new Error(`Unknown reality transaction type: ${type}`);
     const event = { type, payload: { ...payload }, result: { ...initialResult }, tick: world.tick };
     suppressCapture += 1;
     try {
@@ -72,7 +81,8 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
   }
 
   function register(type, handler, priority = 0) {
-    if (typeof handler !== 'function') throw new Error('Ecological transaction handler must be a function.');
+    if (!Object.values(REALITY_TRANSACTION_TYPES).includes(type)) throw new Error(`Unknown reality transaction type: ${type}`);
+    if (typeof handler !== 'function') throw new Error('Reality transaction handler must be a function.');
     const list = handlers.get(type) || [];
     const registration = { handler, priority, order: sequence++ };
     list.push(registration);
@@ -131,7 +141,7 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
         const position = positionOf(id);
 
         if (delta > EPSILON && guild === 'grazer') {
-          const event = transact(ECOLOGICAL_TRANSACTION_TYPES.GRAZE, {
+          const event = transact(REALITY_TRANSACTION_TYPES.GRAZE, {
             consumerId: id,
             guild,
             x: position.x,
@@ -144,7 +154,7 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
           const prey = pendingRemoval(preyGuild);
           if (prey) {
             prey.consumed = true;
-            const event = transact(ECOLOGICAL_TRANSACTION_TYPES.PREDATE, {
+            const event = transact(REALITY_TRANSACTION_TYPES.PREDATE, {
               consumerId: id,
               consumerGuild: guild,
               preyId: prey.id,
@@ -162,7 +172,7 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
             birth.consumed = true;
             const child = guildMaps[guild]?.get?.(birth.id);
             const parentLoss = before - after;
-            const event = transact(ECOLOGICAL_TRANSACTION_TYPES.REPRODUCE, {
+            const event = transact(REALITY_TRANSACTION_TYPES.REPRODUCE, {
               parentId: id,
               childId: birth.id,
               guild,
@@ -225,7 +235,7 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
     if (!activeBatch) return;
     for (const removal of activeBatch.removals) {
       if (removal.consumed) continue;
-      transact(ECOLOGICAL_TRANSACTION_TYPES.DIE, {
+      transact(REALITY_TRANSACTION_TYPES.DIE, {
         entityId: removal.id,
         guild: removal.guild,
         x: removal.x,
@@ -260,10 +270,11 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
 
   function snapshot() {
     return {
-      version: 1,
+      version: 2,
       eventDriven: true,
       scanFreePopulationAccounting: true,
-      types: { ...ECOLOGICAL_TRANSACTION_TYPES },
+      domains: ['ecology', 'hydrology'],
+      types: { ...REALITY_TRANSACTION_TYPES },
       counts: { ...counts },
       recent: recent.slice(-64).map(record => ({ ...record, payload: { ...record.payload }, result: { ...record.result } })),
       handlers: Object.fromEntries([...handlers.entries()].map(([type, list]) => [type, list.length])),
@@ -281,12 +292,13 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
     beforeStepHooks.length = 0;
     afterStepHooks.length = 0;
     if (world.ecologicalTransactions === api) world.ecologicalTransactions = null;
+    if (world.realityTransactions === api) world.realityTransactions = null;
   }
 
   const api = {
-    version: 1,
+    version: 2,
     eventDriven: true,
-    types: ECOLOGICAL_TRANSACTION_TYPES,
+    types: REALITY_TRANSACTION_TYPES,
     transact,
     register,
     beforeStep: (handler, priority = 0) => addStepHook(beforeStepHooks, handler, priority),
@@ -296,5 +308,8 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
   };
 
   world.ecologicalTransactions = api;
+  world.realityTransactions = api;
   return api;
 }
+
+export const installRealityTransactions = installEcologicalTransactions;
