@@ -66,25 +66,6 @@ UPTAKE
 
 Creature energy mutations and entity destruction are captured at the ECS mutation boundary during the existing authoritative `world.step()`. The transaction layer assigns deterministic sequence numbers and invokes registered conservation handlers in priority order.
 
-```text
-world.step()
-    |
-    +-- organism mutation
-    |       |
-    |       +--> GRAZE / PREDATE / REPRODUCE / DIE
-    |
-    +-- fixed-grid ecological hooks
-            |
-            +--> DECOMPOSE / UPTAKE
-                    |
-                    v
-              conservation handlers
-                    |
-          +---------+---------+
-          |                   |
-     energy ledger       nutrient ledger
-```
-
 This replaces the previous correctness-first pattern of snapshotting every organism before a step and comparing the entire population afterward.
 
 `scanFreePopulationAccounting: true` means **no whole-population before/after reconciliation scan per tick**. The bounded 18×10 landscape grid still updates for primary production, soil state, and decomposition; its cost does not grow with organism population.
@@ -93,12 +74,12 @@ The current Eidolon adapter discovers transactions from ECS mutations so the leg
 
 ### Transaction semantics
 
-- `GRAZE` fires when a grazer attempts to increase stored energy. The energy ledger first debits finite coarse forage stock and can reduce the allowed gain before it reaches the organism. The nutrient ledger receives the same finalized transfer and moves vegetation nutrient into grazer biomass plus detrital waste.
-- `PREDATE` pairs prey destruction with the immediately consuming predator/apex energy gain. The energy ledger limits retained energy by prey energy and trophic efficiency. The nutrient ledger transfers tracked prey nutrients into consumer biomass and detritus.
-- `REPRODUCE` pairs a new same-guild entity with the parent energy transfer. Offspring energy cannot exceed the energy actually transferred by the parent. Tracked body nutrients are divided between parent and offspring rather than created.
-- `DIE` returns tracked organism nutrients to local detritus. The same transaction type represents coarse vegetation turnover with `guild: vegetation`.
-- `DECOMPOSE` mineralizes local detritus into soil nutrient.
-- `UPTAKE` moves soil nutrient into vegetation and can limit requested primary-production energy when nutrients are insufficient.
+- `GRAZE`: finite forage is debited before a grazer's requested energy gain is retained; the same finalized transfer moves vegetation nutrient into biomass and detrital waste.
+- `PREDATE`: prey destruction is paired with the consuming predator/apex gain; retained energy and nutrients are bounded by the prey transfer.
+- `REPRODUCE`: offspring energy cannot exceed energy actually transferred by the parent; tracked body nutrients are partitioned between parent and offspring.
+- `DIE`: tracked organism nutrient returns to local detritus; vegetation turnover uses the same transaction with `guild: vegetation`.
+- `DECOMPOSE`: local detritus mineralizes into soil nutrient.
+- `UPTAKE`: soil nutrient enters vegetation and can limit requested primary production.
 
 ## Writable ecological energy
 
@@ -153,18 +134,7 @@ npm run check:kernel
 npm run check:kernel-browser
 ```
 
-The headless kernel suite includes:
-
-```text
-scripts/multiscale-kernel-check.mjs
-scripts/eidolon-kernel-adapter-check.mjs
-scripts/reality-observer-level-check.mjs
-scripts/ecological-transactions-check.mjs
-scripts/ecological-energy-ledger-check.mjs
-scripts/ecological-nutrient-cycle-check.mjs
-```
-
-It verifies deterministic refinement, temporal scheduling, collapse/restore, conservation rejection, lazy Eidolon resolution, all six ecological transaction types, forage depletion, trophic anti-creation, reproduction transfer, nutrient inheritance, grazing/predation nutrient flows, decomposition, soil uptake, and nutrient conservation drift.
+The headless suite includes `ecological-transactions-check.mjs`, energy-ledger checks, nutrient-cycle checks, the generic multiscale tests, adapter tests, and observer tests. It verifies all six transaction types, conservation behavior, reproduction transfer, nutrient inheritance, grazing/predation flows, decomposition, uptake, and nutrient conservation drift.
 
 The Chromium test verifies the transaction layer and both writable ledgers in the production build, then drives the public runtime through planet -> region -> patch -> actual ECS entity -> inspector -> coarsening while retaining the existing iPhone, renderer, performance, Surface Mode, and runtime diagnostics.
 
@@ -196,19 +166,7 @@ multiscale-reality-kernel/
   package.json
 ```
 
-This Eidolon repository should keep:
-
-```text
-Eidolon adapter
-camera / inspector bridge
-ECS mutation capture adapter
-ecological energy ledger
-ecological nutrient cycle
-browser integration tests
-renderers and UI
-```
-
-The journal/handler mechanism can eventually move to the generic repository; the code that knows `grazer`, `predator`, `apex`, Eidolon's ECS maps, or forage cells should not.
+This Eidolon repository should keep the Eidolon adapter, camera/inspector bridge, ECS mutation capture adapter, ecological ledgers, browser tests, renderers, and UI.
 
 After one more non-ecological cross-scale contract proves the same APIs can serve a different domain, extract the stable generic core into its own repository/package and consume it here as a normal dependency rather than a Git submodule.
 
