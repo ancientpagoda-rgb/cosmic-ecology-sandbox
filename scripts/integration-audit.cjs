@@ -34,7 +34,8 @@ const rootEntry = 'app-seeded.js';
 requireText('index.html', 'Procedural Living Planet', 'honest fictional-planet title');
 requireText('index.html', 'fictional procedural living planet', 'fictional-world accessibility label');
 requireText('index.html', 'src="./app-seeded.js?', 'seeded project-relative root entry point');
-requireText('index.html', 'src="./core/surface-mode-entry.js?', 'bundled surface-mode entry point');
+requireText('index.html', 'src="./core/surface-mode-entry.js?', 'bundled local-detail renderer entry point');
+requireText('index.html', 'src="./core/continuous-world-view.js?', 'single continuous world-view controller');
 forbidText('index.html', 'scientific-earth-presentation', 'retired Earth renderer');
 forbidText('index.html', 'lilac-cloud-overlay', 'retired cloud sidecar');
 forbidText('index.html', 'rain-runoff-overlay', 'retired rain sidecar');
@@ -126,8 +127,8 @@ requireMissing('.github/workflows/phase11-live.yml', 'Phase 11 live workflow fro
 forbidText('.github/workflows/browser-smoke.yml', 'node scripts/browser-smoke.cjs', 'Phase 11 browser suite');
 requireText('.github/workflows/browser-smoke.yml', 'node scripts/reality-check.cjs', 'autonomous living-planet experience check');
 requireText('.github/workflows/browser-smoke.yml', 'node scripts/iphone-sphere-smoke.cjs', 'iPhone visual check');
-requireText('.github/workflows/browser-smoke.yml', 'node scripts/surface-mode-smoke.cjs', 'surface-mode interaction check');
-requireText('.github/workflows/browser-smoke.yml', 'node scripts/performance-smoke.cjs', 'startup and Surface Mode performance check');
+requireText('.github/workflows/browser-smoke.yml', 'node scripts/surface-mode-smoke.cjs', 'local-renderer interaction check');
+requireText('.github/workflows/browser-smoke.yml', 'node scripts/performance-smoke.cjs', 'startup and local-detail performance check');
 
 requireText('scripts/reality-check.cjs', 'exerciseDesktopInteraction', 'real browser camera interaction');
 requireText('scripts/reality-check.cjs', 'exerciseBiology', 'causal reproduction browser scenario');
@@ -137,11 +138,16 @@ requireText('scripts/unified-smoke.cjs', 'statDefinitions === 8', 'defined stati
 requireText('scripts/unified-smoke.cjs', 'initial.observatory.traits > 0', 'evolution observatory browser assertion');
 requireText('scripts/unified-smoke.cjs', '[title][tabindex="0"]', 'keyboard-inspectable statistic assertion');
 requireText('scripts/iphone-sphere-smoke.cjs', 'Mobile dashboard overlaps the inspector.', 'mobile panel overlap assertion');
-requireText('scripts/iphone-sphere-smoke.cjs', 'Movement joystick', 'mobile Surface Mode joystick assertion');
+requireText('scripts/iphone-sphere-smoke.cjs', 'Movement joystick', 'mobile local-view joystick assertion');
 requireText('scripts/root-renderer-smoke.cjs', 'visibleSimulationCanvases.length === 1', 'single simulation canvas plus approved presentation layers');
-requireText('scripts/surface-mode-smoke.cjs', "document.documentElement.dataset.surfaceMode === 'active'", 'surface mode activates in browser');
-requireText('scripts/surface-mode-smoke.cjs', "page.keyboard.down('w')", 'surface mode movement browser assertion');
-requireText('scripts/surface-mode-smoke.cjs', "page.locator('#enterSurfaceMode').click()", 'surface mode re-entry browser assertion');
+requireText('scripts/surface-mode-smoke.cjs', "document.documentElement.dataset.surfaceMode === 'active'", 'local detail renderer activates in browser');
+requireText('scripts/surface-mode-smoke.cjs', "page.keyboard.down('w')", 'local movement browser assertion');
+requireText('scripts/surface-mode-smoke.cjs', 'window.realitySandboxWorldView.jumpOutward()', 'local renderer rejoins unified view');
+requireText('scripts/continuous-world-view-check.cjs', "page.mouse.wheel(0, -520)", 'globe-to-ground zoom descent assertion');
+requireText('scripts/continuous-world-view-check.cjs', "page.mouse.wheel(0, 900)", 'ground-to-globe zoom ascent assertion');
+requireText('scripts/continuous-world-view-check.cjs', 'Simulation stopped in local LOD', 'simulation remains continuous at local scale');
+requireText('core/continuous-world-view.js', "model: 'single-authoritative-location-altitude-continuous-lod-view'", 'single authoritative continuous camera model');
+requireText('core/continuous-world-view.js', "rendererPolicy: 'globe-and-local-renderers-are-private-lod-backends'", 'globe and local renderers are private LOD backends');
 requireText('scripts/performance-smoke.cjs', 'webglcontextlost', 'surface context-loss fallback assertion');
 requireText('scripts/performance-smoke.cjs', 'STARTUP_PIXEL_BUDGET', 'startup canvas performance budget');
 requireText('scripts/performance-smoke.cjs', 'preEntrySurfaceResources', 'lazy Surface resource performance budget');
@@ -154,6 +160,7 @@ requireText('README.md', 'Scope freeze', 'universe scope freeze documentation');
 requireText('README.md', 'No new phase should be added', 'experience-gate rule');
 requireText('package.json', '"audit:integration"', 'integration audit script');
 requireText('package.json', '"check:ecology"', 'ecology observatory contract script');
+requireText('package.json', '"check:view"', 'continuous world-view regression script');
 
 if (failures.length) {
   console.error('Reality Sandbox integration audit failed:\n');
