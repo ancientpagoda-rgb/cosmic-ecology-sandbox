@@ -1,0 +1,15 @@
+{
+  "name": "multiscale-reality-kernel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic multiscale orchestration and transaction primitives for causally connected simulations.",
+  "exports": {
+    ".": "./src/index.js",
+    "./kernel": "./src/kernel.js",
+    "./transactions": "./src/transactions.js"
+  },
+  "scripts": {
+    "test": "node test/kernel.test.mjs && node test/transactions.test.mjs"
+  }
+}
