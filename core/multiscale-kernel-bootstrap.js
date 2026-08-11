@@ -1,5 +1,6 @@
 import { createEidolonKernelAdapter } from './eidolon-kernel-adapter.js';
 import { installEcologicalEnergyLedger } from './ecological-energy-ledger.js';
+import { installEcologicalNutrientCycle } from './ecological-nutrient-cycle.js';
 import { installRealityObserverBridge } from './reality-observer-bridge.js';
 
 function waitForAuthoritativeRuntime(timeoutMs = 30000) {
@@ -31,11 +32,22 @@ async function installRealityKernel() {
   if (!planet?.seasonalResources?.sample) throw new Error('Authoritative Eidolon resource field is unavailable after startup.');
   if (!runtime?.getCamera) throw new Error('Authoritative Eidolon presentation runtime is unavailable after startup.');
 
+  // Nutrients wrap the seasonal field first so soil availability can constrain
+  // the landscape productivity seen by the energy ledger. The nutrient cycle
+  // then attaches outside the energy wrapper, preserving one authoritative
+  // world.step while observing the energy ledger's spatial flow counters.
+  const ecologicalNutrients = installEcologicalNutrientCycle({
+    world: planet.world,
+    resourceField: planet.seasonalResources,
+  });
+  planet.ecologicalNutrients = ecologicalNutrients;
+
   const ecologicalEnergy = installEcologicalEnergyLedger({
     world: planet.world,
     resourceField: planet.seasonalResources,
   });
   planet.ecologicalEnergy = ecologicalEnergy;
+  ecologicalNutrients.attachEnergyLedger(ecologicalEnergy);
 
   const adapter = createEidolonKernelAdapter({
     world: planet.world,
@@ -44,16 +56,21 @@ async function installRealityKernel() {
   });
 
   const api = {
-    version: 3,
-    mode: 'observer-coupled-kernel-with-writable-ecology',
+    version: 4,
+    mode: 'observer-coupled-kernel-with-writable-energy-and-nutrients',
     kernel: adapter.kernel,
     ecologicalEnergy,
+    ecologicalNutrients,
     requestAt(options = {}) {
       const result = adapter.requestAt(options);
+      const hasPoint = Number.isFinite(options.x) && Number.isFinite(options.y);
       return {
         ...result,
-        ecologicalEnergy: Number.isFinite(options.x) && Number.isFinite(options.y)
+        ecologicalEnergy: hasPoint
           ? ecologicalEnergy.sample(options.x, options.y).ecologicalEnergy
+          : null,
+        ecologicalNutrients: hasPoint
+          ? ecologicalNutrients.sample(options.x, options.y).ecologicalNutrients
           : null,
       };
     },
@@ -64,6 +81,7 @@ async function installRealityKernel() {
       ...adapter.snapshot(),
       observation: api.observation?.snapshot?.() || null,
       ecologicalEnergy: ecologicalEnergy.snapshot(),
+      ecologicalNutrients: ecologicalNutrients.snapshot(),
     }),
     getScales: () => adapter.getScales(),
     observation: null,
@@ -83,6 +101,7 @@ async function installRealityKernel() {
       scales: api.getScales(),
       observation: api.observation.snapshot(),
       ecologicalEnergy: api.ecologicalEnergy.snapshot(),
+      ecologicalNutrients: api.ecologicalNutrients.snapshot(),
     },
   }));
   return api;
