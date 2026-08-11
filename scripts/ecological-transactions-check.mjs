@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { installEcologicalTransactions } from '../core/ecological-transactions.js';
+import { installRealityTransactions } from '../core/ecological-transactions.js';
 
 function makeWorld() {
   const position = new Map([
@@ -22,13 +22,16 @@ function makeWorld() {
 }
 
 const fixture = makeWorld();
-const transactions = installEcologicalTransactions({ world: fixture.world });
+const transactions = installRealityTransactions({ world: fixture.world });
 
 fixture.world.step = fixture.world.step.bind(fixture.world);
 
 // Explicit coarse transactions are journaled directly.
 transactions.transact(transactions.types.UPTAKE, { x: 5, y: 5, requestedEnergy: 0.2 }, { allowedEnergy: 0.2 });
 transactions.transact(transactions.types.DECOMPOSE, { x: 5, y: 5, requestedNutrient: 0.1 }, { mineralized: 0.1 });
+for (const type of ['PRECIPITATE', 'FLOW', 'ERODE', 'DEPOSIT', 'EVAPORATE']) {
+  transactions.transact(transactions.types[type], { domain: 'hydrology', amount: 0.1 }, {});
+}
 
 // Replace the wrapped source step by mutating behavior through the already
 // wrapped world: before/after hooks remain authoritative, while proxy-backed
@@ -50,8 +53,6 @@ const sourceStep = () => {
   if (mode === 'die') fixture.world.ecs.destroyEntity(3);
 };
 
-// The transaction installer owns the current wrapper, so exercise the event
-// classifier by registering source behavior as a before-step hook.
 const removeDriver = transactions.beforeStep(() => sourceStep(), -1000);
 
 mode = 'graze';
@@ -67,16 +68,20 @@ removeDriver();
 const snapshot = transactions.snapshot();
 assert.equal(snapshot.eventDriven, true);
 assert.equal(snapshot.scanFreePopulationAccounting, true);
-for (const type of ['GRAZE', 'PREDATE', 'DIE', 'REPRODUCE', 'DECOMPOSE', 'UPTAKE']) {
+assert(snapshot.domains.includes('ecology'));
+assert(snapshot.domains.includes('hydrology'));
+for (const type of ['GRAZE', 'PREDATE', 'DIE', 'REPRODUCE', 'DECOMPOSE', 'UPTAKE', 'PRECIPITATE', 'FLOW', 'ERODE', 'DEPOSIT', 'EVAPORATE']) {
   assert(snapshot.counts[type] >= 1, `${type} transaction was not recorded: ${JSON.stringify(snapshot.counts)}`);
 }
 assert(snapshot.recent.every(record => Number.isInteger(record.sequence)), 'transaction journal is missing deterministic sequence numbers');
 
 transactions.destroy();
-assert.equal(fixture.world.ecologicalTransactions, null, 'destroy() did not detach transaction layer');
+assert.equal(fixture.world.ecologicalTransactions, null, 'destroy() did not detach ecological compatibility alias');
+assert.equal(fixture.world.realityTransactions, null, 'destroy() did not detach shared reality transaction layer');
 
 console.log(JSON.stringify({
   ok: true,
+  domains: snapshot.domains,
   scanFreePopulationAccounting: snapshot.scanFreePopulationAccounting,
   counts: snapshot.counts,
   recentTypes: snapshot.recent.map(record => record.type),
