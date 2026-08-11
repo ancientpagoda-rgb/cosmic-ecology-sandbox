@@ -31,7 +31,13 @@ function assert(condition, message) {
     assert(initial.observers.length === 0, `initial kernel should have no active observers: ${JSON.stringify(initial.observers)}`);
     assert(initial.kernel.nodes.length === 1, `initial kernel should contain only the planet node, got ${initial.kernel.nodes.length}`);
 
+    // Freeze the authoritative world while selecting and traversing one entity's
+    // scale hierarchy. Otherwise a live organism can cross a patch boundary
+    // between the 2x/4x/9x assertions, which is valid simulation behavior but
+    // makes this observer-coupling test nondeterministic.
     const target = await page.evaluate(() => {
+      window.realitySandboxDebug.pause();
+      if (!window.realitySandboxDebug.isPaused()) throw new Error('Unable to pause Eidolon for kernel camera test.');
       const world = window.realitySandboxPlanet.world;
       const c = world.ecs.components;
       const candidates = [c.agent, c.predator, c.apex];
@@ -93,6 +99,7 @@ function assert(condition, message) {
 
     console.log(JSON.stringify({
       ok: true,
+      pausedDuringTraversal: true,
       initialNodes: initial.kernel.nodes.length,
       targetEntity: target.id,
       transitions: {
