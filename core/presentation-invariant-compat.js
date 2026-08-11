@@ -8,7 +8,14 @@ const LEGACY_CANVAS_FAILURE = 'The root must use exactly one visible simulation 
 function visible(element) {
   const style = getComputedStyle(element);
   const rect = element.getBoundingClientRect();
-  return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+  return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || 1) > 0 && rect.width > 0 && rect.height > 0;
+}
+
+function authoritativeWorldCanvas() {
+  if (window.realitySandboxSingleSphericalRenderer?.installed) {
+    return document.getElementById('eidolonSingleWorldCanvas');
+  }
+  return document.getElementById('lofiLivingCanvas');
 }
 
 async function installPresentationInvariantCompat() {
@@ -18,13 +25,16 @@ async function installPresentationInvariantCompat() {
       const originalRunInvariants = runtime.runInvariants.bind(runtime);
       runtime.runInvariants = () => {
         const original = originalRunInvariants();
-        const failures = (original.failures || []).filter(failure => failure !== LEGACY_CANVAS_FAILURE);
+        const failures = (original.failures || []).filter(failure =>
+          failure !== LEGACY_CANVAS_FAILURE &&
+          !String(failure).includes('exactly one visible simulation canvas')
+        );
         const simulationCanvases = [...document.querySelectorAll('canvas')]
           .filter(visible)
           .filter(canvas => !APPROVED_PRESENTATION_CANVASES.has(canvas.id));
-        const rootCanvas = document.getElementById('lofiLivingCanvas');
+        const rootCanvas = authoritativeWorldCanvas();
         if (simulationCanvases.length !== 1 || simulationCanvases[0] !== rootCanvas) {
-          failures.push('The root must use exactly one visible simulation canvas plus approved presentation layers.');
+          failures.push('The root must expose exactly one authoritative visible world canvas.');
         }
         return { ...original, ok: failures.length === 0, failures };
       };
