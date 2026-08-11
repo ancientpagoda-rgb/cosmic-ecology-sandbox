@@ -35,13 +35,23 @@ export function createSeasonalResourceFields(world, living, waterCycle, journal)
         const seasonalLight = 0.56 + Math.sin(season * Math.PI * 2 + x / world.width * Math.PI * 2) * (0.22 - latitude * 0.08);
         const thermalFit = 1 - Math.min(1, Math.abs(terrain.temperature - 0.58) * 1.45);
         // Water-cycle fields can be extended independently; missing optional
-        // coastal fields must not poison the visible food summary with NaN.
+        // coastal or sediment fields must not poison the visible food summary.
         const soil = finite(water.soil);
         const river = finite(water.river);
         const delta = finite(water.delta);
         const lake = finite(water.lake);
+        const depositedSediment = finite(water.sediment?.depositedFraction);
+        const activeErosion = finite(water.sediment?.erosionActivity);
         const moisture = clamp(soil * 0.62 + terrain.rainfall * 0.24 + river * 0.34 + delta * 0.4, 0, 1);
-        const fertility = clamp(thermalFit * 0.35 + terrain.rainfall * 0.3 + moisture * 0.45, 0, 1);
+        // Newly deposited material modestly enriches floodplains/deltas while
+        // active stripping reduces near-term substrate quality. These remain
+        // model fertility effects, not claimed soil-chemistry measurements.
+        const fertility = clamp(
+          thermalFit * 0.35 + terrain.rainfall * 0.3 + moisture * 0.45
+          + depositedSediment * 0.12 - activeErosion * 0.08,
+          0,
+          1,
+        );
         const vegetation = vegetationCover(terrain.biome);
         // The forage map follows the planet's generated vegetation zones. A
         // rainforest is a broad food landscape, while steppe and scrub provide
