@@ -207,7 +207,7 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
 
   for (const [guild, map] of Object.entries(guildMaps)) installGuildMapCapture(guild, map);
 
-  world.ecs.destroyEntity = function capturedDestroyEntity(id) {
+  const capturedDestroyEntity = function capturedDestroyEntity(id) {
     if (activeBatch && suppressCapture === 0) {
       for (const [guild, map] of Object.entries(guildMaps)) {
         if (!map?.has?.(id)) continue;
@@ -219,6 +219,7 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
     }
     return originalDestroyEntity.call(world.ecs, id);
   };
+  world.ecs.destroyEntity = capturedDestroyEntity;
 
   function flushDeaths() {
     if (!activeBatch) return;
@@ -279,6 +280,7 @@ export function installEcologicalTransactions({ world, historyLimit = 256 } = {}
     handlers.clear();
     beforeStepHooks.length = 0;
     afterStepHooks.length = 0;
+    if (world.ecologicalTransactions === api) world.ecologicalTransactions = null;
   }
 
   const api = {
