@@ -64,7 +64,7 @@ requireText('scripts/continuous-world-view-check.cjs', 'assertSameRenderer', 'sa
 requireText('scripts/continuous-world-view-check.cjs', 'rendererSwaps === 0', 'zero renderer swaps assertion');
 requireText('scripts/continuous-world-view-check.cjs', 'canvasSwaps === 0', 'zero canvas swaps assertion');
 requireText('scripts/continuous-world-view-check.cjs', 'altitudeSequence', 'ground-to-orbit altitude sweep');
-requireText('scripts/continuous-world-view-check.cjs', 'Simulation stopped in local LOD', 'simulation continuity assertion');
+requireText('scripts/continuous-world-view-check.cjs', 'Simulation stopped near the ground', 'simulation continuity assertion');
 requireText('scripts/reality-check.cjs', 'exerciseDesktopInteraction', 'real browser interaction');
 requireText('scripts/reality-check.cjs', 'exerciseBiology', 'causal reproduction scenario');
 requireText('scripts/reality-check.cjs', 'exerciseLongRun', 'deterministic stress run');
