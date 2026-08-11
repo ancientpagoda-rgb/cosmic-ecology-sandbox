@@ -20,14 +20,14 @@ fs.mkdirSync(outputDir, { recursive: true });
   try {
     const url = new URL(baseUrl);
     url.searchParams.set('debug', '1');
-    url.searchParams.set('morphologyCheck', '1');
+    url.searchParams.set('classicCreatureCheck', '1');
     await page.goto(url.toString(), { waitUntil: 'domcontentloaded', timeout: 120000 });
     await page.waitForFunction(() => Boolean(
       window.realitySandboxDebug?.ready &&
       window.realitySandboxCreaturePhenotypes?.get &&
-      window.realitySandboxUnifiedCreatureLOD &&
+      window.realitySandboxGoogridCreatures?.getSnapshot &&
       window.realitySandboxSurfaceMode?.enterAt &&
-      document.querySelector('.eidolon-unified-creatures')
+      document.querySelector('.eidolon-creatures .eidolon-creature[data-entity-id]')
     ), null, { timeout: 120000 });
 
     const target = await page.evaluate(() => {
@@ -38,99 +38,55 @@ fs.mkdirSync(outputDir, { recursive: true });
       const [id, position] = first;
       return { id, x: position.x, y: position.y, width: planet.world.width, height: planet.world.height };
     });
-    assert(target && Number.isFinite(target.id), 'No living ECS creature was available for morphology parity testing.');
+    assert(target && Number.isFinite(target.id), 'No living ECS creature was available for classic presentation testing.');
 
     await page.evaluate(({ x, y, width, height }) => {
       window.realitySandboxUnified.setCamera({ centerX: x / width, centerY: y / height, zoom: 2.5 });
-      window.realitySandboxUnifiedCreatureLOD.render();
+      window.realitySandboxGoogridCreatures.render();
     }, target);
     await page.waitForTimeout(300);
 
     const far = await page.evaluate(entityId => {
       const phenotype = window.realitySandboxCreaturePhenotypes.get(entityId);
-      const node = document.querySelector(`.eidolon-unified-creatures .eidolon-creature[data-entity-id="${entityId}"]`);
-      if (!phenotype || !node) return { phenotype, found: Boolean(node) };
-      const fills = [...node.querySelectorAll('[fill]')].map(n => n.getAttribute('fill'));
-      return {
-        found: true,
-        phenotype,
-        signature: node.getAttribute('data-phenotype-signature'),
-        form: node.getAttribute('data-form'),
-        role: node.getAttribute('data-role'),
-        fills,
-        oldLayerDisplay: getComputedStyle(document.querySelector('.eidolon-creatures')).display,
-        lod: window.realitySandboxUnifiedCreatureLOD.getSnapshot(),
-      };
-    }, target.id);
-    assert(far.found, `Unified overview glyph for entity ${target.id} was not rendered.`);
-    assert(far.signature === far.phenotype.signature, 'Overview glyph did not use the authoritative phenotype signature.');
-    assert(far.form === far.phenotype.form, 'Overview glyph form diverged from authoritative phenotype.');
-    assert(far.role === far.phenotype.role, 'Overview glyph role diverged from authoritative phenotype.');
-    assert(far.fills.includes(far.phenotype.color) || far.phenotype.sprite, 'Overview glyph did not use phenotype body color.');
-    assert(far.oldLayerDisplay === 'none', 'Legacy overview creature layer was still visually active.');
-    assert(far.lod.displayCap == null, 'Unified creature LOD introduced a display-count cap.');
-    await page.screenshot({ path: path.join(outputDir, 'same-creature-far.png'), fullPage: true });
-
-    await page.evaluate(({ x, y, width }) => {
-      const mode = window.realitySandboxSurfaceMode;
-      mode.enterAt((x - 16 + width) % width, y);
-      const player = mode.getPlayer();
-      player.yaw = 0;
-      player.pitch = 0.18;
-      window.realitySandboxUnifiedCreatureLOD.render();
-    }, target);
-    await page.waitForFunction(entityId => Boolean(
-      document.documentElement.dataset.surfaceMode === 'active' &&
-      document.querySelector(`.eidolon-surface-creatures [data-surface-entity-id="${entityId}"] .eidolon-creature[data-entity-id="${entityId}"]`)
-    ), target.id, { timeout: 30000 });
-    await page.waitForTimeout(800);
-
-    const near = await page.evaluate(entityId => {
-      const phenotype = window.realitySandboxCreaturePhenotypes.get(entityId);
-      const layerNode = document.getElementById('surfaceModeLayer');
-      const anchor = document.querySelector(`.eidolon-surface-creatures [data-surface-entity-id="${entityId}"]`);
-      const node = anchor?.querySelector(`.eidolon-creature[data-entity-id="${entityId}"]`);
-      const fills = node ? [...node.querySelectorAll('[fill]')].map(n => n.getAttribute('fill')) : [];
-      const layerRect = layerNode?.getBoundingClientRect();
-      const anchorRect = anchor?.getBoundingClientRect();
-      const centerY = anchorRect ? anchorRect.top + anchorRect.height * 0.5 : NaN;
-      const normalizedY = layerRect && Number.isFinite(centerY) && layerRect.height > 0
-        ? (centerY - layerRect.top) / layerRect.height
-        : NaN;
+      const node = document.querySelector(`.eidolon-creatures .eidolon-creature[data-entity-id="${entityId}"]`);
+      const style = node ? getComputedStyle(node.closest('.eidolon-creatures')) : null;
       return {
         found: Boolean(node),
         phenotype,
-        anchorSignature: anchor?.getAttribute('data-phenotype-signature') || null,
-        signature: node?.getAttribute('data-phenotype-signature') || null,
-        form: node?.getAttribute('data-form') || null,
         role: node?.getAttribute('data-role') || null,
-        fills,
-        surfaceCount: document.querySelectorAll('.eidolon-surface-creatures [data-surface-entity-id]').length,
-        lod: window.realitySandboxUnifiedCreatureLOD.getSnapshot(),
-        player: window.realitySandboxSurfaceMode.getPlayer(),
-        groundPlacement: {
-          layerTop: layerRect?.top ?? null,
-          layerHeight: layerRect?.height ?? null,
-          creatureTop: anchorRect?.top ?? null,
-          creatureHeight: anchorRect?.height ?? null,
-          centerY: Number.isFinite(centerY) ? centerY : null,
-          normalizedY: Number.isFinite(normalizedY) ? normalizedY : null,
-        },
+        visible: Boolean(node && style && style.display !== 'none' && style.visibility !== 'hidden'),
+        classicSnapshot: window.realitySandboxGoogridCreatures.getSnapshot(),
+        unifiedRendererLoaded: Boolean(window.realitySandboxUnifiedCreatureLOD),
       };
     }, target.id);
 
-    assert(near.found, `Surface glyph for the same ECS entity ${target.id} was not rendered.`);
-    assert(near.signature === far.signature, `Far/surface phenotype signatures diverged (${far.signature} vs ${near.signature}).`);
-    assert(near.anchorSignature === far.signature, 'Surface projection anchor did not carry the same phenotype signature.');
-    assert(near.form === far.form, `Far/surface forms diverged (${far.form} vs ${near.form}).`);
-    assert(near.role === far.role, `Far/surface roles diverged (${far.role} vs ${near.role}).`);
-    assert(near.fills.includes(far.phenotype.color) || far.phenotype.sprite, 'Surface glyph did not preserve phenotype body color.');
-    assert(near.lod.phenotypeMismatches === 0, `Unified LOD reported ${near.lod.phenotypeMismatches} phenotype mismatches.`);
-    assert(near.lod.displayCap == null, 'Surface phenotype layer introduced a display-count cap.');
-    assert(Number.isFinite(near.groundPlacement.normalizedY), 'Surface creature grounding could not be measured.');
-    assert(near.groundPlacement.normalizedY > 0.52 && near.groundPlacement.normalizedY < 0.95,
-      `Near creature was not grounded in the lower Surface view (${near.groundPlacement.normalizedY}).`);
-    await page.screenshot({ path: path.join(outputDir, 'same-creature-surface.png'), fullPage: true });
+    assert(far.found && far.visible, `Classic GooGrid creature ${target.id} was not visibly rendered.`);
+    assert(far.phenotype, 'Authoritative phenotype data service was not retained underneath classic presentation.');
+    assert(far.classicSnapshot.style === 'googrid-inspired-lineage-morphology', 'Classic GooGrid morphology renderer was not active.');
+    assert(far.classicSnapshot.displayCap == null, 'Classic overview renderer unexpectedly gained a display-count cap.');
+    assert(!far.unifiedRendererLoaded, 'v73 replacement creature renderer was still active over the classic visuals.');
+    await page.screenshot({ path: path.join(outputDir, 'classic-creature-far.png'), fullPage: true });
+
+    await page.evaluate(({ x, y, width }) => {
+      window.realitySandboxSurfaceMode.enterAt((x - 16 + width) % width, y);
+    }, target);
+    await page.waitForFunction(() => Boolean(
+      document.documentElement.dataset.surfaceMode === 'active' &&
+      window.realitySandboxPresentationDiagnostics?.().surfaceGpu?.active === true
+    ), null, { timeout: 30000 });
+    await page.waitForTimeout(900);
+
+    const surface = await page.evaluate(() => ({
+      active: document.documentElement.dataset.surfaceMode === 'active',
+      visibleClassicFauna: Number(document.documentElement.dataset.surfaceModeVisibleCreatures || 0),
+      unifiedSurfaceLayerPresent: Boolean(document.querySelector('.eidolon-surface-creatures')),
+      gpu: window.realitySandboxPresentationDiagnostics?.().surfaceGpu || null,
+    }));
+    assert(surface.active, 'Surface Mode did not activate.');
+    assert(surface.gpu?.active === true, 'Original Surface GPU presentation was not active.');
+    assert(surface.visibleClassicFauna > 0, 'Original Surface fauna renderer did not show nearby creatures.');
+    assert(!surface.unifiedSurfaceLayerPresent, 'v73 Surface replacement creature layer was still present.');
+    await page.screenshot({ path: path.join(outputDir, 'classic-creature-surface.png'), fullPage: true });
 
     await page.evaluate(() => window.realitySandboxSurfaceMode.exit());
     await page.waitForTimeout(180);
@@ -138,10 +94,10 @@ fs.mkdirSync(outputDir, { recursive: true });
 
     const result = {
       ok: true,
-      model: 'one-authoritative-phenotype-two-render-lods-grounded-surface',
+      model: 'classic-v70-creature-presentation-with-authoritative-phenotype-data-retained',
       target,
       far,
-      near,
+      surface,
       pageErrors,
     };
     fs.writeFileSync(path.join(outputDir, 'unified-morphology.json'), JSON.stringify(result, null, 2));
