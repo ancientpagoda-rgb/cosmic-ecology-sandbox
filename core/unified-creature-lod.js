@@ -2,7 +2,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const STYLE_ID = 'eidolon-unified-creature-lod-style';
 const OVERVIEW_CLASS = 'eidolon-unified-creatures';
 const SURFACE_CLASS = 'eidolon-surface-creatures';
-const RENDER_MS = 100;
+const RENDER_MS = 120;
 const PHENOTYPE_REFRESH_MS = 650;
 const SURFACE_CULL_DISTANCE = 185;
 const SURFACE_VFOV = 100 * Math.PI / 180;
@@ -269,7 +269,7 @@ function install({ planet, phenotypes, runtime, mode, canvas, surfaceLayer }) {
     if (Math.abs(ndcX) > 1.12) return null;
     const altitude = Math.max(3.6, finite(player.altitude) || 3.6);
     const groundAngle = Math.atan2(-altitude, Math.max(1, forward));
-    const viewAngle = groundAngle + finite(player.pitch);
+    const viewAngle = groundAngle - finite(player.pitch);
     const ndcY = Math.tan(viewAngle) / tanV;
     if (ndcY < -1.35 || ndcY > 1.35) return null;
     return { x: rect.width * (.5 + ndcX * .5), y: rect.height * (.5 - ndcY * .5), distance };
@@ -331,7 +331,6 @@ function install({ planet, phenotypes, runtime, mode, canvas, surfaceLayer }) {
       item.shadow.setAttribute('cy', Math.max(3, base * p.width * .48).toFixed(2));
       item.shadow.setAttribute('rx', (shadowScale * .7).toFixed(2));
       item.shadow.setAttribute('ry', Math.max(2, base * p.width * .13).toFixed(2));
-      item.node.parentNode?.append(item.node);
       seen.add(id);
     }
 
@@ -369,25 +368,26 @@ function install({ planet, phenotypes, runtime, mode, canvas, surfaceLayer }) {
   render();
 
   const api = {
-    version: 2,
-    model: 'shared-phenotype-pooled-multi-lod-overview-and-surface',
+    version: 3,
+    model: 'shared-phenotype-pooled-grounded-multi-lod-overview-and-surface',
     render,
     getSnapshot() {
       return {
-        version: 2,
-        model: 'shared-phenotype-pooled-multi-lod-overview-and-surface',
+        version: 3,
+        model: 'shared-phenotype-pooled-grounded-multi-lod-overview-and-surface',
         overviewRendered,
         surfaceRendered,
         phenotypeMismatches,
         surfaceCullDistance: SURFACE_CULL_DISTANCE,
         displayCap: null,
         overviewSource: 'existing-projection-shared-phenotype-pooled-glyph',
-        surfaceSource: 'first-person-frustum-shared-phenotype-pooled-glyph',
+        surfaceSource: 'first-person-grounded-frustum-shared-phenotype-pooled-glyph',
         legacyOverviewHidden: true,
         nodePooling: true,
         nodesCreated,
         nodesReused,
         phenotypeCacheSize: phenotypeCache.size,
+        renderIntervalMs: RENDER_MS,
         lastRenderAt,
       };
     },
