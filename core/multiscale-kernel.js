@@ -134,7 +134,14 @@ export class RealityKernel {
     if (!node) throw new Error(`unknown node ${nodeId}`);
 
     if (node.children.length) {
-      for (const childId of node.children) this.setSubtreeActive(childId, true);
+      // Re-open one hierarchy level only. Descendants that were previously
+      // coarsened remain archived until an observer explicitly descends into
+      // that child again; otherwise old fine-detail regions would reactivate
+      // whenever any sibling branch was inspected.
+      for (const childId of node.children) {
+        const child = this.nodes.get(childId);
+        if (child) child.active = true;
+      }
       node.generation += 1;
       node.archivedAt = null;
       this.assertRefinementConservation(nodeId);
