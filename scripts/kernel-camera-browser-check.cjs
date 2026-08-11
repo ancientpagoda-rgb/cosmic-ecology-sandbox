@@ -33,6 +33,10 @@ function assert(condition, message) {
     assert(initial.ecologicalEnergy?.writable === true, 'writable ecological energy contract was not installed');
     assert(initial.ecologicalEnergy?.physicalUnitClaim === false, 'model ecological-energy units must not be presented as physical SI energy');
     assert(initial.ecologicalEnergy?.stock?.capacity > 0, 'ecological energy ledger has no productive landscape capacity');
+    assert(initial.ecologicalNutrients?.writable === true, 'writable ecological nutrient cycle was not installed');
+    assert(initial.ecologicalNutrients?.physicalUnitClaim === false, 'model nutrient units must not be presented as physical chemical units');
+    assert(initial.ecologicalNutrients?.reservoirs?.total > 0, 'ecological nutrient cycle has no initialized nutrient matter');
+    assert(Math.abs(initial.ecologicalNutrients?.conservation?.drift || 0) < 1e-8, `nutrient cycle drifted at startup: ${JSON.stringify(initial.ecologicalNutrients?.conservation)}`);
 
     // Freeze the authoritative world while selecting and traversing one entity's
     // scale hierarchy. Otherwise a live organism can cross a patch boundary
@@ -108,6 +112,12 @@ function assert(condition, message) {
         writable: initial.ecologicalEnergy.writable,
         unit: initial.ecologicalEnergy.unit,
         stockAvailability: initial.ecologicalEnergy.stock.availability,
+      },
+      ecologicalNutrients: {
+        writable: initial.ecologicalNutrients.writable,
+        unit: initial.ecologicalNutrients.unit,
+        reservoirs: initial.ecologicalNutrients.reservoirs,
+        conservation: initial.ecologicalNutrients.conservation,
       },
       targetEntity: target.id,
       transitions: {
