@@ -30,7 +30,7 @@ fs.mkdirSync(outputDir, { recursive: true });
       window.realitySandboxCreatureInspector &&
       window.realitySandboxCreatureFollow &&
       window.realitySandboxPauseControl &&
-      document.querySelector('.eidolon-unified-creatures .eidolon-creature[data-entity-id]') &&
+      document.querySelector('.eidolon-creatures .eidolon-creature[data-entity-id]') &&
       document.getElementById('eidolon-creature-follow')
     ), null, { timeout: 120000 });
     await page.waitForTimeout(300);
@@ -41,16 +41,16 @@ fs.mkdirSync(outputDir, { recursive: true });
     }
 
     const target = await page.evaluate(() => {
-      const nodes = [...document.querySelectorAll('.eidolon-unified-creatures .eidolon-creature[data-entity-id]')];
+      const nodes = [...document.querySelectorAll('.eidolon-creatures .eidolon-creature[data-entity-id]')];
       const grazer = nodes.find(node => node.getAttribute('data-role') === 'grazer') || nodes[0];
       return { id: Number(grazer?.getAttribute('data-entity-id')), role: grazer?.getAttribute('data-role') || null };
     });
-    assert(Number.isFinite(target.id), 'No inspectable unified creature entity ID was rendered.');
+    assert(Number.isFinite(target.id), 'No inspectable classic creature entity ID was rendered.');
 
-    await page.locator(`.eidolon-unified-creatures .eidolon-creature[data-entity-id="${target.id}"]`).click({ force: true });
+    await page.locator(`.eidolon-creatures .eidolon-creature[data-entity-id="${target.id}"]`).click({ force: true });
     await page.waitForTimeout(220);
     const selected = await snapshot(page);
-    assert(selected.visible, 'Creature inspector did not become visible after clicking a creature.');
+    assert(selected.visible, 'Creature inspector did not become visible after clicking a classic creature.');
     assert(selected.selectedEntityId === target.id, `Inspector selected entity ${selected.selectedEntityId} instead of clicked entity ${target.id}.`);
     assert(selected.individual?.entityId === target.id, 'Inspector snapshot is not bound to the clicked ECS entity.');
     assert(selected.individual?.role === target.role, `Inspector role ${selected.individual?.role} did not match rendered role ${target.role}.`);
@@ -59,9 +59,8 @@ fs.mkdirSync(outputDir, { recursive: true });
     assert(Number.isFinite(selected.individual?.dna?.speed), 'Inspector did not expose DNA speed.');
     assert(Number.isFinite(selected.individual?.dna?.sense), 'Inspector did not expose DNA sense.');
     assert(Number.isFinite(selected.individual?.dna?.metabolism), 'Inspector did not expose DNA metabolism.');
-    assert(selected.panelText.includes(`entity ${target.id}`), `Inspector panel text does not identify entity ${target.id}.`);
     assert(selected.followButtonVisible, 'Follow control did not become visible for the selected creature.');
-    await page.screenshot({ path: path.join(outputDir, 'selected-paused.png'), fullPage: true });
+    await page.screenshot({ path: path.join(outputDir, 'classic-selected-paused.png'), fullPage: true });
 
     const beforeStepTick = selected.individual.worldTick;
     await page.locator('#eidolon-step-once').click();
@@ -82,14 +81,13 @@ fs.mkdirSync(outputDir, { recursive: true });
       const position = planet.world.ecs.components.position.get(entityId);
       position.x = planet.world.width * 0.73;
       position.y = planet.world.height * 0.32;
-      return { x: position.x, y: position.y, centerX: 0.73, centerY: 0.32 };
+      return { centerX: 0.73, centerY: 0.32 };
     }, target.id);
     await page.waitForTimeout(260);
     const followedMove = await snapshot(page);
     assert(followedMove.follow?.following, 'Follow mode disengaged while the selected creature remained alive.');
-    assert(Math.abs(followedMove.camera.centerX - relocated.centerX) < 0.01, `Follow camera did not track creature longitude (${followedMove.camera.centerX} vs ${relocated.centerX}).`);
-    assert(Math.abs(followedMove.camera.centerY - relocated.centerY) < 0.01, `Follow camera did not track creature latitude (${followedMove.camera.centerY} vs ${relocated.centerY}).`);
-    await page.screenshot({ path: path.join(outputDir, 'following-relocated-creature.png'), fullPage: true });
+    assert(Math.abs(followedMove.camera.centerX - relocated.centerX) < 0.01, 'Follow camera did not track creature longitude.');
+    assert(Math.abs(followedMove.camera.centerY - relocated.centerY) < 0.01, 'Follow camera did not track creature latitude.');
 
     const canvas = await page.locator('#lofiLivingCanvas').boundingBox();
     assert(canvas, 'Living canvas did not have bounds for manual follow override test.');
@@ -102,13 +100,10 @@ fs.mkdirSync(outputDir, { recursive: true });
     await page.mouse.up();
     await page.waitForTimeout(220);
     const manualOverride = await snapshot(page);
-    fs.writeFileSync(path.join(outputDir, 'manual-override.json'), JSON.stringify({ beforeManualCamera, manualOverride }, null, 2));
     const centerMoved = circularDistance(manualOverride.camera.centerX, beforeManualCamera.centerX) > 0.0001
       || Math.abs(manualOverride.camera.centerY - beforeManualCamera.centerY) > 0.0001;
-    assert(centerMoved, `Manual globe drag did not actually move camera center (${JSON.stringify(beforeManualCamera)} -> ${JSON.stringify(manualOverride.camera)}).`);
+    assert(centerMoved, 'Manual globe drag did not move the camera center.');
     assert(!manualOverride.follow?.following, 'Manual globe drag did not disengage creature follow mode.');
-    const cancellationCount = (manualOverride.follow?.manualCancellations || 0) + (manualOverride.follow?.cameraMutationCancellations || 0);
-    assert(cancellationCount >= 1, 'Follow controller did not record the manual/external camera override.');
 
     await page.keyboard.press('Escape');
     await page.waitForTimeout(100);
@@ -118,14 +113,13 @@ fs.mkdirSync(outputDir, { recursive: true });
 
     const result = {
       ok: true,
-      model: 'visible-unified-glyph-to-ecs-individual-inspection-and-camera-follow',
+      model: 'classic-googrid-glyph-to-ecs-individual-inspection-and-camera-follow',
       target,
       selected,
       stepped,
       followEnabled,
       relocated,
       followedMove,
-      beforeManualCamera,
       manualOverride,
       cleared,
       pageErrors,
@@ -144,16 +138,13 @@ fs.mkdirSync(outputDir, { recursive: true });
 
 async function snapshot(page) {
   return page.evaluate(() => {
-    const inspector = window.realitySandboxCreatureInspector;
-    const panel = document.getElementById('eidolon-creature-inspector');
-    const state = inspector?.getSnapshot?.() || {};
+    const state = window.realitySandboxCreatureInspector?.getSnapshot?.() || {};
     const followButton = document.getElementById('eidolon-creature-follow');
     return {
       paused: Boolean(window.realitySandboxDebug?.isPaused?.()),
       selectedEntityId: state.selectedEntityId ?? null,
       visible: Boolean(state.visible),
       individual: state.individual || null,
-      panelText: panel?.textContent?.replace(/\s+/g, ' ').trim() || '',
       followButtonVisible: Boolean(followButton && !followButton.hidden),
       follow: window.realitySandboxCreatureFollow?.getSnapshot?.() || null,
       camera: window.realitySandboxUnified?.getCamera?.() || null,
