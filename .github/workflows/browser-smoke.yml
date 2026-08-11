@@ -44,6 +44,9 @@ jobs:
       - name: Run integration audit
         run: npm run audit:integration
 
+      - name: Verify multiscale reality kernel
+        run: npm run check:kernel
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
