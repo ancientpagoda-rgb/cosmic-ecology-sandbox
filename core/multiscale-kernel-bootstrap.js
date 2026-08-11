@@ -1,4 +1,5 @@
 import { createEidolonKernelAdapter } from './eidolon-kernel-adapter.js';
+import { installRealityObserverBridge } from './reality-observer-bridge.js';
 
 function waitForAuthoritativeRuntime(timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
@@ -24,7 +25,9 @@ async function installRealityKernel() {
   await ready;
 
   const planet = window.realitySandboxPlanet;
+  const runtime = window.realitySandboxUnified;
   if (!planet?.world) throw new Error('Authoritative Eidolon world is unavailable after startup.');
+  if (!runtime?.getCamera) throw new Error('Authoritative Eidolon presentation runtime is unavailable after startup.');
 
   const adapter = createEidolonKernelAdapter({
     world: planet.world,
@@ -33,16 +36,23 @@ async function installRealityKernel() {
   });
 
   const api = {
-    version: 1,
-    mode: 'read-only-adapter',
+    version: 2,
+    mode: 'read-only-observer-coupled-adapter',
     kernel: adapter.kernel,
     requestAt: options => adapter.requestAt(options),
     releaseObserver: observerId => adapter.releaseObserver(observerId),
     refresh: () => adapter.refresh(),
     locate: (x, y) => adapter.locate(x, y),
-    snapshot: () => adapter.snapshot(),
+    snapshot: () => ({ ...adapter.snapshot(), observation: api.observation?.snapshot?.() || null }),
     getScales: () => adapter.getScales(),
+    observation: null,
   };
+
+  api.observation = installRealityObserverBridge({
+    runtime,
+    world: planet.world,
+    kernelApi: api,
+  });
 
   window.realitySandboxRealityKernel = api;
   window.dispatchEvent(new CustomEvent('reality-sandbox-kernel-ready', {
@@ -50,6 +60,7 @@ async function installRealityKernel() {
       version: api.version,
       mode: api.mode,
       scales: api.getScales(),
+      observation: api.observation.snapshot(),
     },
   }));
   return api;
