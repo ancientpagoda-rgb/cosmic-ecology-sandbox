@@ -47,6 +47,9 @@ jobs:
       - name: Verify multiscale reality kernel
         run: npm run check:kernel
 
+      - name: Verify Sumer civilization model
+        run: npm run check:sumer
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
@@ -72,6 +75,13 @@ jobs:
         env:
           REALITY_BASE_URL: http://127.0.0.1:4173/
         run: npm run check:kernel-browser
+
+      - name: Verify Sumer civilization browser runtime
+        id: sumer_test
+        continue-on-error: true
+        env:
+          REALITY_BASE_URL: http://127.0.0.1:4173/
+        run: npm run check:sumer-browser
 
       - name: Verify iPhone sphere aspect
         id: iphone_sphere_test
@@ -134,19 +144,20 @@ jobs:
         with:
           script: |
             const kernelCameraOk = '${{ steps.kernel_camera_test.outcome }}' === 'success';
+            const sumerOk = '${{ steps.sumer_test.outcome }}' === 'success';
             const unifiedOk = '${{ steps.unified_test.outcome }}' === 'success';
             const rootRendererOk = '${{ steps.root_renderer_test.outcome }}' === 'success';
             const iphoneSphereOk = '${{ steps.iphone_sphere_test.outcome }}' === 'success';
             const surfaceModeOk = '${{ steps.surface_mode_test.outcome }}' === 'success';
             const performanceOk = '${{ steps.performance_test.outcome }}' === 'success';
-            const ok = kernelCameraOk && unifiedOk && rootRendererOk && iphoneSphereOk && surfaceModeOk && performanceOk;
+            const ok = kernelCameraOk && sumerOk && unifiedOk && rootRendererOk && iphoneSphereOk && surfaceModeOk && performanceOk;
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
               state: ok ? 'success' : 'failure',
               context: 'browser/unified-runtime',
-              description: ok ? 'Living planet, reality refinement, surface mode, and iPhone checks passed' : 'A living-planet browser, reality-refinement, or visual check failed',
+              description: ok ? 'Living planet, Sumer, reality refinement, surface mode, and iPhone checks passed' : 'A living-planet, Sumer, reality-refinement, or visual check failed',
               target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             });
             if (!ok) core.setFailed('One or more browser diagnostics failed.');
