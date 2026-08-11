@@ -13,14 +13,11 @@ export default defineConfig({
     sourcemap: false,
     assetsDir: 'assets',
     rollupOptions: {
-      // Pages is the product artifact, not the experiment archive. Vite's dev
-      // server can still open every root-level lab HTML file directly, but the
-      // public deployment should contain only the living planet, its Origins
-      // prologue, and the explicitly linked V6.9 compatibility page.
       input: {
         main: resolve(process.cwd(), 'index.html'),
         origins: resolve(process.cwd(), 'origins.html'),
         realityEngineV69: resolve(process.cwd(), 'reality-engine-v6-9.html'),
+        sumer: resolve(process.cwd(), 'sumer.html'),
       },
     },
   },
