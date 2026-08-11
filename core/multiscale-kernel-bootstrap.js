@@ -1,7 +1,8 @@
 import { createEidolonKernelAdapter } from './eidolon-kernel-adapter.js';
-import { installEcologicalTransactions } from './ecological-transactions.js';
+import { installRealityTransactions } from './ecological-transactions.js';
 import { installEcologicalEnergyLedger } from './ecological-energy-ledger.js';
 import { installEcologicalNutrientCycle } from './ecological-nutrient-cycle.js';
+import { installHydrologyErosionContract } from './hydrology-erosion-contract.js';
 import { installRealityObserverBridge } from './reality-observer-bridge.js';
 
 function waitForAuthoritativeRuntime(timeoutMs = 30000) {
@@ -30,14 +31,27 @@ async function installRealityKernel() {
   const planet = window.realitySandboxPlanet;
   const runtime = window.realitySandboxUnified;
   if (!planet?.world) throw new Error('Authoritative Eidolon world is unavailable after startup.');
+  if (!planet?.waterCycle?.sample) throw new Error('Authoritative Eidolon water cycle is unavailable after startup.');
   if (!planet?.seasonalResources?.sample) throw new Error('Authoritative Eidolon resource field is unavailable after startup.');
   if (!runtime?.getCamera) throw new Error('Authoritative Eidolon presentation runtime is unavailable after startup.');
 
-  // Install exactly one mutation-capture layer around the authoritative world.
-  // Ledgers register transaction handlers and fixed-grid before-step hooks;
-  // neither ledger wraps world.step or scans the organism population anymore.
-  const ecologicalTransactions = installEcologicalTransactions({ world: planet.world });
-  planet.ecologicalTransactions = ecologicalTransactions;
+  // Install exactly one mutation/event layer around the authoritative world.
+  // Ecological organism capture and non-ecological domain contracts share the
+  // same deterministic transaction journal and simulation clock.
+  const realityTransactions = installRealityTransactions({ world: planet.world });
+  planet.realityTransactions = realityTransactions;
+  // Backward-compatible alias for existing ecology tooling.
+  planet.ecologicalTransactions = realityTransactions;
+
+  // Hydrology is the first non-ecological contract to reuse the event API. It
+  // wraps the existing water-cycle object rather than creating another water
+  // solver, and owns only the conserved sediment reservoirs it introduces.
+  const hydrologyErosion = installHydrologyErosionContract({
+    world: planet.world,
+    waterCycle: planet.waterCycle,
+    transactions: realityTransactions,
+  });
+  planet.hydrologyErosion = hydrologyErosion;
 
   // Nutrients wrap the seasonal field first, then energy wraps that result.
   // Soil availability can therefore constrain the productivity seen by the
@@ -45,14 +59,14 @@ async function installRealityKernel() {
   const ecologicalNutrients = installEcologicalNutrientCycle({
     world: planet.world,
     resourceField: planet.seasonalResources,
-    transactions: ecologicalTransactions,
+    transactions: realityTransactions,
   });
   planet.ecologicalNutrients = ecologicalNutrients;
 
   const ecologicalEnergy = installEcologicalEnergyLedger({
     world: planet.world,
     resourceField: planet.seasonalResources,
-    transactions: ecologicalTransactions,
+    transactions: realityTransactions,
   });
   planet.ecologicalEnergy = ecologicalEnergy;
   ecologicalNutrients.attachEnergyLedger(ecologicalEnergy);
@@ -64,17 +78,28 @@ async function installRealityKernel() {
   });
 
   const api = {
-    version: 5,
-    mode: 'observer-coupled-kernel-with-event-driven-ecology',
+    version: 6,
+    mode: 'observer-coupled-kernel-with-cross-domain-transactions',
     kernel: adapter.kernel,
-    ecologicalTransactions,
+    realityTransactions,
+    ecologicalTransactions: realityTransactions,
+    hydrologyErosion,
     ecologicalEnergy,
     ecologicalNutrients,
     requestAt(options = {}) {
       const result = adapter.requestAt(options);
       const hasPoint = Number.isFinite(options.x) && Number.isFinite(options.y);
+      const hydrology = hasPoint ? hydrologyErosion.sample(options.x, options.y) : null;
       return {
         ...result,
+        hydrology: hydrology ? {
+          river: hydrology.river,
+          lake: hydrology.lake,
+          delta: hydrology.delta,
+          runoff: hydrology.runoff,
+          erosion: hydrology.erosion,
+          sediment: hydrology.sediment,
+        } : null,
         ecologicalEnergy: hasPoint
           ? ecologicalEnergy.sample(options.x, options.y).ecologicalEnergy
           : null,
@@ -89,7 +114,9 @@ async function installRealityKernel() {
     snapshot: () => ({
       ...adapter.snapshot(),
       observation: api.observation?.snapshot?.() || null,
-      ecologicalTransactions: ecologicalTransactions.snapshot(),
+      realityTransactions: realityTransactions.snapshot(),
+      ecologicalTransactions: realityTransactions.snapshot(),
+      hydrologyErosion: hydrologyErosion.snapshot(),
       ecologicalEnergy: ecologicalEnergy.snapshot(),
       ecologicalNutrients: ecologicalNutrients.snapshot(),
     }),
@@ -110,7 +137,8 @@ async function installRealityKernel() {
       mode: api.mode,
       scales: api.getScales(),
       observation: api.observation.snapshot(),
-      ecologicalTransactions: api.ecologicalTransactions.snapshot(),
+      realityTransactions: api.realityTransactions.snapshot(),
+      hydrologyErosion: api.hydrologyErosion.snapshot(),
       ecologicalEnergy: api.ecologicalEnergy.snapshot(),
       ecologicalNutrients: api.ecologicalNutrients.snapshot(),
     },
