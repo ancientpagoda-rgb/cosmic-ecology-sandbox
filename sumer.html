@@ -76,7 +76,7 @@
     <section class="top">
       <div>
         <h1>Sumer — emergent civilization</h1>
-        <p class="subtitle">A deterministic, historically constrained experiment from 3500–2000 BCE. Irrigation, barley, rations, trade, administration, migration, conflict, households, and individual lives interact; recorded history is a reference window, not a scripted outcome.</p>
+        <p class="subtitle">A deterministic, historically constrained experiment from 3500–2000 BCE. Irrigation, barley, rations, trade, administration, migration, conflict, households, urban growth, and individual lives interact; recorded history is a reference window, not a scripted outcome.</p>
         <span class="badge">model units · synthetic starting populations · counterfactual outcomes</span>
       </div>
       <div class="controls" aria-label="Simulation controls">
@@ -106,7 +106,7 @@
           <div class="metric"><small>River pulse</small><strong id="sumerRiver">—</strong></div>
         </div>
         <canvas id="sumerCanvas" aria-label="Schematic simulation map of Sumerian city-states, rivers, and cultivated floodplain"></canvas>
-        <div class="caption"><strong id="sumerPeriod">Late Uruk reference window</strong> · Click a city to select it, then use the Social explorer to descend into actual simulated households and people. Rivers, city positions, streets, and compound positions are schematic historical-geographic presentation.</div>
+        <div class="caption"><strong id="sumerPeriod">Late Uruk reference window</strong> · Click a city to select it, then use the Urban/social explorer to descend through wards, corridors, compounds, actual households, and people. River and building geometry remains schematic presentation.</div>
       </div>
 
       <aside class="panel">
@@ -116,12 +116,12 @@
         </div>
         <div class="side-section">
           <div class="explorer-head">
-            <h2>Social explorer</h2>
+            <h2>Urban / social explorer</h2>
             <button class="mini-button" id="sumerExplorerBack" type="button" disabled>Back</button>
           </div>
           <div id="sumerExplorerBreadcrumb">Uruk</div>
-          <canvas id="sumerSocialCanvas" aria-label="Schematic close-up of actual simulated Sumerian households and people"></canvas>
-          <div id="sumerExplorerDetail">Loading explicit households…</div>
+          <canvas id="sumerSocialCanvas" aria-label="Schematic close-up of persistent simulated Sumerian wards, corridors, compounds, households, and people"></canvas>
+          <div id="sumerExplorerDetail">Loading explicit urban society…</div>
         </div>
         <div class="side-section">
           <h2>City-state system</h2>
@@ -137,7 +137,7 @@
           <ol id="sumerEventLog"><li>No transactions yet.</li></ol>
         </div>
         <div class="side-section note">
-          Historical constraints are intentionally narrower than the simulation: canal irrigation, flood irrigation, barley sowing, grain rations, city institutions, and canal construction are documentable. Population numbers, coefficients, annual weather, household layouts, individual needs, wars, hegemonies, and outcomes are generated model state or schematic presentation—not claims about what actually happened.
+          Historical constraints are intentionally narrower than the simulation: canal irrigation, flood irrigation, barley sowing, grain rations, city institutions, and canal construction are documentable. Population numbers, coefficients, annual weather, urban geometry, individual needs, wars, hegemonies, and outcomes are generated model state or schematic presentation—not claims about what actually happened.
         </div>
       </aside>
     </section>
@@ -145,9 +145,56 @@
 
   <script type="module">
     import { createSumerianCivilizationRuntime } from './core/sumerian-civilization-runtime.js';
+
+    function ordinal(id, marker) {
+      const match = String(id || '').match(new RegExp(`:${marker}:(\\d+)(?:$|:)`));
+      return match ? match[1] : null;
+    }
+
+    function householdOrdinal(id) {
+      const match = String(id || '').match(/:h:(\d+)/);
+      return match ? match[1] : null;
+    }
+
+    function personOrdinal(id) {
+      const match = String(id || '').match(/:p:(\d+)$/);
+      return match ? match[1] : null;
+    }
+
+    function installCanonicalBreadcrumb(runtime) {
+      const element = document.getElementById('sumerExplorerBreadcrumb');
+      if (!element) return;
+      let correcting = false;
+      const render = () => {
+        if (correcting) return;
+        const state = runtime.getExplorerState();
+        const snapshot = runtime.getSnapshot();
+        const city = snapshot.cities.find(item => item.id === state.cityId);
+        const parts = [city?.name || state.cityId];
+        const ward = ordinal(state.wardId, 'ward');
+        const corridor = ordinal(state.corridorId, 'corridor');
+        const household = householdOrdinal(state.householdId);
+        const person = personOrdinal(state.personId);
+        if (ward) parts.push(`W${ward}`);
+        if (corridor) parts.push(`C${corridor}`);
+        if (household && ['compound', 'household', 'person'].includes(state.level)) parts.push(`compound H${household}`);
+        if (household && ['household', 'person'].includes(state.level)) parts.push(`household H${household}`);
+        if (person) parts.push(`P${person}`);
+        const next = parts.join('  ›  ');
+        if (element.textContent !== next) {
+          correcting = true;
+          element.textContent = next;
+          correcting = false;
+        }
+      };
+      new MutationObserver(render).observe(element, { childList: true, characterData: true, subtree: true });
+      render();
+    }
+
     window.sumerianCivilizationReady = Promise.resolve().then(() => {
       const runtime = createSumerianCivilizationRuntime();
       window.sumerianCivilization = runtime;
+      installCanonicalBreadcrumb(runtime);
       window.dispatchEvent(new CustomEvent('sumerian-civilization-ready', { detail: runtime.getSnapshot() }));
       return runtime;
     });
