@@ -39,9 +39,10 @@ for (const city of initial.cities) {
   assert(city.social.occupations.scribe > 0, `no scribes in ${city.id}`);
 }
 
+const urukInitial = initial.cities.find(city => city.id === 'uruk');
 const urukDetail = simulation.getCitySocialDetail('uruk');
 assert.equal(urukDetail.people.length, urukDetail.population, 'city detail must expose every living person without a display cap');
-assert.equal(urukDetail.households.length, urukDetail.households.length);
+assert.equal(urukDetail.households.length, urukInitial.social.households, 'city detail household list must match the cached household count');
 const firstHousehold = urukDetail.households.find(household => household.memberIds.length > 0);
 assert(firstHousehold, 'Uruk has no populated household');
 const firstPersonId = firstHousehold.memberIds[0];
