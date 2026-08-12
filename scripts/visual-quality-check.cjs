@@ -1,0 +1,188 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const { chromium } = require('playwright');
+
+const baseUrl = process.env.REALITY_BASE_URL || 'http://127.0.0.1:4173/';
+const artifactDir = process.env.REALITY_VISUAL_ARTIFACT_DIR || path.join(process.cwd(), 'artifacts', 'visual-regression');
+fs.mkdirSync(artifactDir, { recursive: true });
+
+const CLASSIC_BASELINE = {
+  overview: { minScreenshotBytes: 30000, minColorBuckets: 12, minLumaStdDev: 3.0, minEdgeMean: 0.45 },
+  surface: { minScreenshotBytes: 40000, minColorBuckets: 16, minLumaStdDev: 4.0, minEdgeMean: 0.65 },
+};
+
+(async () => {
+  const executablePath = process.env.REALITY_CHROMIUM_PATH;
+  const browser = await chromium.launch({
+    headless: true,
+    ...(executablePath ? { executablePath } : {}),
+    args: ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--disable-dev-shm-usage', '--no-sandbox'],
+  });
+
+  const results = { classic: {}, experimental: {}, pageErrors: [] };
+  try {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+    page.on('pageerror', error => results.pageErrors.push(`classic: ${error.message}`));
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
+    await page.waitForFunction(() => Boolean(window.realitySandboxSurfaceMode && window.realitySandboxPlanet && window.realitySandboxUnified), null, { timeout: 120000 });
+    await page.waitForTimeout(800);
+
+    results.classic.bootstrap = await page.evaluate(() => ({
+      experimentalFlag: document.documentElement.dataset.experimentalSphericalRenderer,
+      sphericalInstalled: Boolean(window.realitySandboxSingleSphericalRenderer?.installed),
+      classicSurfaceAvailable: Boolean(window.realitySandboxSurfaceMode?.enterAt),
+      rootCanvasPresent: Boolean(document.getElementById('lofiLivingCanvas')),
+      surfaceEnterVisible: (() => {
+        const button = document.getElementById('enterSurfaceMode');
+        if (!button) return false;
+        const style = getComputedStyle(button);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+      })(),
+    }));
+    assert(results.classic.bootstrap.experimentalFlag === 'disabled', `Default route unexpectedly enabled experimental spherical renderer (${results.classic.bootstrap.experimentalFlag}).`);
+    assert(!results.classic.bootstrap.sphericalInstalled, 'Default route installed the experimental spherical renderer.');
+    assert(results.classic.bootstrap.classicSurfaceAvailable, 'Classic Surface Mode is not the authoritative available renderer.');
+    assert(results.classic.bootstrap.rootCanvasPresent, 'Classic root living canvas is missing.');
+
+    results.classic.overviewSignature = await canvasSignature(page, 'lofiLivingCanvas');
+    const overviewImage = await page.screenshot({ path: path.join(artifactDir, 'classic-overview.png'), fullPage: true });
+    results.classic.overviewScreenshotBytes = overviewImage.length;
+    assertVisual('classic overview', results.classic.overviewSignature, overviewImage.length, CLASSIC_BASELINE.overview);
+
+    await page.evaluate(() => {
+      const { position, agent } = window.realitySandboxPlanet.world.ecs.components;
+      const firstId = agent.keys().next().value;
+      const target = position.get(firstId);
+      const world = window.realitySandboxPlanet.world;
+      if (target) window.realitySandboxSurfaceMode.enterAt((target.x - 28 + world.width) % world.width, target.y);
+      else {
+        const camera = window.realitySandboxUnified.getCamera();
+        window.realitySandboxSurfaceMode.enterAt(camera.centerX * world.width, camera.centerY * world.height);
+      }
+    });
+    await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'active', null, { timeout: 30000 });
+    await page.waitForFunction(() => {
+      const canvas = document.getElementById('surfaceModeCanvas');
+      if (!canvas) return false;
+      const style = getComputedStyle(canvas);
+      const rect = canvas.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    }, null, { timeout: 30000 });
+    await page.waitForTimeout(1000);
+
+    results.classic.surfaceSignature = await canvasSignature(page, 'surfaceModeCanvas');
+    results.classic.creatureLayer = await page.evaluate(() => {
+      const layer = document.querySelector('.eidolon-creatures');
+      if (!layer) return { present: false };
+      const style = getComputedStyle(layer);
+      return { present: true, display: style.display, visibility: style.visibility, opacity: style.opacity };
+    });
+    if (results.classic.creatureLayer.present) {
+      assert(results.classic.creatureLayer.display !== 'none' && results.classic.creatureLayer.visibility !== 'hidden', 'Established .eidolon-creatures layer is being forcibly hidden.');
+    }
+    const surfaceImage = await page.screenshot({ path: path.join(artifactDir, 'classic-surface.png'), fullPage: true });
+    results.classic.surfaceScreenshotBytes = surfaceImage.length;
+    assertVisual('classic surface', results.classic.surfaceSignature, surfaceImage.length, CLASSIC_BASELINE.surface);
+
+    const experimental = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+    experimental.on('pageerror', error => results.pageErrors.push(`experimental: ${error.message}`));
+    const experimentalUrl = new URL(baseUrl);
+    experimentalUrl.searchParams.set('renderer', 'spherical');
+    await experimental.goto(experimentalUrl.toString(), { waitUntil: 'domcontentloaded', timeout: 120000 });
+    await experimental.waitForFunction(() => Boolean(window.realitySandboxSingleSphericalRenderer?.installed), null, { timeout: 120000 });
+    await experimental.waitForTimeout(1200);
+    results.experimental.state = await experimental.evaluate(() => window.realitySandboxSingleSphericalRenderer.getState());
+    assert(results.experimental.state.altitude <= 18, `Experimental spherical renderer starts too far from the surface (${results.experimental.state.altitude}).`);
+    assert(results.experimental.state.globalLod === 'ground', `Experimental spherical renderer did not start in ground LOD (${results.experimental.state.globalLod}).`);
+    assert(results.experimental.state.globalSegments?.[0] >= 160 && results.experimental.state.globalSegments?.[1] >= 96, `Ground globe LOD is too coarse (${results.experimental.state.globalSegments}).`);
+    assert(results.experimental.state.localPatchSegments >= 96, `Local terrain patch is too coarse (${results.experimental.state.localPatchSegments}).`);
+    assert(results.experimental.state.localPatchBuildAltitude >= 300, `Local terrain patch activates too late (${results.experimental.state.localPatchBuildAltitude}).`);
+    assert(results.experimental.state.renderDprCap >= 1.9, `Desktop DPR cap is unexpectedly low (${results.experimental.state.renderDprCap}).`);
+    results.experimental.signature = await canvasSignature(experimental, 'eidolonSingleWorldCanvas');
+    const experimentalImage = await experimental.screenshot({ path: path.join(artifactDir, 'experimental-spherical.png'), fullPage: true });
+    results.experimental.screenshotBytes = experimentalImage.length;
+    assert(experimentalImage.length > 30000, `Experimental spherical screenshot is suspiciously small (${experimentalImage.length} bytes).`);
+    assert(results.experimental.signature.colorBuckets >= 12, `Experimental spherical scene lacks color/detail diversity (${results.experimental.signature.colorBuckets} buckets).`);
+    await experimental.close();
+
+    assert(results.pageErrors.length === 0, `Browser visual regression emitted errors: ${results.pageErrors.join(' | ')}`);
+    fs.writeFileSync(path.join(artifactDir, 'visual-signatures.json'), JSON.stringify(results, null, 2));
+  } finally {
+    await browser.close();
+  }
+})().catch(error => {
+  fs.writeFileSync(path.join(artifactDir, 'fatal-error.txt'), `${error.stack || error.message}\n`);
+  console.error(error);
+  process.exitCode = 1;
+});
+
+async function canvasSignature(page, canvasId) {
+  return page.evaluate(id => {
+    const source = document.getElementById(id);
+    if (!source) return { missing: true, colorBuckets: 0, lumaStdDev: 0, edgeMean: 0 };
+    const rect = source.getBoundingClientRect();
+    const width = 96;
+    const height = 60;
+    const sample = document.createElement('canvas');
+    sample.width = width;
+    sample.height = height;
+    const ctx = sample.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(source, 0, 0, width, height);
+    const pixels = ctx.getImageData(0, 0, width, height).data;
+    const buckets = new Set();
+    const luma = new Float32Array(width * height);
+    let sum = 0;
+    let sumSq = 0;
+    let opaque = 0;
+    for (let i = 0, p = 0; i < pixels.length; i += 4, p++) {
+      const r = pixels[i];
+      const g = pixels[i + 1];
+      const b = pixels[i + 2];
+      const a = pixels[i + 3];
+      const y = r * 0.2126 + g * 0.7152 + b * 0.0722;
+      luma[p] = y;
+      sum += y;
+      sumSq += y * y;
+      if (a > 16) opaque++;
+      buckets.add(`${r >> 4}:${g >> 4}:${b >> 4}`);
+    }
+    const count = width * height;
+    const mean = sum / count;
+    const variance = Math.max(0, sumSq / count - mean * mean);
+    let edge = 0;
+    let edgeCount = 0;
+    for (let y = 1; y < height; y++) {
+      for (let x = 1; x < width; x++) {
+        const i = y * width + x;
+        edge += Math.abs(luma[i] - luma[i - 1]) + Math.abs(luma[i] - luma[i - width]);
+        edgeCount += 2;
+      }
+    }
+    return {
+      missing: false,
+      cssWidth: rect.width,
+      cssHeight: rect.height,
+      backingWidth: source.width,
+      backingHeight: source.height,
+      backingScaleX: rect.width ? source.width / rect.width : 0,
+      backingScaleY: rect.height ? source.height / rect.height : 0,
+      colorBuckets: buckets.size,
+      lumaMean: mean,
+      lumaStdDev: Math.sqrt(variance),
+      edgeMean: edgeCount ? edge / edgeCount : 0,
+      opaqueRatio: opaque / count,
+    };
+  }, canvasId);
+}
+
+function assertVisual(label, signature, screenshotBytes, baseline) {
+  assert(!signature.missing, `${label} canvas is missing.`);
+  assert(screenshotBytes >= baseline.minScreenshotBytes, `${label} screenshot is suspiciously small (${screenshotBytes} bytes).`);
+  assert(signature.colorBuckets >= baseline.minColorBuckets, `${label} lost color/detail diversity (${signature.colorBuckets} buckets).`);
+  assert(signature.lumaStdDev >= baseline.minLumaStdDev, `${label} became visually flat (${signature.lumaStdDev.toFixed(2)} luma stddev).`);
+  assert(signature.edgeMean >= baseline.minEdgeMean, `${label} lost too much spatial detail (${signature.edgeMean.toFixed(2)} edge mean).`);
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
