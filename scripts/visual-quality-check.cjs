@@ -36,13 +36,15 @@ const CLASSIC_BASELINE = {
         const button = document.getElementById('enterSurfaceMode');
         if (!button) return false;
         const style = getComputedStyle(button);
-        return style.display !== 'none' && style.visibility !== 'hidden';
+        const rect = button.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
       })(),
     }));
     assert(results.classic.bootstrap.experimentalFlag === 'disabled', `Default route unexpectedly enabled experimental spherical renderer (${results.classic.bootstrap.experimentalFlag}).`);
     assert(!results.classic.bootstrap.sphericalInstalled, 'Default route installed the experimental spherical renderer.');
     assert(results.classic.bootstrap.classicSurfaceAvailable, 'Classic Surface Mode is not the authoritative available renderer.');
     assert(results.classic.bootstrap.rootCanvasPresent, 'Classic root living canvas is missing.');
+    assert(results.classic.bootstrap.surfaceEnterVisible, 'Classic Enter Surface control is hidden on the default route.');
 
     results.classic.overviewSignature = await canvasSignature(page, 'lofiLivingCanvas');
     const overviewImage = await page.screenshot({ path: path.join(artifactDir, 'classic-overview.png'), fullPage: true });
@@ -62,15 +64,21 @@ const CLASSIC_BASELINE = {
     });
     await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'active', null, { timeout: 30000 });
     await page.waitForFunction(() => {
-      const canvas = document.getElementById('surfaceModeCanvas');
-      if (!canvas) return false;
+      const diagnostics = window.realitySandboxPresentationDiagnostics?.();
+      const canvas = document.getElementById('surfaceGpuCanvas');
+      if (!canvas || diagnostics?.surfaceGpu?.active !== true) return false;
       const style = getComputedStyle(canvas);
       const rect = canvas.getBoundingClientRect();
       return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
     }, null, { timeout: 30000 });
-    await page.waitForTimeout(1000);
+    await page.waitForFunction(() => window.realitySandboxSurfaceSphereV37?.getStats?.().nearBuildsCompleted >= 1, null, { timeout: 30000 });
+    await page.waitForTimeout(500);
 
-    results.classic.surfaceSignature = await canvasSignature(page, 'surfaceModeCanvas');
+    results.classic.surfaceSignature = await canvasSignature(page, 'surfaceGpuCanvas');
+    results.classic.surfaceState = await page.evaluate(() => ({
+      gpu: window.realitySandboxPresentationDiagnostics?.().surfaceGpu || null,
+      sphere: window.realitySandboxSurfaceSphereV37?.getStats?.() || null,
+    }));
     results.classic.creatureLayer = await page.evaluate(() => {
       const layer = document.querySelector('.eidolon-creatures');
       if (!layer) return { present: false };
@@ -80,6 +88,8 @@ const CLASSIC_BASELINE = {
     if (results.classic.creatureLayer.present) {
       assert(results.classic.creatureLayer.display !== 'none' && results.classic.creatureLayer.visibility !== 'hidden', 'Established .eidolon-creatures layer is being forcibly hidden.');
     }
+    assert(results.classic.surfaceState.gpu?.active === true, 'Classic GPU Surface renderer is not presenting.');
+    assert(results.classic.surfaceState.sphere?.nearBuildsCompleted >= 1, 'Classic high-detail near terrain never completed.');
     const surfaceImage = await page.screenshot({ path: path.join(artifactDir, 'classic-surface.png'), fullPage: true });
     results.classic.surfaceScreenshotBytes = surfaceImage.length;
     assertVisual('classic surface', results.classic.surfaceSignature, surfaceImage.length, CLASSIC_BASELINE.surface);
@@ -97,6 +107,7 @@ const CLASSIC_BASELINE = {
     assert(results.experimental.state.globalSegments?.[0] >= 160 && results.experimental.state.globalSegments?.[1] >= 96, `Ground globe LOD is too coarse (${results.experimental.state.globalSegments}).`);
     assert(results.experimental.state.localPatchSegments >= 96, `Local terrain patch is too coarse (${results.experimental.state.localPatchSegments}).`);
     assert(results.experimental.state.localPatchBuildAltitude >= 300, `Local terrain patch activates too late (${results.experimental.state.localPatchBuildAltitude}).`);
+    assert(results.experimental.state.patchBuilds >= 1, 'Experimental renderer did not prebuild local terrain before its first close view.');
     assert(results.experimental.state.renderDprCap >= 1.9, `Desktop DPR cap is unexpectedly low (${results.experimental.state.renderDprCap}).`);
     results.experimental.signature = await canvasSignature(experimental, 'eidolonSingleWorldCanvas');
     const experimentalImage = await experimental.screenshot({ path: path.join(artifactDir, 'experimental-spherical.png'), fullPage: true });
