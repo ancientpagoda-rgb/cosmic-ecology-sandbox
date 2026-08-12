@@ -94,9 +94,10 @@ export function createSumerianCivilizationRuntime({
 
   function socialLine(city) {
     const social = city.social;
+    const urban = city.urban;
     if (!social) return 'social layer unavailable';
     const jobs = social.occupations || {};
-    return `${social.households.toLocaleString()} households · ${social.adults.toLocaleString()} adults · farmers ${(jobs.farmer || 0).toLocaleString()} · scribes ${(jobs.scribe || 0).toLocaleString()}`;
+    return `${social.households.toLocaleString()} households · ${urban?.wards || 0} wards · ${urban?.corridors || 0} corridors · farmers ${(jobs.farmer || 0).toLocaleString()} · scribes ${(jobs.scribe || 0).toLocaleString()}`;
   }
 
   function draw() {
@@ -153,7 +154,7 @@ export function createSumerianCivilizationRuntime({
         `canal ${(selected.canalHealth * 100).toFixed(0)}% · salinity ${(selected.meanSalinity * 100).toFixed(1)}%`,
         `admin ${(selected.administration * 100).toFixed(0)}% · records ${Math.round(selected.records)}`,
       ];
-      const boxWidth = Math.min(width * 0.68, 610 * (window.devicePixelRatio || 1));
+      const boxWidth = Math.min(width * 0.72, 680 * (window.devicePixelRatio || 1));
       const lineHeight = Math.max(18, height * 0.026);
       const boxHeight = lines.length * lineHeight + 18;
       context.fillStyle = 'rgba(250,245,230,0.88)';
@@ -186,7 +187,8 @@ export function createSumerianCivilizationRuntime({
       explorer.setCity(selected.id);
       if (ui.selected) {
         const jobs = selected.social?.occupations || {};
-        ui.selected.innerHTML = `<strong>${selected.name}</strong><br>Population ${Math.round(selected.population).toLocaleString()} · households ${(selected.social?.households || 0).toLocaleString()} · adults ${(selected.social?.adults || 0).toLocaleString()}<br>farmers ${(jobs.farmer || 0).toLocaleString()} · canal workers ${(jobs['canal-worker'] || 0).toLocaleString()} · potters ${(jobs.potter || 0).toLocaleString()} · merchants ${(jobs.merchant || 0).toLocaleString()} · scribes ${(jobs.scribe || 0).toLocaleString()} · priests ${(jobs.priest || 0).toLocaleString()} · soldiers ${(jobs.soldier || 0).toLocaleString()}<br>food ${(selected.foodRatio * 100).toFixed(0)}% · canal ${(selected.canalHealth * 100).toFixed(0)}% · salinity ${(selected.meanSalinity * 100).toFixed(1)}% · administration ${(selected.administration * 100).toFixed(0)}%`;
+        const urban = selected.urban || {};
+        ui.selected.innerHTML = `<strong>${selected.name}</strong><br>Population ${Math.round(selected.population).toLocaleString()} · households ${(selected.social?.households || 0).toLocaleString()} · wards ${(urban.wards || 0).toLocaleString()} · corridors ${(urban.corridors || 0).toLocaleString()}<br>farmers ${(jobs.farmer || 0).toLocaleString()} · canal workers ${(jobs['canal-worker'] || 0).toLocaleString()} · potters ${(jobs.potter || 0).toLocaleString()} · merchants ${(jobs.merchant || 0).toLocaleString()} · scribes ${(jobs.scribe || 0).toLocaleString()} · priests ${(jobs.priest || 0).toLocaleString()} · soldiers ${(jobs.soldier || 0).toLocaleString()}<br>food ${(selected.foodRatio * 100).toFixed(0)}% · canal ${(selected.canalHealth * 100).toFixed(0)}% · salinity ${(selected.meanSalinity * 100).toFixed(1)}% · administration ${(selected.administration * 100).toFixed(0)}%`;
       }
     }
 
@@ -205,9 +207,10 @@ export function createSumerianCivilizationRuntime({
     }
 
     if (ui.eventLog) {
-      const aggregate = snapshot.transactions.recent.slice(-14);
-      const social = snapshot.social?.transactions?.recent?.slice(-8) || [];
-      const recent = aggregate.concat(social).sort((a, b) => b.tick - a.tick || b.sequence - a.sequence).slice(0, 18);
+      const aggregate = snapshot.transactions.recent.slice(-12);
+      const social = snapshot.social?.transactions?.recent?.slice(-7) || [];
+      const urban = snapshot.urban?.transactions?.recent?.slice(-7) || [];
+      const recent = aggregate.concat(social, urban).sort((a, b) => b.tick - a.tick || b.sequence - a.sequence).slice(0, 20);
       ui.eventLog.innerHTML = recent.map(record => {
         const cityId = record.payload.cityId || record.payload.fromCityId || record.payload.attackerId || record.payload.previousCityId;
         const city = snapshot.cities.find(item => item.id === cityId);
@@ -283,9 +286,16 @@ export function createSumerianCivilizationRuntime({
     setRunning(value) { running = Boolean(value); previousTime = 0; updateInterface(); },
     selectCity(cityId) { selectedCityId = cityId; updateInterface(); return explorer.getState(); },
     getCitySocialDetail: cityId => simulation.getCitySocialDetail(cityId),
+    getCityUrbanDetail: cityId => simulation.getCityUrbanDetail(cityId),
+    observeWard: (wardId, observerId) => simulation.observeWard(wardId, observerId),
+    observeCorridor: (corridorId, observerId) => simulation.observeCorridor(corridorId, observerId),
+    observeCompound: (householdId, observerId) => simulation.observeCompound(householdId, observerId),
     observeHousehold: (householdId, observerId) => simulation.observeHousehold(householdId, observerId),
     observePerson: (personId, observerId) => simulation.observePerson(personId, observerId),
     getExplorerState: () => explorer.getState(),
+    openWard: wardId => explorer.openWard(wardId),
+    openCorridor: corridorId => explorer.openCorridor(corridorId),
+    openCompound: householdId => explorer.openCompound(householdId),
     openHousehold: householdId => explorer.openHousehold(householdId),
     openPerson: personId => explorer.openPerson(personId),
     explorerBack: () => explorer.back(),
