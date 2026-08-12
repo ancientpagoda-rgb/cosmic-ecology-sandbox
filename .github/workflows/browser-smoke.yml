@@ -107,10 +107,14 @@ jobs:
               sha: context.sha,
               state: ok ? 'success' : 'failure',
               context: 'browser/visual-quality',
-              description: ok ? 'Classic Surface Mode and screenshot quality checks passed' : 'A renderer visual regression check failed',
+              description: ok ? 'Classic Surface Mode and screenshot quality checks passed' : `Surface=${surfaceOk ? 'ok' : 'failed'} visual=${visualOk ? 'ok' : 'failed'}`,
               target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             });
 
-      - name: Fail workflow when renderer tests failed
-        if: always() && (steps.surface_test.outcome != 'success' || steps.visual_test.outcome != 'success')
+      - name: Fail because classic Surface smoke failed
+        if: always() && steps.surface_test.outcome != 'success'
+        run: exit 1
+
+      - name: Fail because visual regression failed
+        if: always() && steps.visual_test.outcome != 'success'
         run: exit 1
