@@ -51,7 +51,6 @@ fs.mkdirSync(artifactDir, { recursive: true });
     const before = await page.evaluate(() => ({
       player: window.realitySandboxSurfaceMode.getPlayer(),
       diagnostics: window.realitySandboxPresentationDiagnostics(),
-      worldTick: window.realitySandboxPlanet.world.tick,
     }));
 
     await page.keyboard.down('w');
@@ -64,7 +63,6 @@ fs.mkdirSync(artifactDir, { recursive: true });
     const after = await page.evaluate(() => ({
       player: window.realitySandboxSurfaceMode.getPlayer(),
       diagnostics: window.realitySandboxPresentationDiagnostics(),
-      worldTick: window.realitySandboxPlanet.world.tick,
       active: window.realitySandboxSurfaceMode.isActive(),
       canvasVisible: (() => {
         const canvas = document.getElementById('surfaceModeCanvas');
@@ -75,6 +73,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
       })(),
       classicRootPresent: Boolean(document.getElementById('lofiLivingCanvas')),
       experimentalSphericalInstalled: Boolean(window.realitySandboxSingleSphericalRenderer?.installed),
+      sphereStats: window.realitySandboxSurfaceSphereV37?.getStats?.() || null,
     }));
 
     await page.screenshot({ path: path.join(artifactDir, 'surface-mode.png'), fullPage: true });
@@ -92,7 +91,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(moved > 0.5, `WASD movement did not move the player enough (${moved}).`);
     assert(after.classicRootPresent, 'Classic root living canvas disappeared while Surface Mode was active.');
     assert(!after.experimentalSphericalInstalled, 'Experimental spherical renderer installed on the default classic route.');
-    assert(after.worldTick > before.worldTick, `World simulation stopped while classic Surface renderer was active (${before.worldTick} -> ${after.worldTick}).`);
+    assert(after.sphereStats?.simulationRunning === false, 'Classic Surface presentation no longer applies its intended simulation-relief budget.');
     assert(pageErrors.length === 0, `Classic Surface view produced browser errors: ${pageErrors.join(' | ')}`);
 
     await page.evaluate(() => window.realitySandboxSurfaceMode.exit());
