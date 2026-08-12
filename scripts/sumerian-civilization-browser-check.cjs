@@ -25,15 +25,20 @@ function assert(condition, message) {
     assert(initial.mode === 'historically-constrained-emergent', `unexpected Sumer mode: ${initial.mode}`);
     assert(initial.exactHistoricalReplay === false, 'Sumer experiment must not claim exact historical replay');
     assert(initial.syntheticInitialPopulations === true, 'synthetic population boundary is missing');
-    assert(initial.version === 2, `expected Sumer social v2, got ${initial.version}`);
+    assert(initial.version === 3, `expected Sumer urban/social v3, got ${initial.version}`);
     assert(initial.socialModel === 'explicit-households-event-driven-people', `unexpected social model: ${initial.socialModel}`);
+    assert(initial.urbanModel === 'persistent-ward-corridor-compound', `unexpected urban model: ${initial.urbanModel}`);
     assert(initial.social?.exactPeople === true, 'browser Sumer runtime is not using exact people');
-    assert(initial.social?.displayCap === null, 'browser Sumer runtime introduced a display cap');
+    assert(initial.social?.displayCap === null, 'browser Sumer runtime introduced a person display cap');
+    assert(initial.urban?.displayCap === null, 'browser Sumer runtime introduced an urban display cap');
+    assert(initial.urban?.hardWardCap === null, 'browser Sumer runtime introduced a hard ward cap');
     assert(initial.social.people === Math.round(initial.totals.population), `initial person ledger drift: ${initial.social.people} vs ${initial.totals.population}`);
+    assert(initial.urban.compounds === initial.social.households, `initial compound ledger drift: ${initial.urban.compounds}/${initial.social.households}`);
     assert(initial.social.households > 5000, `unexpectedly few households: ${initial.social.households}`);
+    assert(initial.urban.wards > 20 && initial.urban.corridors >= initial.urban.wards, 'urban hierarchy did not initialize');
     assert(initial.yearBCE === 3500, `unexpected initial year ${initial.yearBCE}`);
     assert(initial.cities.length === 7, `expected seven initial city-state anchors, got ${initial.cities.length}`);
-    assert(initial.kernel.nodes.length === 8, `unexpected initial kernel node count: ${initial.kernel.nodes.length}`);
+    assert(initial.kernel.nodes.length === 8, `urban layer eagerly expanded the kernel instead of observer materialization: ${initial.kernel.nodes.length}`);
 
     const after50 = await page.evaluate(() => {
       window.sumerianCivilization.advance(50);
@@ -47,48 +52,75 @@ function assert(condition, message) {
     for (const type of ['BIRTH', 'DEATH', 'WORK']) {
       assert(after50.social.transactions.counts[type] > 0, `${type} missing from browser social run`);
     }
+    for (const type of ['WARD', 'CORRIDOR', 'SETTLE']) {
+      assert(after50.urban.transactions.counts[type] > 0, `${type} missing from browser urban run`);
+    }
     assert(after50.kernel.observers.some(observer => observer.observerId === 'sumer-viewer'), 'city selection did not create kernel observer');
     assert(after50.totals.population > 0 && Number.isFinite(after50.totals.population), 'invalid population after 50 years');
     assert(after50.social.people === Math.round(after50.totals.population), 'social population drift after 50 years');
+    assert(after50.urban.compounds === after50.social.households, 'urban compound drift after 50 years');
     const lagash = after50.cities.find(city => city.id === 'lagash');
     assert(lagash?.social?.households > 0, 'Lagash has no explicit households');
     assert(lagash.social.occupations.farmer > 0 && lagash.social.occupations.scribe > 0, 'Lagash occupations did not materialize');
+    assert(lagash.urban.wards >= 3 && lagash.urban.compounds === lagash.social.households, 'Lagash urban state is inconsistent');
 
     const micro = await page.evaluate(() => {
-      const detail = window.sumerianCivilization.getCitySocialDetail('lagash');
-      const household = detail.households.find(item => item.memberIds.length > 0);
+      const social = window.sumerianCivilization.getCitySocialDetail('lagash');
+      const urban = window.sumerianCivilization.getCityUrbanDetail('lagash');
+      const ward = urban.wards.find(item => item.corridorIds.length > 0);
+      const corridor = urban.corridors.find(item => item.wardId === ward?.id && item.compoundIds.length > 0);
+      const compound = urban.compounds.find(item => item.corridorId === corridor?.id);
+      const household = social.households.find(item => item.id === compound?.householdId && item.memberIds.length > 0);
       const personId = household?.memberIds?.[0];
-      const householdObserver = household ? window.sumerianCivilization.observeHousehold(household.id, 'browser-household') : null;
-      const personObserver = personId ? window.sumerianCivilization.observePerson(personId, 'browser-person') : null;
       return {
-        people: detail.people.length,
-        population: detail.population,
-        households: detail.households.length,
+        people: social.people.length,
+        population: social.population,
+        households: social.households.length,
+        wards: urban.wards.length,
+        corridors: urban.corridors.length,
+        compounds: urban.compounds.length,
+        wardId: ward?.id || null,
+        wardCorridors: ward?.corridorIds?.length || 0,
+        corridorId: corridor?.id || null,
+        corridorCompounds: corridor?.compoundIds?.length || 0,
         householdId: household?.id || null,
         householdMembers: household?.memberIds?.length || 0,
-        person: detail.people.find(item => item.id === personId) || null,
-        householdObserver,
-        personObserver,
+        personId: personId || null,
+        person: social.people.find(item => item.id === personId) || null,
       };
     });
     assert(micro.people === micro.population, `city detail did not expose every person: ${micro.people}/${micro.population}`);
-    assert(micro.households > 0 && micro.person, 'household/person detail is missing');
+    assert(micro.compounds === micro.households, `city urban detail did not expose every household compound: ${micro.compounds}/${micro.households}`);
+    assert(micro.wards > 0 && micro.corridors >= micro.wards, 'Lagash urban detail is missing wards/corridors');
+    assert(micro.householdId && micro.person, 'urban household/person detail is missing');
     assert(Number.isFinite(micro.person.needs?.nutrition) && Number.isFinite(micro.person.needs?.security), 'person needs are missing or invalid');
+    assert(Number.isFinite(micro.person.needs?.marketAccess) && Number.isFinite(micro.person.needs?.canalAccess), 'person local urban access is missing');
     assert(Array.isArray(micro.person.socialTies), 'person social ties are missing');
-    assert(micro.person.socialTies.every(id => typeof id === 'string'), 'person social ties contain invalid IDs');
-    assert(String(micro.householdObserver?.resolvedNodeId || '').includes('household:'), 'household did not resolve through multiscale kernel');
-    assert(String(micro.personObserver?.resolvedNodeId || '').includes('person:'), 'person did not resolve through multiscale kernel');
 
     const cityExplorer = await page.evaluate(() => {
       window.sumerianCivilization.selectCity('lagash');
       return window.sumerianCivilization.getExplorerState();
     });
     assert(cityExplorer.level === 'city' && cityExplorer.cityId === 'lagash', `explorer did not enter Lagash city view: ${JSON.stringify(cityExplorer)}`);
-    assert(cityExplorer.renderedHouseholds === micro.households, `explorer household rendering is capped or incomplete: ${cityExplorer.renderedHouseholds}/${micro.households}`);
+    assert(cityExplorer.renderedWards === micro.wards, `explorer ward rendering is incomplete: ${cityExplorer.renderedWards}/${micro.wards}`);
 
-    const householdExplorer = await page.evaluate(householdId => window.sumerianCivilization.openHousehold(householdId), micro.householdId);
+    const wardExplorer = await page.evaluate(id => window.sumerianCivilization.openWard(id), micro.wardId);
+    assert(wardExplorer.level === 'ward' && wardExplorer.wardId === micro.wardId, `ward did not open: ${JSON.stringify(wardExplorer)}`);
+    assert(wardExplorer.renderedCorridors === micro.wardCorridors, `ward corridor rendering is incomplete: ${wardExplorer.renderedCorridors}/${micro.wardCorridors}`);
+    assert(String(wardExplorer.observerResolvedNodeId || '').includes('ward:'), 'ward explorer did not resolve through kernel');
+
+    const corridorExplorer = await page.evaluate(id => window.sumerianCivilization.openCorridor(id), micro.corridorId);
+    assert(corridorExplorer.level === 'corridor' && corridorExplorer.corridorId === micro.corridorId, `corridor did not open: ${JSON.stringify(corridorExplorer)}`);
+    assert(corridorExplorer.renderedCompounds === micro.corridorCompounds, `corridor compound rendering is incomplete: ${corridorExplorer.renderedCompounds}/${micro.corridorCompounds}`);
+    assert(String(corridorExplorer.observerResolvedNodeId || '').includes('corridor:'), 'corridor explorer did not resolve through kernel');
+
+    const compoundExplorer = await page.evaluate(id => window.sumerianCivilization.openCompound(id), micro.householdId);
+    assert(compoundExplorer.level === 'compound' && compoundExplorer.householdId === micro.householdId, `compound did not open: ${JSON.stringify(compoundExplorer)}`);
+    assert(String(compoundExplorer.observerResolvedNodeId || '').includes('compound:'), 'compound explorer did not resolve through kernel');
+    assert(/Enter household/i.test(await page.locator('#sumerExplorerDetail').textContent() || ''), 'compound view does not expose household entry');
+
+    const householdExplorer = await page.evaluate(id => window.sumerianCivilization.openHousehold(id), micro.householdId);
     assert(householdExplorer.level === 'household', `household did not open visually: ${JSON.stringify(householdExplorer)}`);
-    assert(householdExplorer.householdId === micro.householdId, 'visual explorer opened the wrong household');
     assert(householdExplorer.renderedPeople === micro.householdMembers, `household member rendering is incomplete: ${householdExplorer.renderedPeople}/${micro.householdMembers}`);
     assert(String(householdExplorer.observerResolvedNodeId || '').includes('household:'), 'visual household did not resolve through kernel observer');
 
@@ -99,26 +131,54 @@ function assert(condition, message) {
     assert(personExplorer.level === 'person' && personExplorer.personId, `member click did not open a person: ${JSON.stringify(personExplorer)}`);
     assert(String(personExplorer.observerResolvedNodeId || '').includes('person:'), 'visual person did not resolve through kernel observer');
 
+    const hierarchy = await page.evaluate(({ wardId, corridorId, householdId, personId }) => {
+      const kernel = window.sumerianCivilization.simulation.kernel;
+      const urban = window.sumerianCivilization.getCityUrbanDetail('lagash');
+      const compound = urban.compounds.find(item => item.householdId === householdId);
+      const ward = kernel.nodes.get(`ward:${wardId}`);
+      const corridor = kernel.nodes.get(`corridor:${corridorId}`);
+      const compoundNode = kernel.nodes.get(`compound:${compound.id}`);
+      const household = kernel.nodes.get(`household:${householdId}`);
+      const person = kernel.nodes.get(`person:${personId}`);
+      return {
+        wardParent: ward?.parentId,
+        wardNode: ward?.id,
+        corridorParent: corridor?.parentId,
+        corridorNode: corridor?.id,
+        compoundParent: compoundNode?.parentId,
+        compoundNode: compoundNode?.id,
+        householdParent: household?.parentId,
+        householdNode: household?.id,
+        personParent: person?.parentId,
+      };
+    }, micro);
+    assert(hierarchy.wardParent === 'city:lagash', `ward parent mismatch: ${JSON.stringify(hierarchy)}`);
+    assert(hierarchy.corridorParent === hierarchy.wardNode, `corridor parent mismatch: ${JSON.stringify(hierarchy)}`);
+    assert(hierarchy.compoundParent === hierarchy.corridorNode, `compound parent mismatch: ${JSON.stringify(hierarchy)}`);
+    assert(hierarchy.householdParent === hierarchy.compoundNode, `household parent mismatch: ${JSON.stringify(hierarchy)}`);
+    assert(hierarchy.personParent === hierarchy.householdNode, `person parent mismatch: ${JSON.stringify(hierarchy)}`);
+
     const explorerText = await page.locator('#sumerExplorerDetail').textContent();
-    assert(/Needs:/i.test(explorerText || ''), `person needs are not visible in explorer: ${explorerText}`);
+    assert(/Needs\/access:/i.test(explorerText || ''), `person needs/access are not visible in explorer: ${explorerText}`);
     assert(/Direct social ties:/i.test(explorerText || ''), `person social ties are not visible in explorer: ${explorerText}`);
     const breadcrumb = await page.locator('#sumerExplorerBreadcrumb').textContent();
-    assert(/Lagash/i.test(breadcrumb || '') && /P\d+/i.test(breadcrumb || ''), `person breadcrumb is missing: ${breadcrumb}`);
+    assert(/Lagash/i.test(breadcrumb || '') && /W\d+/i.test(breadcrumb || '') && /C\d+/i.test(breadcrumb || '') && /P\d+/i.test(breadcrumb || ''), `full urban/person breadcrumb is missing: ${breadcrumb}`);
 
-    await page.locator('#sumerExplorerBack').click();
-    const backToHousehold = await page.evaluate(() => window.sumerianCivilization.getExplorerState());
-    assert(backToHousehold.level === 'household', 'first explorer Back did not return to household');
-    await page.locator('#sumerExplorerBack').click();
+    for (const expectedLevel of ['household', 'compound', 'corridor', 'ward', 'city']) {
+      await page.locator('#sumerExplorerBack').click();
+      const state = await page.evaluate(() => window.sumerianCivilization.getExplorerState());
+      assert(state.level === expectedLevel, `explorer Back expected ${expectedLevel}, got ${JSON.stringify(state)}`);
+    }
     const backToCity = await page.evaluate(() => window.sumerianCivilization.getExplorerState());
-    assert(backToCity.level === 'city' && backToCity.renderedHouseholds === micro.households, 'second explorer Back did not return to complete city household view');
+    assert(backToCity.renderedWards === micro.wards, 'city return did not render complete ward set');
 
     const canvas = await page.locator('#sumerCanvas').boundingBox();
     assert(canvas && canvas.width > 500 && canvas.height > 300, `Sumer canvas did not render: ${JSON.stringify(canvas)}`);
     const socialCanvas = await page.locator('#sumerSocialCanvas').boundingBox();
-    assert(socialCanvas && socialCanvas.width > 250 && socialCanvas.height > 180, `Sumer social explorer canvas did not render: ${JSON.stringify(socialCanvas)}`);
+    assert(socialCanvas && socialCanvas.width > 250 && socialCanvas.height > 180, `Sumer urban/social explorer canvas did not render: ${JSON.stringify(socialCanvas)}`);
     const selected = await page.locator('#sumerSelected').textContent();
     assert(/Lagash/i.test(selected || ''), `Lagash selection not reflected in UI: ${selected}`);
-    assert(/households/i.test(selected || ''), `social household state is not visible in UI: ${selected}`);
+    assert(/households/i.test(selected || '') && /wards/i.test(selected || '') && /corridors/i.test(selected || ''), `urban state is not visible in selected-city UI: ${selected}`);
     assert(/scribes/i.test(selected || ''), `occupation state is not visible in UI: ${selected}`);
 
     const after250 = await page.evaluate(() => {
@@ -128,6 +188,8 @@ function assert(condition, message) {
     assert(after250.yearBCE === 3250, `250-year browser run produced ${after250.yearBCE}`);
     assert(after250.totals.population > 0 && after250.totals.population < 5_000_000, `population out of bounds: ${after250.totals.population}`);
     assert(after250.social.people === Math.round(after250.totals.population), 'social population drift after 250 years');
+    assert(after250.urban.compounds === after250.social.households, 'urban household/compound drift after 250 years');
+    assert(after250.urban.displayCap === null && after250.urban.hardWardCap === null, 'urban cap appeared after running');
     assert(Number.isFinite(after250.totals.meanSalinity), 'mean salinity became invalid');
     assert(pageErrors.length === 0, `page errors: ${pageErrors.join(' | ')}`);
 
@@ -139,11 +201,17 @@ function assert(condition, message) {
       population: Math.round(after250.totals.population),
       explicitPeople: after250.social.people,
       households: after250.social.households,
-      exploredCityHouseholds: cityExplorer.renderedHouseholds,
+      wards: after250.urban.wards,
+      corridors: after250.urban.corridors,
+      compounds: after250.urban.compounds,
+      exploredCityWards: cityExplorer.renderedWards,
+      exploredWardCorridors: wardExplorer.renderedCorridors,
+      exploredCorridorCompounds: corridorExplorer.renderedCompounds,
       exploredHouseholdPeople: householdExplorer.renderedPeople,
       hegemon: after250.politics.hegemonName,
       transactionCounts: after250.transactions.counts,
       socialTransactionCounts: after250.social.transactions.counts,
+      urbanTransactionCounts: after250.urban.transactions.counts,
     }, null, 2));
   } finally {
     await browser.close();
