@@ -16,15 +16,16 @@
     body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top, #2c241a 0, #17130f 52%, #100d0a 100%); }
     button, select { font: inherit; }
     button { cursor: pointer; }
+    button:disabled { cursor: default; opacity: .45; }
     .shell { width: min(1480px, 100%); margin: 0 auto; padding: 18px; }
     .top { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin-bottom: 14px; }
     h1 { margin: 0 0 5px; font-size: clamp(1.5rem, 3vw, 2.4rem); font-weight: 760; letter-spacing: .02em; }
     .subtitle { margin: 0; max-width: 850px; color: #cdbf9f; line-height: 1.45; }
     .badge { display: inline-block; margin-top: 7px; padding: 4px 8px; border: 1px solid #6f5a39; border-radius: 999px; color: #e5c98f; background: #261f16; font-size: .79rem; }
     .controls { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
-    .controls button, .controls select { border: 1px solid #67573f; background: #2a231a; color: #f5e7cc; border-radius: 8px; padding: 8px 11px; }
-    .controls button:hover { background: #3a2e20; }
-    .grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, .9fr); gap: 14px; align-items: start; }
+    .controls button, .controls select, .mini-button, .explorer-members button { border: 1px solid #67573f; background: #2a231a; color: #f5e7cc; border-radius: 8px; padding: 8px 11px; }
+    .controls button:hover, .mini-button:hover:not(:disabled), .explorer-members button:hover { background: #3a2e20; }
+    .grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(320px, .9fr); gap: 14px; align-items: start; }
     .panel { border: 1px solid #4f4332; background: rgba(27, 22, 16, .92); border-radius: 12px; overflow: hidden; }
     .metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; background: #4c4030; border-bottom: 1px solid #4f4332; }
     .metric { padding: 11px 12px; background: #211b14; }
@@ -45,17 +46,28 @@
     ol { margin: 0; padding-left: 22px; max-height: 300px; overflow: auto; color: #d8c8aa; font-size: .82rem; line-height: 1.45; }
     ol span { color: #9b8c72; font-variant-numeric: tabular-nums; }
     .note { color: #9f927b; font-size: .78rem; line-height: 1.4; }
+    .explorer-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .explorer-head h2 { margin: 0; }
+    .mini-button { padding: 5px 9px; font-size: .78rem; }
+    #sumerExplorerBreadcrumb { margin: 8px 0; color: #e5c98f; font-size: .8rem; font-variant-numeric: tabular-nums; }
+    #sumerSocialCanvas { display: block; width: 100%; height: 280px; min-height: 220px; border: 1px solid #5a4933; border-radius: 8px; background: #ccb78f; touch-action: manipulation; }
+    #sumerExplorerDetail { margin-top: 9px; color: #d8c8aa; font-size: .8rem; line-height: 1.48; overflow-wrap: anywhere; }
+    .explorer-note { display: inline-block; margin-top: 5px; color: #9f927b; font-size: .75rem; line-height: 1.38; }
+    .explorer-members { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 4px; }
+    .explorer-members button { padding: 5px 7px; font-size: .72rem; text-align: left; }
     a { color: #e5c98f; }
     @media (max-width: 920px) {
       .grid { grid-template-columns: 1fr; }
       .metrics { grid-template-columns: repeat(2, 1fr); }
       #sumerCanvas { min-height: 410px; height: 58vh; }
+      #sumerSocialCanvas { height: 330px; }
     }
     @media (max-width: 560px) {
       .shell { padding: 10px; }
       .metrics { grid-template-columns: 1fr 1fr; }
       .metric:last-child { grid-column: span 2; }
       #sumerCanvas { min-height: 390px; }
+      #sumerSocialCanvas { height: 260px; }
     }
   </style>
 </head>
@@ -64,7 +76,7 @@
     <section class="top">
       <div>
         <h1>Sumer — emergent civilization</h1>
-        <p class="subtitle">A deterministic, historically constrained experiment from 3500–2000 BCE. Irrigation, barley, rations, trade, administration, migration, conflict, and political consolidation interact; recorded history is a reference window, not a scripted outcome.</p>
+        <p class="subtitle">A deterministic, historically constrained experiment from 3500–2000 BCE. Irrigation, barley, rations, trade, administration, migration, conflict, households, and individual lives interact; recorded history is a reference window, not a scripted outcome.</p>
         <span class="badge">model units · synthetic starting populations · counterfactual outcomes</span>
       </div>
       <div class="controls" aria-label="Simulation controls">
@@ -94,13 +106,22 @@
           <div class="metric"><small>River pulse</small><strong id="sumerRiver">—</strong></div>
         </div>
         <canvas id="sumerCanvas" aria-label="Schematic simulation map of Sumerian city-states, rivers, and cultivated floodplain"></canvas>
-        <div class="caption"><strong id="sumerPeriod">Late Uruk reference window</strong> · Click a city to inspect it. Rivers and city positions are schematic historical-geographic anchors; ancient channels changed substantially through time.</div>
+        <div class="caption"><strong id="sumerPeriod">Late Uruk reference window</strong> · Click a city to select it, then use the Social explorer to descend into actual simulated households and people. Rivers, city positions, streets, and compound positions are schematic historical-geographic presentation.</div>
       </div>
 
       <aside class="panel">
         <div class="side-section">
           <h2>Selected city-state</h2>
           <div id="sumerSelected">Uruk</div>
+        </div>
+        <div class="side-section">
+          <div class="explorer-head">
+            <h2>Social explorer</h2>
+            <button class="mini-button" id="sumerExplorerBack" type="button" disabled>Back</button>
+          </div>
+          <div id="sumerExplorerBreadcrumb">Uruk</div>
+          <canvas id="sumerSocialCanvas" aria-label="Schematic close-up of actual simulated Sumerian households and people"></canvas>
+          <div id="sumerExplorerDetail">Loading explicit households…</div>
         </div>
         <div class="side-section">
           <h2>City-state system</h2>
@@ -116,7 +137,7 @@
           <ol id="sumerEventLog"><li>No transactions yet.</li></ol>
         </div>
         <div class="side-section note">
-          Historical constraints are intentionally narrower than the simulation: canal irrigation, flood irrigation, barley sowing, grain rations, city institutions, and canal construction are documentable. Population numbers, coefficients, annual weather, wars, hegemonies, and outcomes are generated model state—not claims about what actually happened.
+          Historical constraints are intentionally narrower than the simulation: canal irrigation, flood irrigation, barley sowing, grain rations, city institutions, and canal construction are documentable. Population numbers, coefficients, annual weather, household layouts, individual needs, wars, hegemonies, and outcomes are generated model state or schematic presentation—not claims about what actually happened.
         </div>
       </aside>
     </section>
