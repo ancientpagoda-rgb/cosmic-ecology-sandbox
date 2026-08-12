@@ -114,7 +114,31 @@ export function createSumerianCivilizationSimulation(options = {}) {
   }
 
   function getCitySocialDetail(cityId) {
-    return social.cityDetail(cityId);
+    const detail = social.cityDetail(cityId);
+    const city = base.cities.find(item => item.id === cityId);
+    if (!city) return detail;
+    const householdMembers = new Map(detail.households.map(household => [household.id, household.memberIds]));
+    const foodSecurity = clamp(city.foodRatio || 0, 0, 1);
+    const civicSecurity = clamp(0.36 + (city.military || 0) * 0.34 + (city.canalHealth || 0) * 0.16 - (base.state.climateStress || 0) * 0.18, 0, 1);
+    const institutionalAccess = clamp((city.administration || 0) * 0.55 + (city.templeComplexity || 0) * 0.45, 0, 1);
+    return {
+      ...detail,
+      people: detail.people.map(person => {
+        const household = householdMembers.get(person.householdId) || [];
+        const socialTies = [...new Set([...person.parentIds, ...household.filter(id => id !== person.id)])];
+        const householdSupport = clamp((household.length - 1) / 6, 0, 1);
+        return {
+          ...person,
+          needs: {
+            nutrition: foodSecurity,
+            security: civicSecurity,
+            householdSupport,
+            institutionalAccess,
+          },
+          socialTies,
+        };
+      }),
+    };
   }
 
   function observeHousehold(householdId, observerId = 'sumer-household-viewer') {
