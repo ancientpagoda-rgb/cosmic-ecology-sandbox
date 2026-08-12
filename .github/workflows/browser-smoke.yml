@@ -1,4 +1,4 @@
-name: Browser simulation diagnostics
+name: Browser visual and simulation diagnostics
 
 on:
   pull_request:
@@ -27,8 +27,8 @@ jobs:
               repo: context.repo.repo,
               sha: context.sha,
               state: 'pending',
-              context: 'browser/unified-runtime',
-              description: 'Single-world browser diagnostics are running',
+              context: 'browser/visual-quality',
+              description: 'Classic renderer and screenshot regression checks are running',
               target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             });
 
@@ -63,39 +63,30 @@ jobs:
           cat /tmp/reality-preview.log
           exit 1
 
-      - name: Run desktop, ultrawide, and mobile reality diagnostics
-        id: unified_test
+      - name: Verify classic Surface Mode behavior
+        id: surface_test
         continue-on-error: true
         env:
           REALITY_BASE_URL: http://127.0.0.1:4173/
-          REALITY_CHECK_ARTIFACT_DIR: artifacts/unified-smoke
-        run: node scripts/reality-check.cjs
+          REALITY_SURFACE_MODE_ARTIFACT_DIR: artifacts/surface-mode-smoke
+        run: node scripts/surface-mode-smoke.cjs
 
-      - name: Verify one scene and camera from ground to globe
-        id: continuity_test
+      - name: Capture and enforce visual regression quality
+        id: visual_test
         continue-on-error: true
         env:
           REALITY_BASE_URL: http://127.0.0.1:4173/
-          REALITY_CHECK_ARTIFACT_DIR: artifacts/continuous-world-view
-        run: node scripts/continuous-world-view-check.cjs
-
-      - name: Enforce single-world rendering performance
-        id: performance_test
-        continue-on-error: true
-        env:
-          REALITY_BASE_URL: http://127.0.0.1:4173/
-          REALITY_PERFORMANCE_ARTIFACT_DIR: artifacts/single-world-performance
-        run: node scripts/single-world-performance-check.cjs
+          REALITY_VISUAL_ARTIFACT_DIR: artifacts/visual-regression
+        run: node scripts/visual-quality-check.cjs
 
       - name: Upload browser diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reality-browser-diagnostics-${{ github.sha }}
+          name: reality-browser-visuals-${{ github.sha }}
           path: |
-            artifacts/unified-smoke
-            artifacts/continuous-world-view
-            artifacts/single-world-performance
+            artifacts/surface-mode-smoke
+            artifacts/visual-regression
             /tmp/reality-preview.log
           if-no-files-found: warn
           retention-days: 30
@@ -105,17 +96,16 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const unifiedOk = '${{ steps.unified_test.outcome }}' === 'success';
-            const continuityOk = '${{ steps.continuity_test.outcome }}' === 'success';
-            const performanceOk = '${{ steps.performance_test.outcome }}' === 'success';
-            const ok = unifiedOk && continuityOk && performanceOk;
+            const surfaceOk = '${{ steps.surface_test.outcome }}' === 'success';
+            const visualOk = '${{ steps.visual_test.outcome }}' === 'success';
+            const ok = surfaceOk && visualOk;
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
               state: ok ? 'success' : 'failure',
-              context: 'browser/unified-runtime',
-              description: ok ? 'One-scene world, mobile, continuity, and performance checks passed' : 'A single-world browser diagnostic failed',
+              context: 'browser/visual-quality',
+              description: ok ? 'Classic Surface Mode and screenshot quality checks passed' : 'A renderer visual regression check failed',
               target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             });
-            if (!ok) core.setFailed('One or more single-world browser diagnostics failed.');
+            if (!ok) core.setFailed('One or more renderer visual regression checks failed.');
