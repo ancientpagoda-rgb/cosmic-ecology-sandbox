@@ -12,7 +12,7 @@ function assert(condition, message) {
     headless: true,
     args: ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--disable-dev-shm-usage', '--no-sandbox'],
   });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 820 } });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 920 } });
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
 
@@ -64,6 +64,8 @@ function assert(condition, message) {
         people: detail.people.length,
         population: detail.population,
         households: detail.households.length,
+        householdId: household?.id || null,
+        householdMembers: household?.memberIds?.length || 0,
         person: detail.people.find(item => item.id === personId) || null,
         householdObserver,
         personObserver,
@@ -77,8 +79,43 @@ function assert(condition, message) {
     assert(String(micro.householdObserver?.resolvedNodeId || '').includes('household:'), 'household did not resolve through multiscale kernel');
     assert(String(micro.personObserver?.resolvedNodeId || '').includes('person:'), 'person did not resolve through multiscale kernel');
 
+    const cityExplorer = await page.evaluate(() => {
+      window.sumerianCivilization.selectCity('lagash');
+      return window.sumerianCivilization.getExplorerState();
+    });
+    assert(cityExplorer.level === 'city' && cityExplorer.cityId === 'lagash', `explorer did not enter Lagash city view: ${JSON.stringify(cityExplorer)}`);
+    assert(cityExplorer.renderedHouseholds === micro.households, `explorer household rendering is capped or incomplete: ${cityExplorer.renderedHouseholds}/${micro.households}`);
+
+    const householdExplorer = await page.evaluate(householdId => window.sumerianCivilization.openHousehold(householdId), micro.householdId);
+    assert(householdExplorer.level === 'household', `household did not open visually: ${JSON.stringify(householdExplorer)}`);
+    assert(householdExplorer.householdId === micro.householdId, 'visual explorer opened the wrong household');
+    assert(householdExplorer.renderedPeople === micro.householdMembers, `household member rendering is incomplete: ${householdExplorer.renderedPeople}/${micro.householdMembers}`);
+    assert(String(householdExplorer.observerResolvedNodeId || '').includes('household:'), 'visual household did not resolve through kernel observer');
+
+    const memberButtons = page.locator('#sumerExplorerDetail [data-person-id]');
+    assert(await memberButtons.count() === micro.householdMembers, `household UI hid members: ${await memberButtons.count()}/${micro.householdMembers}`);
+    await memberButtons.first().click();
+    const personExplorer = await page.evaluate(() => window.sumerianCivilization.getExplorerState());
+    assert(personExplorer.level === 'person' && personExplorer.personId, `member click did not open a person: ${JSON.stringify(personExplorer)}`);
+    assert(String(personExplorer.observerResolvedNodeId || '').includes('person:'), 'visual person did not resolve through kernel observer');
+
+    const explorerText = await page.locator('#sumerExplorerDetail').textContent();
+    assert(/Needs:/i.test(explorerText || ''), `person needs are not visible in explorer: ${explorerText}`);
+    assert(/Direct social ties:/i.test(explorerText || ''), `person social ties are not visible in explorer: ${explorerText}`);
+    const breadcrumb = await page.locator('#sumerExplorerBreadcrumb').textContent();
+    assert(/Lagash/i.test(breadcrumb || '') && /P\d+/i.test(breadcrumb || ''), `person breadcrumb is missing: ${breadcrumb}`);
+
+    await page.locator('#sumerExplorerBack').click();
+    const backToHousehold = await page.evaluate(() => window.sumerianCivilization.getExplorerState());
+    assert(backToHousehold.level === 'household', 'first explorer Back did not return to household');
+    await page.locator('#sumerExplorerBack').click();
+    const backToCity = await page.evaluate(() => window.sumerianCivilization.getExplorerState());
+    assert(backToCity.level === 'city' && backToCity.renderedHouseholds === micro.households, 'second explorer Back did not return to complete city household view');
+
     const canvas = await page.locator('#sumerCanvas').boundingBox();
     assert(canvas && canvas.width > 500 && canvas.height > 300, `Sumer canvas did not render: ${JSON.stringify(canvas)}`);
+    const socialCanvas = await page.locator('#sumerSocialCanvas').boundingBox();
+    assert(socialCanvas && socialCanvas.width > 250 && socialCanvas.height > 180, `Sumer social explorer canvas did not render: ${JSON.stringify(socialCanvas)}`);
     const selected = await page.locator('#sumerSelected').textContent();
     assert(/Lagash/i.test(selected || ''), `Lagash selection not reflected in UI: ${selected}`);
     assert(/households/i.test(selected || ''), `social household state is not visible in UI: ${selected}`);
@@ -102,6 +139,8 @@ function assert(condition, message) {
       population: Math.round(after250.totals.population),
       explicitPeople: after250.social.people,
       households: after250.social.households,
+      exploredCityHouseholds: cityExplorer.renderedHouseholds,
+      exploredHouseholdPeople: householdExplorer.renderedPeople,
       hegemon: after250.politics.hegemonName,
       transactionCounts: after250.transactions.counts,
       socialTransactionCounts: after250.social.transactions.counts,
