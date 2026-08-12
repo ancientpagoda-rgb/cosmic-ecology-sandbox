@@ -71,6 +71,9 @@ function assert(condition, message) {
     });
     assert(micro.people === micro.population, `city detail did not expose every person: ${micro.people}/${micro.population}`);
     assert(micro.households > 0 && micro.person, 'household/person detail is missing');
+    assert(Number.isFinite(micro.person.needs?.nutrition) && Number.isFinite(micro.person.needs?.security), 'person needs are missing or invalid');
+    assert(Array.isArray(micro.person.socialTies), 'person social ties are missing');
+    assert(micro.person.socialTies.every(id => typeof id === 'string'), 'person social ties contain invalid IDs');
     assert(String(micro.householdObserver?.resolvedNodeId || '').includes('household:'), 'household did not resolve through multiscale kernel');
     assert(String(micro.personObserver?.resolvedNodeId || '').includes('person:'), 'person did not resolve through multiscale kernel');
 
