@@ -1,4 +1,5 @@
 import { createSumerianCivilizationSimulation } from './sumerian-civilization-social-v2.js';
+import { createSumerianSocialExplorer } from './sumerian-social-explorer.js';
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 
@@ -31,6 +32,14 @@ export function createSumerianCivilizationRuntime({
     speed: document.getElementById('sumerSpeed'),
     reset: document.getElementById('sumerReset'),
   };
+
+  const explorer = createSumerianSocialExplorer({
+    simulation,
+    canvas: document.getElementById('sumerSocialCanvas'),
+    breadcrumb: document.getElementById('sumerExplorerBreadcrumb'),
+    detail: document.getElementById('sumerExplorerDetail'),
+    backButton: document.getElementById('sumerExplorerBack'),
+  });
 
   let running = false;
   let speed = 12;
@@ -174,6 +183,7 @@ export function createSumerianCivilizationRuntime({
     if (selected) {
       selectedCityId = selected.id;
       simulation.observeCity(selected.id);
+      explorer.setCity(selected.id);
       if (ui.selected) {
         const jobs = selected.social?.occupations || {};
         ui.selected.innerHTML = `<strong>${selected.name}</strong><br>Population ${Math.round(selected.population).toLocaleString()} · households ${(selected.social?.households || 0).toLocaleString()} · adults ${(selected.social?.adults || 0).toLocaleString()}<br>farmers ${(jobs.farmer || 0).toLocaleString()} · canal workers ${(jobs['canal-worker'] || 0).toLocaleString()} · potters ${(jobs.potter || 0).toLocaleString()} · merchants ${(jobs.merchant || 0).toLocaleString()} · scribes ${(jobs.scribe || 0).toLocaleString()} · priests ${(jobs.priest || 0).toLocaleString()} · soldiers ${(jobs.soldier || 0).toLocaleString()}<br>food ${(selected.foodRatio * 100).toFixed(0)}% · canal ${(selected.canalHealth * 100).toFixed(0)}% · salinity ${(selected.meanSalinity * 100).toFixed(1)}% · administration ${(selected.administration * 100).toFixed(0)}%`;
@@ -267,12 +277,17 @@ export function createSumerianCivilizationRuntime({
 
   return {
     simulation,
+    explorer,
     getSnapshot: () => simulation.snapshot(),
     advance,
     setRunning(value) { running = Boolean(value); previousTime = 0; updateInterface(); },
-    selectCity(cityId) { selectedCityId = cityId; updateInterface(); },
+    selectCity(cityId) { selectedCityId = cityId; updateInterface(); return explorer.getState(); },
     getCitySocialDetail: cityId => simulation.getCitySocialDetail(cityId),
     observeHousehold: (householdId, observerId) => simulation.observeHousehold(householdId, observerId),
     observePerson: (personId, observerId) => simulation.observePerson(personId, observerId),
+    getExplorerState: () => explorer.getState(),
+    openHousehold: householdId => explorer.openHousehold(householdId),
+    openPerson: personId => explorer.openPerson(personId),
+    explorerBack: () => explorer.back(),
   };
 }
