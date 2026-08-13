@@ -19,7 +19,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
 
   try {
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
-    await page.waitForFunction(() => Boolean(window.realitySandboxSurfaceMode && window.realitySandboxWorldView), null, { timeout: 120000 });
+    await page.waitForFunction(() => Boolean(window.realitySandboxSurfaceMode && window.realitySandboxPlanet && window.realitySandboxUnified), null, { timeout: 120000 });
     await page.evaluate(() => {
       const { position, agent } = window.realitySandboxPlanet.world.ecs.components;
       const firstId = agent.keys().next().value;
@@ -51,8 +51,6 @@ fs.mkdirSync(artifactDir, { recursive: true });
     const before = await page.evaluate(() => ({
       player: window.realitySandboxSurfaceMode.getPlayer(),
       diagnostics: window.realitySandboxPresentationDiagnostics(),
-      worldView: window.realitySandboxWorldView.getSnapshot(),
-      worldTick: window.realitySandboxPlanet.world.tick,
     }));
 
     await page.keyboard.down('w');
@@ -65,8 +63,6 @@ fs.mkdirSync(artifactDir, { recursive: true });
     const after = await page.evaluate(() => ({
       player: window.realitySandboxSurfaceMode.getPlayer(),
       diagnostics: window.realitySandboxPresentationDiagnostics(),
-      worldView: window.realitySandboxWorldView.getSnapshot(),
-      worldTick: window.realitySandboxPlanet.world.tick,
       active: window.realitySandboxSurfaceMode.isActive(),
       canvasVisible: (() => {
         const canvas = document.getElementById('surfaceModeCanvas');
@@ -75,29 +71,33 @@ fs.mkdirSync(artifactDir, { recursive: true });
         const rect = canvas.getBoundingClientRect();
         return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
       })(),
+      classicRootPresent: Boolean(document.getElementById('lofiLivingCanvas')),
+      experimentalSphericalInstalled: Boolean(window.realitySandboxSingleSphericalRenderer?.installed),
+      sphereStats: window.realitySandboxSurfaceSphereV37?.getStats?.() || null,
     }));
 
     await page.screenshot({ path: path.join(artifactDir, 'surface-mode.png'), fullPage: true });
     fs.writeFileSync(path.join(artifactDir, 'surface-mode.json'), JSON.stringify({ before, after, pageErrors }, null, 2));
 
     const moved = Math.hypot(after.player.x - before.player.x, after.player.y - before.player.y);
-    assert(before.diagnostics.surfaceModeReady === true, 'Local renderer diagnostics never became ready.');
-    assert(after.active && after.canvasVisible, 'Local renderer did not remain active with a visible input canvas.');
-    assert(after.diagnostics.surfaceMode === 'active' && after.diagnostics.surfaceModeCanvasPresent, 'Local renderer diagnostics do not report an active presentation.');
-    assert(after.diagnostics.surfaceModeRenderer === 'gpu-controller-spherical-topology', `Unexpected local controller (${after.diagnostics.surfaceModeRenderer}).`);
-    assert(after.diagnostics.surfaceGpu?.renderer === 'WebGLRenderer' && after.diagnostics.surfaceGpu?.gpuPrimary === true, 'Local LOD did not select the cached WebGL GPU renderer.');
-    assert(before.player.pitch >= 0.18, `Local view should start terrain-facing, not at the empty horizon (pitch ${before.player.pitch}).`);
-    assert(after.diagnostics.surfaceGpu?.fauna?.renderLoopProceduralSamples === 0, 'Local fauna performs procedural sampling in the render loop.');
-    assert(after.diagnostics.surfaceGpu?.fauna?.visible >= 1, 'Local expedition did not present nearby fauna.');
+    assert(before.diagnostics.surfaceModeReady === true, 'Classic Surface renderer diagnostics never became ready.');
+    assert(after.active && after.canvasVisible, 'Classic Surface renderer did not remain active with a visible input canvas.');
+    assert(after.diagnostics.surfaceMode === 'active' && after.diagnostics.surfaceModeCanvasPresent, 'Classic Surface diagnostics do not report an active presentation.');
+    assert(after.diagnostics.surfaceModeRenderer === 'gpu-controller-spherical-topology', `Unexpected classic surface controller (${after.diagnostics.surfaceModeRenderer}).`);
+    assert(after.diagnostics.surfaceGpu?.renderer === 'WebGLRenderer' && after.diagnostics.surfaceGpu?.gpuPrimary === true, 'Classic Surface LOD did not select the cached WebGL GPU renderer.');
+    assert(before.player.pitch >= 0.18, `Classic Surface view should start terrain-facing, not at the empty horizon (pitch ${before.player.pitch}).`);
+    assert(after.diagnostics.surfaceGpu?.fauna?.renderLoopProceduralSamples === 0, 'Classic Surface fauna performs procedural sampling in the render loop.');
+    assert(after.diagnostics.surfaceGpu?.fauna?.visible >= 1, 'Classic Surface expedition did not present nearby fauna.');
     assert(moved > 0.5, `WASD movement did not move the player enough (${moved}).`);
-    assert(after.worldView.model === 'single-authoritative-location-altitude-continuous-lod-view', 'Local renderer is not governed by the unified world-view controller.');
-    assert(after.worldTick > before.worldTick, `World simulation stopped while local renderer was active (${before.worldTick} -> ${after.worldTick}).`);
-    assert(pageErrors.length === 0, `Local view produced browser errors: ${pageErrors.join(' | ')}`);
+    assert(after.classicRootPresent, 'Classic root living canvas disappeared while Surface Mode was active.');
+    assert(!after.experimentalSphericalInstalled, 'Experimental spherical renderer installed on the default classic route.');
+    assert(after.sphereStats?.simulationRunning === false, 'Classic Surface presentation no longer applies its intended simulation-relief budget.');
+    assert(pageErrors.length === 0, `Classic Surface view produced browser errors: ${pageErrors.join(' | ')}`);
 
-    await page.evaluate(() => window.realitySandboxWorldView.jumpOutward());
+    await page.evaluate(() => window.realitySandboxSurfaceMode.exit());
     await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'inactive', null, { timeout: 10000 });
 
-    // Re-enter the private local renderer once to verify its resource lifecycle.
+    // Re-enter once to verify the classic renderer's resource lifecycle.
     await page.evaluate(() => {
       const camera = window.realitySandboxUnified.getCamera();
       const world = window.realitySandboxPlanet.world;
@@ -107,7 +107,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
       const diagnostics = window.realitySandboxPresentationDiagnostics?.();
       return document.documentElement.dataset.surfaceMode === 'active' && diagnostics?.surfaceGpu?.active === true;
     }, null, { timeout: 15000 });
-    await page.evaluate(() => window.realitySandboxWorldView.jumpOutward());
+    await page.evaluate(() => window.realitySandboxSurfaceMode.exit());
     await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'inactive', null, { timeout: 10000 });
   } finally {
     await browser.close();

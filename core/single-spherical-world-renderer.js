@@ -6,18 +6,26 @@ const SEA_LEVEL = 0.53;
 const PLANET_RADIUS = 220;
 const HEIGHT_SCALE = 14;
 const MIN_ALTITUDE = 2.4;
-const DEFAULT_ALTITUDE = 300;
+const DEFAULT_ALTITUDE = 12;
 const MAX_ALTITUDE = 3200;
-const LOCAL_PATCH_RADIUS_WORLD = 112;
-const LOCAL_PATCH_SEGMENTS = 58;
-const LOCAL_PATCH_BUILD_ALTITUDE = 210;
-const LOCAL_PATCH_FADE_START = 105;
-const LOCAL_PATCH_FADE_END = 240;
+const LOCAL_PATCH_RADIUS_WORLD = 148;
+const LOCAL_PATCH_SEGMENTS = 112;
+const LOCAL_PATCH_BUILD_ALTITUDE = 420;
+const LOCAL_PATCH_FADE_START = 160;
+const LOCAL_PATCH_FADE_END = 440;
 const ORBIT_BLEND_START = 38;
 const ORBIT_BLEND_END = 155;
 const CAMERA_FOV = 68;
-const GLOBAL_WIDTH_SEGMENTS = 88;
-const GLOBAL_HEIGHT_SEGMENTS = 56;
+const GLOBAL_LOD_TIERS = [
+  { name: 'ground', maxAltitude: 70, widthSegments: 192, heightSegments: 120 },
+  { name: 'regional', maxAltitude: 260, widthSegments: 144, heightSegments: 90 },
+  { name: 'orbit', maxAltitude: 900, widthSegments: 112, heightSegments: 70 },
+  { name: 'cosmic', maxAltitude: Infinity, widthSegments: 72, heightSegments: 46 },
+];
+const DESKTOP_DPR_CAP = 2.5;
+const MOBILE_DPR_CAP = 1.6;
+const MIN_RENDER_DPR = 1;
+const DPR_ADJUST_INTERVAL_MS = 1600;
 const FAUNA_REFRESH_MS = 180;
 const GLOBAL_REFRESH_TICKS = 720;
 const PATCH_MOVE_THRESHOLD = 18;
@@ -108,7 +116,6 @@ function install({ runtime, planet, host }) {
   style.textContent = `
     #lofiLivingCanvas{opacity:0!important;visibility:hidden!important;pointer-events:none!important}
     #surfaceModeLayer,#enterSurfaceMode{display:none!important;visibility:hidden!important;pointer-events:none!important}
-    .eidolon-creatures{display:none!important;visibility:hidden!important;pointer-events:none!important}
     #eidolonSingleWorldCanvas{display:block!important;visibility:visible!important;opacity:1!important}
   `;
   document.head.append(style);
@@ -125,7 +132,11 @@ function install({ runtime, planet, host }) {
   host.prepend(canvas);
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(1.35, Math.max(1, globalThis.devicePixelRatio || 1)));
+  const mobileLike = matchMedia?.('(pointer: coarse)')?.matches || Math.min(innerWidth, innerHeight) < 700;
+  const deviceDpr = Math.max(1, Number(globalThis.devicePixelRatio) || 1);
+  const renderDprCap = Math.min(deviceDpr, mobileLike ? MOBILE_DPR_CAP : DESKTOP_DPR_CAP);
+  let renderPixelRatio = renderDprCap;
+  renderer.setPixelRatio(renderPixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.02;
@@ -143,7 +154,8 @@ function install({ runtime, planet, host }) {
   scene.add(sun);
 
   const planetMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94, metalness: 0.01 });
-  const planetGeometry = new THREE.SphereGeometry(PLANET_RADIUS, GLOBAL_WIDTH_SEGMENTS, GLOBAL_HEIGHT_SEGMENTS);
+  let globalLod = selectGlobalLod(DEFAULT_ALTITUDE);
+  let planetGeometry = new THREE.SphereGeometry(PLANET_RADIUS, globalLod.widthSegments, globalLod.heightSegments);
   const planetMesh = new THREE.Mesh(planetGeometry, planetMaterial);
   planetMesh.frustumCulled = false;
   scene.add(planetMesh);
@@ -202,11 +214,31 @@ function install({ runtime, planet, host }) {
   let destroyed = false;
   let lastFrame = performance.now();
   let frames = 0;
+  let averageFrameMs = 16.7;
+  let lastDprAdjustment = performance.now();
   let externalCameraCenter = runtime.getCamera();
   let manualCameraWrite = false;
 
   buildGlobalPlanet();
+  buildPatch();
   previousSetPresentationSuspended?.(true);
+
+  function selectGlobalLod(altitude) {
+    return GLOBAL_LOD_TIERS.find(tier => altitude <= tier.maxAltitude) || GLOBAL_LOD_TIERS.at(-1);
+  }
+
+  function ensureGlobalLod() {
+    const nextLod = selectGlobalLod(state.altitude);
+    if (nextLod.name === globalLod.name) return false;
+    const previousGeometry = planetGeometry;
+    globalLod = nextLod;
+    planetGeometry = new THREE.SphereGeometry(PLANET_RADIUS, globalLod.widthSegments, globalLod.heightSegments);
+    planetMesh.geometry = planetGeometry;
+    previousGeometry.dispose();
+    buildGlobalPlanet();
+    document.documentElement.dataset.sphericalGlobalLod = globalLod.name;
+    return true;
+  }
 
   function buildGlobalPlanet() {
     const positions = planetGeometry.attributes.position;
@@ -228,6 +260,7 @@ function install({ runtime, planet, host }) {
     positions.needsUpdate = true;
     globalBuilds++;
     lastGlobalRefreshTick = world.tick;
+    document.documentElement.dataset.sphericalGlobalLod = globalLod.name;
   }
 
   function needsPatchBuild() {
@@ -452,6 +485,22 @@ function install({ runtime, planet, host }) {
     camera.updateProjectionMatrix();
   }
 
+  function updateAdaptiveDpr(dt, now) {
+    averageFrameMs = averageFrameMs * 0.92 + dt * 1000 * 0.08;
+    if (now - lastDprAdjustment < DPR_ADJUST_INTERVAL_MS) return;
+    lastDprAdjustment = now;
+    let next = renderPixelRatio;
+    if (averageFrameMs > 25) next = Math.max(MIN_RENDER_DPR, renderPixelRatio - 0.2);
+    else if (averageFrameMs < 17.2) next = Math.min(renderDprCap, renderPixelRatio + 0.1);
+    next = Math.round(next * 100) / 100;
+    if (Math.abs(next - renderPixelRatio) < 0.01) return;
+    renderPixelRatio = next;
+    renderer.setPixelRatio(renderPixelRatio);
+    const rect = host.getBoundingClientRect();
+    renderer.setSize(Math.max(1, Math.round(rect.width || innerWidth)), Math.max(1, Math.round(rect.height || innerHeight)), false);
+    document.documentElement.dataset.sphericalRenderDpr = renderPixelRatio.toFixed(2);
+  }
+
   function onWheel(event) {
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -578,10 +627,12 @@ function install({ runtime, planet, host }) {
     lastFrame = now;
     syncFromExternalRuntimeCamera();
     updateMovement(dt);
+    const lodChanged = ensureGlobalLod();
     if (needsPatchBuild()) buildPatch();
-    if (world.tick - lastGlobalRefreshTick >= GLOBAL_REFRESH_TICKS && state.altitude > 90) buildGlobalPlanet();
+    if (!lodChanged && world.tick - lastGlobalRefreshTick >= GLOBAL_REFRESH_TICKS && state.altitude > 90) buildGlobalPlanet();
     refreshFauna(now);
     resize();
+    updateAdaptiveDpr(dt, now);
     updateCamera();
     renderer.render(scene, camera);
     frames++;
@@ -607,7 +658,7 @@ function install({ runtime, planet, host }) {
       presentation: {
         ...(base.presentation || {}),
         renderer: 'three-single-spherical-world-scene',
-        geometry: 'single-displaced-sphere-with-local-spherical-lod',
+        geometry: 'distance-adaptive-displaced-sphere-with-local-spherical-lod',
         projection: 'perspective',
         spherical: true,
         visibleCanvasId: canvas.id,
@@ -619,7 +670,7 @@ function install({ runtime, planet, host }) {
 
   function getState() {
     return {
-      version: 2,
+      version: 3,
       model: 'single-three-scene-single-camera-spherical-lod',
       x: state.x,
       y: state.y,
@@ -628,10 +679,17 @@ function install({ runtime, planet, host }) {
       yaw: state.yaw,
       pitch: state.pitch,
       altitude: state.altitude,
-      tier: document.documentElement.dataset.planetCameraTier || 'orbit',
+      tier: document.documentElement.dataset.planetCameraTier || 'aerial',
       canvasId: canvas.id,
       renderer: 'Three.WebGLRenderer',
       visibleCanvases: 1,
+      globalLod: globalLod.name,
+      globalSegments: [globalLod.widthSegments, globalLod.heightSegments],
+      localPatchSegments: LOCAL_PATCH_SEGMENTS,
+      localPatchBuildAltitude: LOCAL_PATCH_BUILD_ALTITUDE,
+      renderPixelRatio,
+      renderDprCap,
+      averageFrameMs,
       globalBuilds,
       patchBuilds,
       faunaRefreshes,
@@ -687,7 +745,7 @@ function install({ runtime, planet, host }) {
 
   const api = {
     installed: true,
-    version: 2,
+    version: 3,
     model: 'single-three-scene-single-camera-spherical-lod',
     getState,
     getSnapshot: getState,
@@ -703,7 +761,9 @@ function install({ runtime, planet, host }) {
   planet.worldView = api;
   document.body.dataset.worldViewSystem = 'single-three-spherical-camera';
   document.documentElement.dataset.worldViewReady = 'true';
-  document.documentElement.dataset.worldViewRegime = 'orbit';
+  document.documentElement.dataset.worldViewRegime = 'ground';
+  document.documentElement.dataset.sphericalRenderDpr = renderPixelRatio.toFixed(2);
+  document.documentElement.dataset.sphericalGlobalLod = globalLod.name;
   window.dispatchEvent(new CustomEvent('eidolon-world-view-ready', { detail: getState() }));
   return api;
 }
