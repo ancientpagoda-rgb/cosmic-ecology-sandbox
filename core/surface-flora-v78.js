@@ -2,8 +2,14 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const LEGACY_FAUNA_EMISSIVE = 0x12202a;
-const FLORA_BUILD = 'v78-native-surface-flora';
+const FLORA_BUILD = 'v79-native-grounded-surface-flora';
+const Z_SCALE = 62;
+const SEA_LEVEL = 0.53;
+const ROOT_Y = -0.58;
+const WET_PLANT_THRESHOLD = 0.12;
 const html = document.documentElement;
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const wrap = (value, max) => ((value % max) + max) % max;
 
 function createPlantGeometry() {
   const parts = [];
@@ -26,10 +32,9 @@ function createPlantGeometry() {
     parts.push(geometry);
   };
 
-  // The legacy surface renderer places each organism's origin roughly 0.58
-  // model-units above the ground for every size class. Building the root at
-  // y=-0.58 means the exact same authoritative placement now roots a plant in
-  // the terrain instead of floating an animal above it.
+  // Root geometry begins below the legacy fauna origin. v79 additionally
+  // replaces the old walking/bobbing matrix with a fixed terrain-grounded one,
+  // so the root remains planted even on uneven terrain.
   add(new THREE.CylinderGeometry(0.12, 0.21, 1.72, 7), [0, 0.28, 0], [0, 0, 0], [1, 1, 1], 0x78583a);
   add(new THREE.IcosahedronGeometry(0.24, 1), [0, -0.48, 0], [0, 0, 0], [1.25, 0.65, 1.25], 0x5f6f38);
 
@@ -57,8 +62,6 @@ function createPlantGeometry() {
   add(new THREE.IcosahedronGeometry(0.44, 1), [0.38, 1.42, 0.18], [0, 0.4, 0], [1.08, 0.62, 0.92], 0x79a95a);
   add(new THREE.IcosahedronGeometry(0.42, 1), [-0.36, 1.38, -0.21], [0, -0.5, 0], [1.10, 0.61, 0.94], 0x6ba054);
 
-  // A small flower/seed crown makes the silhouette unmistakably botanical at
-  // the same viewing distance where the old head/horns used to read as fauna.
   for (let index = 0; index < 6; index += 1) {
     const angle = index / 6 * Math.PI * 2;
     add(
@@ -89,10 +92,99 @@ const state = {
   visiblePlants: 0,
   scans: 0,
   lastScan: null,
+  roots: new Map(),
+  rootAnchorKey: '',
+  groundedMatrixWrites: 0,
+  terrainSamples: 0,
+  waterSamples: 0,
+  wetPlantsSuppressed: new Set(),
 };
 
 const plantGeometry = createPlantGeometry();
 const nativeSceneAdd = THREE.Scene.prototype.add;
+
+function normalizeSphereSample(x, y, world) {
+  let sx = x;
+  let sy = y;
+  while (sy < 0 || sy > world.height) {
+    if (sy < 0) {
+      sy = -sy;
+      sx += world.width * 0.5;
+    } else if (sy > world.height) {
+      sy = world.height - (sy - world.height);
+      sx += world.width * 0.5;
+    }
+  }
+  return { x: wrap(sx, world.width), y: clamp(sy, 0, world.height) };
+}
+
+function surfaceAnchor() {
+  const surface = window.realitySandboxSurfaceSphereV37?.getStats?.();
+  const planet = window.realitySandboxPlanet;
+  const world = planet?.world;
+  if (!surface || !world) return null;
+  const parts = String(surface.activeChunkKey || '').split(':').map(Number);
+  const stride = Number(surface.chunkStride);
+  if (parts.length !== 2 || !parts.every(Number.isFinite) || !Number.isFinite(stride)) return null;
+  return {
+    key: surface.activeChunkKey,
+    x: wrap((parts[0] + 0.5) * stride, world.width),
+    y: clamp((parts[1] + 0.5) * stride, 0, world.height),
+    curvatureRadius: Number(surface.curvatureRadius) || Math.max(world.width, world.height) * 22,
+    world,
+    planet,
+  };
+}
+
+function sphereSag(localX, localZ, radius) {
+  const d2 = localX * localX + localZ * localZ;
+  const r2 = radius * radius;
+  return radius - Math.sqrt(Math.max(1, r2 - Math.min(d2, r2 - 1)));
+}
+
+function rootFor(index, localX, localZ, uniformScale, yaw) {
+  const anchor = surfaceAnchor();
+  if (!anchor) return null;
+
+  if (state.rootAnchorKey !== anchor.key) {
+    state.rootAnchorKey = anchor.key;
+    state.roots.clear();
+    state.wetPlantsSuppressed.clear();
+  }
+
+  const cached = state.roots.get(index);
+  if (cached) return cached;
+
+  const samplePoint = normalizeSphereSample(anchor.x + localX, anchor.y + localZ, anchor.world);
+  // Passing a third argument intentionally bypasses the Surface HUD cache in
+  // the v37 wrappers and reaches the authoritative terrain/water samplers.
+  const terrain = anchor.planet.living?.sampleDynamicPlanet?.(samplePoint.x, samplePoint.y, 'flora-root-v79');
+  const water = anchor.planet.waterCycle?.sample?.(samplePoint.x, samplePoint.y, 'flora-root-v79');
+  state.terrainSamples++;
+  state.waterSamples++;
+
+  const elevation = terrain?.land ? clamp(Number(terrain.elevation ?? SEA_LEVEL), 0, 1) : SEA_LEVEL;
+  const groundY = elevation * Z_SCALE - sphereSag(localX, localZ, anchor.curvatureRadius);
+  const wetness = Math.max(
+    Number(water?.river || 0),
+    Number(water?.lake || 0),
+    Number(water?.delta || 0),
+    Number(water?.surface || 0),
+  );
+  const wet = terrain?.land === false || wetness > WET_PLANT_THRESHOLD;
+
+  const root = {
+    localX,
+    localZ,
+    groundY,
+    uniformScale,
+    yaw,
+    wet,
+  };
+  state.roots.set(index, root);
+  if (wet) state.wetPlantsSuppressed.add(index);
+  return root;
+}
 
 function convertLegacyFaunaMesh(scene, object) {
   if (!object?.isInstancedMesh || object.userData?.floraV78) return false;
@@ -103,7 +195,7 @@ function convertLegacyFaunaMesh(scene, object) {
   oldGeometry?.dispose?.();
   object.name = 'surfaceFloraV78NativePlants';
   object.userData.floraV78 = true;
-  object.userData.presentation = 'rooted-procedural-plant-individuals';
+  object.userData.presentation = 'fixed-root-procedural-plant-individuals';
 
   if (object.material) {
     object.material.roughness = 0.88;
@@ -115,8 +207,6 @@ function convertLegacyFaunaMesh(scene, object) {
     object.material.needsUpdate = true;
   }
 
-  // Preserve lineage colors, but pull extreme animal colors toward foliage so
-  // every instance still reads as a plant while retaining inherited variation.
   const nativeSetColorAt = object.setColorAt.bind(object);
   object.setColorAt = function setPlantColorAt(index, color) {
     const tint = color?.clone?.() || new THREE.Color(color || 0x6f9b51);
@@ -125,10 +215,36 @@ function convertLegacyFaunaMesh(scene, object) {
     return nativeSetColorAt(index, tint);
   };
 
+  // The authoritative renderer still emits animal walk/bob transforms. Capture
+  // the first location for each instance in the current terrain chunk, sample
+  // the real ground once, and thereafter keep that plant fixed at its root.
+  const nativeSetMatrixAt = object.setMatrixAt.bind(object);
+  const position = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
+  const euler = new THREE.Euler();
+  object.setMatrixAt = function setGroundedPlantMatrixAt(index, matrix) {
+    matrix.decompose(position, quaternion, scale);
+    euler.setFromQuaternion(quaternion, 'XYZ');
+    const uniformScale = Math.max(0.001, Number(scale.x) || 1);
+    const root = rootFor(index, position.x, position.z, uniformScale, euler.y);
+    if (root) {
+      position.x = root.localX;
+      position.z = root.localZ;
+      position.y = root.groundY - ROOT_Y * root.uniformScale + 0.012;
+      quaternion.setFromEuler(new THREE.Euler(0, root.yaw, 0));
+      if (root.wet) scale.set(0.001, 0.001, 0.001);
+      else scale.set(root.uniformScale, root.uniformScale, root.uniformScale);
+      matrix.compose(position, quaternion, scale);
+      state.groundedMatrixWrites++;
+    }
+    return nativeSetMatrixAt(index, matrix);
+  };
+
   state.mesh = object;
   state.scene = scene;
   state.convertedMeshes += 1;
-  html.dataset.surfaceFloraV78 = 'native-gpu-instanced-3d-plants';
+  html.dataset.surfaceFloraV78 = 'native-gpu-instanced-grounded-3d-plants';
   return true;
 }
 
@@ -140,8 +256,8 @@ THREE.Scene.prototype.add = function floraAwareSceneAdd(...objects) {
 
 function plantCount() {
   const legacyCount = Number(state.legacyExpedition?.getVisibleFauna?.());
-  if (Number.isFinite(legacyCount)) return legacyCount;
-  return Number(state.mesh?.count || 0);
+  if (Number.isFinite(legacyCount)) return Math.max(0, legacyCount - state.wetPlantsSuppressed.size);
+  return Math.max(0, Number(state.mesh?.count || 0) - state.wetPlantsSuppressed.size);
 }
 
 function rewriteBotanyNote() {
@@ -192,15 +308,11 @@ function updatePresentationUi() {
   if (help) help.textContent = help.textContent.replace(/E scan life/i, 'E scan plants');
 }
 
-// The authoritative v37 renderer still updates this compatibility dataset each
-// frame. Mirror its count into the flora dataset, then immediately normalize
-// the public creature count to zero. The internal ecological populations stay
-// untouched; only their presentation has changed.
 const creatureDatasetObserver = new MutationObserver(() => {
   const value = Number(html.dataset.surfaceModeVisibleCreatures || 0);
   if (value > 0) {
-    state.visiblePlants = value;
-    html.dataset.surfaceModeVisiblePlants = String(value);
+    state.visiblePlants = Math.max(0, value - state.wetPlantsSuppressed.size);
+    html.dataset.surfaceModeVisiblePlants = String(state.visiblePlants);
     html.dataset.surfaceModeVisibleCreatures = '0';
   }
 });
@@ -224,12 +336,19 @@ const api = {
     presentation: 'procedural-3d-plants',
     rendererIntegration: 'authoritative-surface-instanced-mesh-replacement',
     gpuInstancing: true,
-    swayAnimation: true,
+    rootedToTerrain: true,
+    movementSuppressed: true,
+    wetPlacementSuppressed: true,
+    swayAnimation: false,
     morphologies: ['rosette', 'branching', 'crown'],
     convertedMeshes: state.convertedMeshes,
     hiddenLegacyFauna: state.convertedMeshes,
     legacyFaunaVisible: false,
     visiblePlants: plantCount(),
+    wetPlantsSuppressed: state.wetPlantsSuppressed.size,
+    groundedMatrixWrites: state.groundedMatrixWrites,
+    terrainSamples: state.terrainSamples,
+    waterSamples: state.waterSamples,
     scans: state.scans,
     nativeMeshName: state.mesh?.name || null,
   }),
