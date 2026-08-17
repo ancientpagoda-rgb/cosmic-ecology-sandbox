@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 
-const BUILD = 'v80-water-geometry-stabilization';
+const BUILD = 'v81-stable-smooth-rivers-and-water';
 const CORE_WATER_LOWERING = 0.08;
 const RIVER_LOWERING = 0.20;
-const RIVER_WIDTH_SCALE = 0.84;
 const html = document.documentElement;
 
 const stats = {
@@ -14,8 +13,8 @@ const stats = {
   waterMasksSmoothed: 0,
   skinnyWaterVerticesRemoved: 0,
   riverMeshesPatched: 0,
-  riverVerticesLowered: 0,
-  riverVerticesNarrowed: 0,
+  riverTracesRebuilt: 0,
+  riverVerticesRebuilt: 0,
   renderPassesInspected: 0,
 };
 
@@ -27,7 +26,6 @@ function smoothWaterMask(attribute) {
   const raw = new Float32Array(count);
   for (let i = 0; i < count; i++) raw[i] = attribute.getX(i);
   const next = new Float32Array(count);
-
   const read = (x, z) => raw[Math.max(0, Math.min(side - 1, z)) * side + Math.max(0, Math.min(side - 1, x))];
 
   for (let z = 0; z < side; z++) {
@@ -52,29 +50,40 @@ function smoothWaterMask(attribute) {
       const center = raw[index];
       let value = weighted / Math.max(1, weightTotal);
 
-      // The base terrain-water mesh used to carry very thin river samples. At
-      // coarse tessellation those become giant triangular spikes. Keep broad
-      // lakes/ocean here and leave narrow rivers to surface-rivers-v41.
-      if (center < 0.72 && localMax < 0.92 && strongNeighbors <= 3) {
+      // Stronger morphological opening: broad ocean/lake areas survive, while
+      // one- and two-cell river streaks disappear from this coarse grid. Rivers
+      // are rendered by the dedicated resampled ribbon layer below.
+      if (center < 0.78 && localMax < 0.96 && strongNeighbors <= 5) {
         if (center > 0.02) stats.skinnyWaterVerticesRemoved++;
         value = 0;
       } else {
-        value = THREE.MathUtils.clamp((value - 0.025) * 1.08, 0, 1);
+        value = THREE.MathUtils.clamp((value - 0.045) * 1.10, 0, 1);
       }
 
-      // Preserve deep open water while still smoothing its boundary.
-      if (center >= 0.98 && strongNeighbors >= 5) value = Math.max(value, 0.92);
+      if (center >= 0.98 && strongNeighbors >= 5) value = Math.max(value, 0.94);
       next[index] = value;
     }
   }
 
-  for (let i = 0; i < count; i++) attribute.setX(i, next[i]);
+  // A second light pass removes single-vertex corners left by the first pass.
+  const filtered = new Float32Array(count);
+  const readNext = (x, z) => next[Math.max(0, Math.min(side - 1, z)) * side + Math.max(0, Math.min(side - 1, x))];
+  for (let z = 0; z < side; z++) {
+    for (let x = 0; x < side; x++) {
+      const index = z * side + x;
+      const c = next[index];
+      const average = (c * 4 + readNext(x - 1, z) + readNext(x + 1, z) + readNext(x, z - 1) + readNext(x, z + 1)) / 8;
+      filtered[index] = c >= 0.92 ? Math.max(c, average) : average;
+    }
+  }
+
+  for (let i = 0; i < count; i++) attribute.setX(i, filtered[i]);
   attribute.needsUpdate = true;
   stats.waterMasksSmoothed++;
 }
 
 function patchCoreWater(mesh) {
-  if (!mesh?.isMesh || mesh.userData?.surfaceWaterV80) return false;
+  if (!mesh?.isMesh || mesh.userData?.surfaceWaterV81) return false;
   const geometry = mesh.geometry;
   const material = mesh.material;
   const strengths = geometry?.getAttribute?.('waterStrength');
@@ -82,33 +91,25 @@ function patchCoreWater(mesh) {
   if (!strengths || !positions || !material?.isShaderMaterial) return false;
   if (!String(material.vertexShader || '').includes('attribute float waterStrength')) return false;
 
-  mesh.userData.surfaceWaterV80 = true;
+  mesh.userData.surfaceWaterV81 = true;
   smoothWaterMask(strengths);
 
-  // Pull both ocean and inland water closer to the terrain. The authoritative
-  // renderer deliberately lifted it for visibility, but the old offset made
-  // shorelines look like raised sheets.
-  for (let i = 0; i < positions.count; i++) {
-    positions.setY(i, positions.getY(i) - CORE_WATER_LOWERING);
-  }
+  for (let i = 0; i < positions.count; i++) positions.setY(i, positions.getY(i) - CORE_WATER_LOWERING);
   positions.needsUpdate = true;
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
   stats.waterVerticesLowered += positions.count;
 
-  // Do not use partial transparency for this coarse grid. Alpha interpolation
-  // revealed whole triangles as long dark wedges. Instead use a smoothed mask
-  // with an opaque depth-writing cutoff, which is visually much more stable.
-  if (!material.userData.surfaceWaterV80) {
-    material.userData.surfaceWaterV80 = true;
+  if (!material.userData.surfaceWaterV81) {
+    material.userData.surfaceWaterV81 = true;
     material.transparent = false;
     material.depthWrite = true;
     material.depthTest = true;
     material.alphaTest = 0;
     material.polygonOffset = true;
-    material.polygonOffsetFactor = -0.45;
-    material.polygonOffsetUnits = -0.45;
+    material.polygonOffsetFactor = -0.35;
+    material.polygonOffsetUnits = -0.35;
     material.vertexShader = `
       uniform float time;
       attribute float waterStrength;
@@ -116,7 +117,7 @@ function patchCoreWater(mesh) {
       varying float vWave;
       void main() {
         vec3 p = position;
-        float wave = (sin((p.x + time * 4.6) * 0.15) + cos((p.z - time * 3.9) * 0.13)) * 0.022 * waterStrength;
+        float wave = (sin((p.x + time * 4.6) * 0.15) + cos((p.z - time * 3.9) * 0.13)) * 0.018 * waterStrength;
         p.y += wave;
         vWater = waterStrength;
         vWave = wave;
@@ -129,9 +130,9 @@ function patchCoreWater(mesh) {
       varying float vWater;
       varying float vWave;
       void main() {
-        if (vWater < 0.18) discard;
-        float strength = smoothstep(0.18, 0.88, vWater);
-        float depthMix = clamp(0.18 + strength * 0.70 - vWave * 0.65, 0.0, 1.0);
+        if (vWater < 0.24) discard;
+        float strength = smoothstep(0.24, 0.90, vWater);
+        float depthMix = clamp(0.17 + strength * 0.70 - vWave * 0.55, 0.0, 1.0);
         vec3 color = mix(shallowColor, deepColor, depthMix);
         gl_FragColor = vec4(color, 1.0);
       }
@@ -145,89 +146,165 @@ function patchCoreWater(mesh) {
   return true;
 }
 
-function patchRiver(mesh) {
-  if (!mesh?.isMesh || mesh.name !== 'surfaceRiversV41' || mesh.userData?.surfaceRiverV80) return false;
-  const geometry = mesh.geometry;
-  const material = mesh.material;
-  const positions = geometry?.getAttribute?.('position');
-  if (!positions || !material?.isShaderMaterial) return false;
+function ribbonComponents(geometry) {
+  const positions = geometry.getAttribute('position');
+  const index = geometry.index;
+  const pairCount = Math.floor((positions?.count || 0) / 2);
+  if (!positions || !index || pairCount < 2) return [];
 
-  mesh.userData.surfaceRiverV80 = true;
-
-  // v41 emits each cross-section as a left/right pair. Lower the whole ribbon
-  // and pull both sides toward their midpoint. This removes the raised lip and
-  // the occasional wide triangular-looking bend without changing the path.
-  for (let i = 0; i + 1 < positions.count; i += 2) {
-    const lx = positions.getX(i);
-    const ly = positions.getY(i);
-    const lz = positions.getZ(i);
-    const rx = positions.getX(i + 1);
-    const ry = positions.getY(i + 1);
-    const rz = positions.getZ(i + 1);
-    const cx = (lx + rx) * 0.5;
-    const cz = (lz + rz) * 0.5;
-
-    positions.setXYZ(i, cx + (lx - cx) * RIVER_WIDTH_SCALE, ly - RIVER_LOWERING, cz + (lz - cz) * RIVER_WIDTH_SCALE);
-    positions.setXYZ(i + 1, cx + (rx - cx) * RIVER_WIDTH_SCALE, ry - RIVER_LOWERING, cz + (rz - cz) * RIVER_WIDTH_SCALE);
-    stats.riverVerticesLowered += 2;
-    stats.riverVerticesNarrowed += 2;
+  const adjacency = Array.from({ length: pairCount }, () => new Set());
+  const array = index.array;
+  for (let i = 0; i + 5 < array.length; i += 6) {
+    const pairs = [...new Set(Array.from(array.slice(i, i + 6), value => Math.floor(Number(value) / 2)))];
+    for (let a = 0; a < pairs.length; a++) {
+      for (let b = a + 1; b < pairs.length; b++) {
+        if (pairs[a] === pairs[b]) continue;
+        adjacency[pairs[a]]?.add(pairs[b]);
+        adjacency[pairs[b]]?.add(pairs[a]);
+      }
+    }
   }
-  positions.needsUpdate = true;
-  geometry.computeVertexNormals();
-  geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
 
-  // Keep river geometry opaque too. The path already has two Chaikin smoothing
-  // passes; transparency at the bank was introducing more artifacts than it
-  // removed. The edge shade gives a softer visual border without depth issues.
-  const edge = new Float32Array(positions.count);
-  for (let i = 0; i < positions.count; i++) edge[i] = i % 2 === 0 ? -1 : 1;
-  geometry.setAttribute('riverEdge', new THREE.BufferAttribute(edge, 1));
+  const visited = new Uint8Array(pairCount);
+  const components = [];
+  for (let start = 0; start < pairCount; start++) {
+    if (visited[start] || adjacency[start].size === 0) continue;
+    const stack = [start];
+    const component = [];
+    visited[start] = 1;
+    while (stack.length) {
+      const current = stack.pop();
+      component.push(current);
+      for (const next of adjacency[current]) {
+        if (visited[next]) continue;
+        visited[next] = 1;
+        stack.push(next);
+      }
+    }
+    component.sort((a, b) => a - b);
+    if (component.length >= 2) components.push(component);
+  }
+  return components;
+}
 
-  material.transparent = false;
-  material.depthWrite = true;
-  material.depthTest = true;
-  material.alphaTest = 0;
-  material.polygonOffset = true;
-  material.polygonOffsetFactor = -0.7;
-  material.polygonOffsetUnits = -0.7;
-  material.vertexShader = `
-    attribute float riverStrength;
-    attribute float riverCoord;
-    attribute float riverEdge;
-    varying float vStrength;
-    varying float vCoord;
-    varying float vEdge;
-    varying vec3 vWorld;
-    void main() {
-      vStrength = riverStrength;
-      vCoord = riverCoord;
-      vEdge = riverEdge;
-      vec4 world = modelMatrix * vec4(position, 1.0);
-      vWorld = world.xyz;
-      gl_Position = projectionMatrix * viewMatrix * world;
+function rebuildRiverRibbon(geometry) {
+  const sourcePositions = geometry.getAttribute('position');
+  const sourceStrength = geometry.getAttribute('riverStrength');
+  const components = ribbonComponents(geometry);
+  if (!sourcePositions || !components.length) return null;
+
+  const positions = [];
+  const colors = [];
+  const indices = [];
+  const shallow = new THREE.Color(0x2f86b7);
+  const deep = new THREE.Color(0x15506f);
+  const tangent = new THREE.Vector3();
+  const perpendicular = new THREE.Vector3();
+  let vertexBase = 0;
+
+  for (const component of components) {
+    const control = [];
+    let strengthSum = 0;
+    let widthSum = 0;
+
+    for (const pair of component) {
+      const left = pair * 2;
+      const right = left + 1;
+      if (right >= sourcePositions.count) continue;
+      const lx = sourcePositions.getX(left);
+      const ly = sourcePositions.getY(left);
+      const lz = sourcePositions.getZ(left);
+      const rx = sourcePositions.getX(right);
+      const ry = sourcePositions.getY(right);
+      const rz = sourcePositions.getZ(right);
+      control.push(new THREE.Vector3((lx + rx) * 0.5, (ly + ry) * 0.5 - RIVER_LOWERING, (lz + rz) * 0.5));
+      widthSum += Math.hypot(lx - rx, lz - rz);
+      strengthSum += sourceStrength ? (sourceStrength.getX(left) + sourceStrength.getX(right)) * 0.5 : 0.5;
     }
-  `;
-  material.fragmentShader = `
-    uniform float time;
-    uniform vec3 shallowColor;
-    uniform vec3 deepColor;
-    varying float vStrength;
-    varying float vCoord;
-    varying float vEdge;
-    varying vec3 vWorld;
-    void main() {
-      float flowBand = sin(vCoord * 0.085 - time * (1.25 + vStrength * 1.55));
-      float crossRipple = sin((vWorld.x + vWorld.z) * 0.09 + time * 0.95);
-      float shimmer = flowBand * 0.026 + crossRipple * 0.009;
-      float bank = smoothstep(1.0, 0.0, abs(vEdge));
-      vec3 color = mix(shallowColor, deepColor, clamp(0.18 + vStrength * 0.68 - shimmer, 0.0, 1.0));
-      color = mix(color * 0.94, color * 1.035, bank);
-      gl_FragColor = vec4(color, 1.0);
+    if (control.length < 2) continue;
+
+    // Cap widths aggressively. The source renderer allows very wide flow-based
+    // ribbons; close to the camera those become giant wedges. Preserve relative
+    // river scale but constrain it to a believable visual range.
+    const averageStrength = THREE.MathUtils.clamp(strengthSum / control.length, 0, 1);
+    const sourceWidth = widthSum / control.length;
+    const fullWidth = THREE.MathUtils.clamp(sourceWidth * 0.36 + averageStrength * 0.55, 0.42, 2.35);
+
+    let curve;
+    if (control.length >= 3) curve = new THREE.CatmullRomCurve3(control, false, 'centripetal', 0.45);
+    const sampleCount = Math.min(120, Math.max(control.length * 4, 10));
+    let distanceAlong = 0;
+    let previous = null;
+
+    for (let sample = 0; sample < sampleCount; sample++) {
+      const t = sampleCount === 1 ? 0 : sample / (sampleCount - 1);
+      const point = curve ? curve.getPoint(t) : control[0].clone().lerp(control[control.length - 1], t);
+      if (curve) curve.getTangent(t, tangent);
+      else tangent.copy(control[control.length - 1]).sub(control[0]).normalize();
+      perpendicular.set(-tangent.z, 0, tangent.x);
+      if (perpendicular.lengthSq() < 1e-8) perpendicular.set(1, 0, 0);
+      perpendicular.normalize().multiplyScalar(fullWidth * 0.5);
+
+      if (previous) distanceAlong += previous.distanceTo(point);
+      previous = point.clone();
+
+      const left = point.clone().add(perpendicular);
+      const right = point.clone().sub(perpendicular);
+      positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
+
+      const flowPulse = 0.10 * Math.sin(distanceAlong * 0.08);
+      const color = shallow.clone().lerp(deep, THREE.MathUtils.clamp(0.24 + averageStrength * 0.62 + flowPulse, 0, 1));
+      colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
     }
-  `;
-  material.needsUpdate = true;
+
+    for (let sample = 0; sample < sampleCount - 1; sample++) {
+      const a = vertexBase + sample * 2;
+      const b = a + 1;
+      const c = a + 2;
+      const d = a + 3;
+      indices.push(a, c, b, b, c, d);
+    }
+
+    vertexBase += sampleCount * 2;
+    stats.riverTracesRebuilt++;
+  }
+
+  if (!positions.length || !indices.length) return null;
+  const rebuilt = new THREE.BufferGeometry();
+  rebuilt.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  rebuilt.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  rebuilt.setIndex(indices);
+  rebuilt.computeVertexNormals();
+  rebuilt.computeBoundingBox();
+  rebuilt.computeBoundingSphere();
+  stats.riverVerticesRebuilt += positions.length / 3;
+  return rebuilt;
+}
+
+function patchRiver(mesh) {
+  if (!mesh?.isMesh || mesh.name !== 'surfaceRiversV41' || mesh.userData?.surfaceRiverV81) return false;
+  const rebuilt = rebuildRiverRibbon(mesh.geometry);
+  if (!rebuilt) return false;
+
+  mesh.userData.surfaceRiverV81 = true;
+  const oldGeometry = mesh.geometry;
+  mesh.geometry = rebuilt;
+  oldGeometry?.dispose?.();
+
+  // A stable standard material avoids the old alpha/depth interactions while
+  // vertex colors keep some visual variation along the stream.
+  mesh.material = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    roughness: 0.34,
+    metalness: 0,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -0.65,
+    polygonOffsetUnits: -0.65,
+  });
   mesh.renderOrder = 3;
+  mesh.frustumCulled = true;
   stats.riverMeshesPatched++;
   return true;
 }
