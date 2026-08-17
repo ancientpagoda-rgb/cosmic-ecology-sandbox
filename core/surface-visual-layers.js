@@ -13,10 +13,11 @@ import './surface-rivers-v41.js';
 import './surface-celestials-v38.js';
 import './surface-solar-lighting-v36.js';
 import './surface-vegetation-v38.js';
+import './surface-flora-v78.js';
 import './surface-horizon-v38.js';
 import './surface-weather-v39.js';
 import './surface-large-planet-coverage-v43.js';
 import './surface-gpu-backend-diagnostics.js';
 import './surface-mobile-controls.js';
 
-export const surfaceVisualLayers = 'v46e-lazy';
+export const surfaceVisualLayers = 'v78-flora-world';
