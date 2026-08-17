@@ -54,8 +54,8 @@ jobs:
         run: |
           test -f dist/index.html
           test -f dist/version.json
-          grep -q "Eidolon · Procedural Living Planet" dist/index.html
-          grep -q "Eidolon, a fictional procedural living planet" dist/index.html
+          grep -q "Eidolon · Procedural Plant Planet" dist/index.html
+          grep -q "Eidolon, a fictional procedural plant planet" dist/index.html
           grep -q "${GITHUB_SHA}" dist/index.html
           grep -q "${GITHUB_SHA}" dist/version.json
           grep -R -q "procedural-living-planet" dist/assets
