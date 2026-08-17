@@ -37,15 +37,17 @@ fs.mkdirSync(artifactDir, { recursive: true });
       return diagnostics?.surfaceModeRenderer === 'gpu-controller-spherical-topology' &&
         diagnostics?.surfaceGpu?.renderer === 'WebGLRenderer' &&
         diagnostics?.surfaceGpu?.active === true &&
-        diagnostics?.surfaceGpu?.fauna?.capacity > 0 &&
-        typeof window.realitySandboxSurfaceExpedition?.scan === 'function';
+        diagnostics?.surfaceFloraV78?.installed === true &&
+        diagnostics?.surfaceFloraV78?.presentation === 'procedural-3d-plants' &&
+        typeof window.realitySandboxSurfaceExpedition?.scan === 'function' &&
+        typeof window.realitySandboxSurfaceExpedition?.getVisibleFlora === 'function';
     }, null, { timeout: 30000 });
     await page.waitForFunction(
       () => window.realitySandboxSurfaceSphereV37?.getStats?.().nearBuildsCompleted >= 1,
       null,
       { timeout: 30000 },
     );
-    await page.waitForFunction(() => window.realitySandboxSurfaceExpedition?.getVisibleFauna?.() >= 1, null, { timeout: 30000 });
+    await page.waitForFunction(() => window.realitySandboxSurfaceExpedition?.getVisibleFlora?.() >= 1, null, { timeout: 30000 });
     await page.waitForTimeout(220);
 
     const before = await page.evaluate(() => ({
@@ -63,6 +65,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     const after = await page.evaluate(() => ({
       player: window.realitySandboxSurfaceMode.getPlayer(),
       diagnostics: window.realitySandboxPresentationDiagnostics(),
+      flora: window.realitySandboxSurfaceFloraV78?.getStats?.() || null,
       active: window.realitySandboxSurfaceMode.isActive(),
       canvasVisible: (() => {
         const canvas = document.getElementById('surfaceModeCanvas');
@@ -74,6 +77,8 @@ fs.mkdirSync(artifactDir, { recursive: true });
       classicRootPresent: Boolean(document.getElementById('lofiLivingCanvas')),
       experimentalSphericalInstalled: Boolean(window.realitySandboxSingleSphericalRenderer?.installed),
       sphereStats: window.realitySandboxSurfaceSphereV37?.getStats?.() || null,
+      visibleCreatureDataset: document.documentElement.dataset.surfaceModeVisibleCreatures,
+      visiblePlantDataset: document.documentElement.dataset.surfaceModeVisiblePlants,
     }));
 
     await page.screenshot({ path: path.join(artifactDir, 'surface-mode.png'), fullPage: true });
@@ -86,8 +91,14 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(after.diagnostics.surfaceModeRenderer === 'gpu-controller-spherical-topology', `Unexpected classic surface controller (${after.diagnostics.surfaceModeRenderer}).`);
     assert(after.diagnostics.surfaceGpu?.renderer === 'WebGLRenderer' && after.diagnostics.surfaceGpu?.gpuPrimary === true, 'Classic Surface LOD did not select the cached WebGL GPU renderer.');
     assert(before.player.pitch >= 0.18, `Classic Surface view should start terrain-facing, not at the empty horizon (pitch ${before.player.pitch}).`);
-    assert(after.diagnostics.surfaceGpu?.fauna?.renderLoopProceduralSamples === 0, 'Classic Surface fauna performs procedural sampling in the render loop.');
-    assert(after.diagnostics.surfaceGpu?.fauna?.visible >= 1, 'Classic Surface expedition did not present nearby fauna.');
+    assert(after.diagnostics.surfaceGpu?.fauna?.renderLoopProceduralSamples === 0, 'Legacy fauna backend performs procedural sampling in the render loop.');
+    assert(after.flora?.installed === true && after.flora?.presentation === 'procedural-3d-plants', 'The 3D flora presentation did not install.');
+    assert(after.flora?.gpuInstancing === true, 'The 3D flora presentation is not GPU-instanced.');
+    assert(after.flora?.visiblePlants >= 1, 'Surface Mode did not present a nearby 3D plant individual.');
+    assert(after.flora?.legacyFaunaVisible === false, 'A legacy animal mesh remained visible in flora mode.');
+    assert(after.flora?.hiddenLegacyFauna >= 1, 'The legacy animal mesh was not explicitly hidden.');
+    assert(after.visibleCreatureDataset === '0', `Visible creature dataset should be zero in flora mode (${after.visibleCreatureDataset}).`);
+    assert(Number(after.visiblePlantDataset) >= 1, `Visible plant dataset did not report a 3D plant (${after.visiblePlantDataset}).`);
     assert(moved > 0.5, `WASD movement did not move the player enough (${moved}).`);
     assert(after.classicRootPresent, 'Classic root living canvas disappeared while Surface Mode was active.');
     assert(!after.experimentalSphericalInstalled, 'Experimental spherical renderer installed on the default classic route.');
@@ -97,7 +108,6 @@ fs.mkdirSync(artifactDir, { recursive: true });
     await page.evaluate(() => window.realitySandboxSurfaceMode.exit());
     await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'inactive', null, { timeout: 10000 });
 
-    // Re-enter once to verify the classic renderer's resource lifecycle.
     await page.evaluate(() => {
       const camera = window.realitySandboxUnified.getCamera();
       const world = window.realitySandboxPlanet.world;
@@ -105,7 +115,9 @@ fs.mkdirSync(artifactDir, { recursive: true });
     });
     await page.waitForFunction(() => {
       const diagnostics = window.realitySandboxPresentationDiagnostics?.();
-      return document.documentElement.dataset.surfaceMode === 'active' && diagnostics?.surfaceGpu?.active === true;
+      return document.documentElement.dataset.surfaceMode === 'active' &&
+        diagnostics?.surfaceGpu?.active === true &&
+        diagnostics?.surfaceFloraV78?.active === true;
     }, null, { timeout: 15000 });
     await page.evaluate(() => window.realitySandboxSurfaceMode.exit());
     await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'inactive', null, { timeout: 10000 });
