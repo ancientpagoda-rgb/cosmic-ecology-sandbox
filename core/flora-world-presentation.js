@@ -20,27 +20,30 @@ function install({ runtime, planet }) {
   const components = planet.world.ecs.components;
   const originalRender = runtime.render;
 
-  // The animal ecology remains an internal population/evolution engine, but its
-  // animal-shaped overview glyphs are presentation-only. During the Pixi draw,
-  // temporarily make those ids look like resources so the overview renders
-  // terrain, weather, and vegetation without creature silhouettes. The real ECS
-  // maps are restored synchronously before simulation code can observe the shim.
+  // Keep the ecological populations intact, but suppress their legacy animal
+  // glyphs in the Pixi overview. Filtering the position iterator is safer than
+  // pretending animal ids are resource ids: plant/resource readers still see
+  // the real resource map and can never receive a non-resource entity.
   runtime.render = function floraOnlyOverviewRender(frame) {
-    const resources = components.resource;
-    if (!resources?.has) return originalRender.call(runtime, frame);
-    const hadOwnHas = Object.prototype.hasOwnProperty.call(resources, 'has');
-    const previousHas = resources.has;
-    resources.has = function floraPresentationResourceHas(id) {
-      return previousHas.call(resources, id)
-        || components.agent?.has(id)
-        || components.predator?.has(id)
-        || components.apex?.has(id);
+    const positions = components.position;
+    if (!positions?.entries) return originalRender.call(runtime, frame);
+    const hadOwnEntries = Object.prototype.hasOwnProperty.call(positions, 'entries');
+    const previousEntries = positions.entries;
+    positions.entries = function floraPresentationEntries() {
+      const source = previousEntries.call(positions);
+      return (function* filteredPositions() {
+        for (const entry of source) {
+          const id = entry[0];
+          if (components.agent?.has(id) || components.predator?.has(id) || components.apex?.has(id)) continue;
+          yield entry;
+        }
+      })();
     };
     try {
       return originalRender.call(runtime, frame);
     } finally {
-      if (hadOwnHas) resources.has = previousHas;
-      else delete resources.has;
+      if (hadOwnEntries) positions.entries = previousEntries;
+      else delete positions.entries;
     }
   };
 
@@ -82,8 +85,6 @@ function install({ runtime, planet }) {
       if (help.textContent !== floraHelp) help.textContent = floraHelp;
     }
 
-    // Creature-specific editors do not match the new plant presentation. Keep
-    // the underlying lineage engine running but remove those animal-facing tools.
     const foundry = document.querySelector('.planet-foundry');
     if (foundry && foundry.style.display !== 'none') foundry.style.display = 'none';
     const evolution = document.querySelector('.planet-evolution');
