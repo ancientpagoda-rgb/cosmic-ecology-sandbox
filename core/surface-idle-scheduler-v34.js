@@ -9,7 +9,9 @@
   const nativeCic = typeof window.cancelIdleCallback === 'function'
     ? window.cancelIdleCallback.bind(window)
     : null;
-  const MAX_BUILD_SLICE_MS = 2.6;
+  // About one third of a 60 Hz frame: enough to finish the first streamed tile
+  // promptly, but still leaves the majority of each frame for input/camera/GPU.
+  const MAX_BUILD_SLICE_MS = 5.5;
   const pending = new Map();
   let nextId = -1;
   let lastInteraction = -Infinity;
@@ -114,11 +116,11 @@
       pending: pending.size,
       millisecondsSinceInteraction: performance.now() - lastInteraction,
       maxBuildSliceMs: MAX_BUILD_SLICE_MS,
-      policy: 'near-first-2.6ms-capped-interaction-debounced-distant',
+      policy: 'near-first-5.5ms-capped-interaction-debounced-distant',
     }),
   };
   window.realitySandboxSurfaceIdleSchedulerV34 = api;
-  document.documentElement.dataset.surfaceIdleSchedulerV34 = 'near-first-2.6ms-capped';
+  document.documentElement.dataset.surfaceIdleSchedulerV34 = 'near-first-5.5ms-capped';
 
   const prev = window.realitySandboxPresentationDiagnostics;
   window.realitySandboxPresentationDiagnostics = () => ({
