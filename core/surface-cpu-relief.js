@@ -1,4 +1,4 @@
-const SURFACE_SAMPLE_GRID = 48;
+const SURFACE_SAMPLE_GRID = 80;
 const MAX_SAMPLE_CACHE_ENTRIES = 10000;
 const NUMERIC_SAMPLE_KEYS = [
   'elevation', 'temperature', 'moisture', 'fertility', 'rainfall', 'roughness', 'albedo',
@@ -177,7 +177,7 @@ function installCpuRelief({ runtime, planet, mode }) {
   };
 
   window.realitySandboxSurfaceCpuRelief = api;
-  document.documentElement.dataset.surfaceCpuRelief = 'root-render-suspended-bilinear-grid-cache-v83';
+  document.documentElement.dataset.surfaceCpuRelief = 'root-render-suspended-bilinear-grid-cache-v84';
 
   const previousDiagnostics = window.realitySandboxPresentationDiagnostics;
   window.realitySandboxPresentationDiagnostics = () => ({
