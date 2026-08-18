@@ -9,6 +9,7 @@
   const nativeCic = typeof window.cancelIdleCallback === 'function'
     ? window.cancelIdleCallback.bind(window)
     : null;
+  const MAX_BUILD_SLICE_MS = 2.6;
   const pending = new Map();
   let nextId = -1;
   let lastInteraction = -Infinity;
@@ -19,6 +20,7 @@
     deferredRuns: 0,
     deferredCancels: 0,
     interactionDeferrals: 0,
+    cappedNativeRuns: 0,
     maxPending: 0,
   };
 
@@ -27,18 +29,28 @@
     window.addEventListener(type, markInteraction, { passive: true, capture: true });
   }
 
-  function makeDeadline(start, budget = 5) {
+  function makeDeadline(start, budget = MAX_BUILD_SLICE_MS, nativeDeadline = null) {
     return {
-      didTimeout: false,
-      timeRemaining: () => Math.max(0, budget - (performance.now() - start)),
+      didTimeout: Boolean(nativeDeadline?.didTimeout),
+      timeRemaining() {
+        const localRemaining = Math.max(0, budget - (performance.now() - start));
+        if (!nativeDeadline?.timeRemaining) return localRemaining;
+        return Math.min(localRemaining, Math.max(0, nativeDeadline.timeRemaining()));
+      },
     };
   }
 
   function scheduleNative(fn, timeout) {
-    if (nativeRic) return nativeRic(fn, { timeout });
+    if (nativeRic) {
+      return nativeRic(nativeDeadline => {
+        const start = performance.now();
+        stats.cappedNativeRuns++;
+        fn(makeDeadline(start, MAX_BUILD_SLICE_MS, nativeDeadline));
+      }, { timeout });
+    }
     return setTimeout(() => {
       const start = performance.now();
-      fn(makeDeadline(start, 4));
+      fn(makeDeadline(start));
     }, 0);
   }
 
@@ -53,10 +65,10 @@
     const now = performance.now();
     const quietFor = now - lastInteraction;
     const due = [...pending.values()].sort((a, b) => a.createdAt - b.createdAt);
-    const item = due.find(entry => quietFor >= 115 || now >= entry.deadlineAt);
+    const item = due.find(entry => quietFor >= 180 || now >= entry.deadlineAt);
     if (!item) {
       stats.interactionDeferrals++;
-      scheduledPump = setTimeout(pump, 45);
+      scheduledPump = setTimeout(pump, 28);
       return;
     }
     pending.delete(item.id);
@@ -79,7 +91,7 @@
       id,
       callback,
       createdAt: now,
-      deadlineAt: now + Math.max(160, timeout || 220),
+      deadlineAt: now + Math.max(180, timeout || 220),
     });
     stats.deferredRequests++;
     stats.maxPending = Math.max(stats.maxPending, pending.size);
@@ -101,11 +113,12 @@
       ...stats,
       pending: pending.size,
       millisecondsSinceInteraction: performance.now() - lastInteraction,
-      policy: 'near-first-interaction-debounced-distant',
+      maxBuildSliceMs: MAX_BUILD_SLICE_MS,
+      policy: 'near-first-2.6ms-capped-interaction-debounced-distant',
     }),
   };
   window.realitySandboxSurfaceIdleSchedulerV34 = api;
-  document.documentElement.dataset.surfaceIdleSchedulerV34 = 'near-first-interaction-debounced-distant';
+  document.documentElement.dataset.surfaceIdleSchedulerV34 = 'near-first-2.6ms-capped';
 
   const prev = window.realitySandboxPresentationDiagnostics;
   window.realitySandboxPresentationDiagnostics = () => ({
@@ -113,4 +126,3 @@
     surfaceIdleSchedulerV34: api.getStats(),
   });
 })();
-
