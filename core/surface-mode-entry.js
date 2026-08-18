@@ -8,5 +8,4 @@ import './surface-mode-sphere-controller-v33.js';
 import './surface-cpu-relief.js';
 import './surface-mode-dblclick-bridge.js';
 import './presentation-invariant-compat.js';
-import './surface-vegetation-v38.js';
 import './surface-flora-v78.js';
