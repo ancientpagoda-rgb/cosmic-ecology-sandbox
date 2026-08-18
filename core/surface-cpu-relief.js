@@ -1,5 +1,9 @@
-const SURFACE_SAMPLE_GRID = 20;
+const SURFACE_SAMPLE_GRID = 48;
 const MAX_SAMPLE_CACHE_ENTRIES = 10000;
+const NUMERIC_SAMPLE_KEYS = [
+  'elevation', 'temperature', 'moisture', 'fertility', 'rainfall', 'roughness', 'albedo',
+  'rain', 'cloud', 'lake', 'river', 'delta', 'snowpack', 'groundwater', 'runoff', 'evaporation', 'soilMoisture',
+];
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const wrap = (value, max) => ((value % max) + max) % max;
@@ -84,7 +88,7 @@ function installCpuRelief({ runtime, planet, mode }) {
   }
 
   function nodeKey(x, y) {
-    return `${x.toFixed(3)}:${y.toFixed(3)}`;
+    return `${x.toFixed(2)}:${y.toFixed(2)}`;
   }
 
   function sampleNode(cache, nativeSample, x, y, hitField, missField) {
@@ -103,14 +107,7 @@ function installCpuRelief({ runtime, planet, mode }) {
     const nearest = ty < 0.5 ? (tx < 0.5 ? a : b) : (tx < 0.5 ? c : d);
     if (!nearest || typeof nearest !== 'object') return nearest;
     const result = { ...nearest };
-    const keys = new Set([
-      ...Object.keys(a || {}),
-      ...Object.keys(b || {}),
-      ...Object.keys(c || {}),
-      ...Object.keys(d || {}),
-    ]);
-
-    for (const key of keys) {
+    for (const key of NUMERIC_SAMPLE_KEYS) {
       const av = a?.[key];
       const bv = b?.[key];
       const cv = c?.[key];
@@ -180,7 +177,7 @@ function installCpuRelief({ runtime, planet, mode }) {
   };
 
   window.realitySandboxSurfaceCpuRelief = api;
-  document.documentElement.dataset.surfaceCpuRelief = 'root-render-suspended-bilinear-grid-cache';
+  document.documentElement.dataset.surfaceCpuRelief = 'root-render-suspended-bilinear-grid-cache-v83';
 
   const previousDiagnostics = window.realitySandboxPresentationDiagnostics;
   window.realitySandboxPresentationDiagnostics = () => ({
