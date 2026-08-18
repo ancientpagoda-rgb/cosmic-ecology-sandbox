@@ -141,8 +141,12 @@ function installCpuRelief({ runtime, planet, mode }) {
     return bilerp(a, b, c, d, tx, ty);
   }
 
+  function cacheableSurfaceRead(rest) {
+    return rest.length === 0 || (rest.length === 1 && rest[0] === 'vegetation-v38');
+  }
+
   planet.living.sampleDynamicPlanet = function surfaceCachedTerrainSample(x, y, ...rest) {
-    if (rest.length || !Number.isFinite(x) || !Number.isFinite(y) || !syncCacheSession()) {
+    if (!cacheableSurfaceRead(rest) || !Number.isFinite(x) || !Number.isFinite(y) || !syncCacheSession()) {
       stats.terrainHotMisses++;
       return nativeTerrainSample(x, y, ...rest);
     }
@@ -151,7 +155,7 @@ function installCpuRelief({ runtime, planet, mode }) {
   };
 
   planet.waterCycle.sample = function surfaceCachedWaterSample(x, y, ...rest) {
-    if (rest.length || !Number.isFinite(x) || !Number.isFinite(y) || !syncCacheSession()) {
+    if (!cacheableSurfaceRead(rest) || !Number.isFinite(x) || !Number.isFinite(y) || !syncCacheSession()) {
       stats.waterHotMisses++;
       return nativeWaterSample(x, y, ...rest);
     }
@@ -171,6 +175,7 @@ function installCpuRelief({ runtime, planet, mode }) {
       terrainCacheSize: terrainGrid.size,
       waterCacheSize: waterGrid.size,
       bilinearSurfaceSampling: true,
+      vegetationSamplingCached: true,
     }),
   };
 
