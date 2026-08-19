@@ -117,7 +117,7 @@ export function createSumerianUrbanLayer({
 
   function dataForCity(cityId) {
     if (!cityData.has(cityId)) {
-      cityData.set(cityId, { cityId, wardIds: [], serial: 0, opened: 0, settled: 0, relocated: 0 });
+      cityData.set(cityId, { cityId, wardIds: [], serial: 0, opened: 0, settled: 0, relocated: 0, compounds: 0 });
     }
     return cityData.get(cityId);
   }
@@ -277,6 +277,8 @@ export function createSumerianUrbanLayer({
       ward.householdIds.delete(compound.householdId);
     }
     corridors.get(compound.corridorId)?.compoundIds.delete(compound.id);
+    const data = dataForCity(compound.cityId);
+    data.compounds = Math.max(0, data.compounds - 1);
     compounds.delete(compound.householdId);
   }
 
@@ -307,6 +309,7 @@ export function createSumerianUrbanLayer({
     corridor.compoundIds.add(id);
     household.urbanParentNodeId = `compound:${id}`;
     const data = dataForCity(household.cityId);
+    data.compounds += 1;
     if (reason === 'relocation') data.relocated += 1;
     else data.settled += 1;
     const type = reason === 'relocation' ? transactionTypes?.RELOCATE : transactionTypes?.SETTLE;
@@ -389,15 +392,15 @@ export function createSumerianUrbanLayer({
 
   function summary(cityId) {
     const wardRows = currentWardRows(cityId);
-    const compoundRows = [...compounds.values()].filter(compound => compound.cityId === cityId);
+    const data = dataForCity(cityId);
     const corridorRows = wardRows.flatMap(ward => ward.corridorIds.map(id => corridors.get(id)).filter(Boolean));
-    const householdCount = Math.max(1, compoundRows.length);
+    const householdCount = Math.max(1, data.compounds);
     const weighted = key => wardRows.reduce((sum, ward) => sum + ward[key] * ward.householdIds.size, 0) / householdCount;
     return {
       cityId,
       wards: wardRows.length,
       corridors: corridorRows.length,
-      compounds: compoundRows.length,
+      compounds: data.compounds,
       targetHouseholdsPerWard: TARGET_HOUSEHOLDS_PER_WARD,
       hardWardCap: null,
       displayCap: null,
@@ -546,6 +549,13 @@ export function createSumerianUrbanLayer({
       assertClose(compound.population, profile.living, `${household.id} population`);
       assertClose(compound.adults, profile.adults, `${household.id} adults`);
       assertClose(compound.statusTotal, profile.statusTotal, `${household.id} statusTotal`);
+    }
+    const compoundCountsByCity = new Map(cities.map(city => [city.id, 0]));
+    for (const compound of compounds.values()) {
+      compoundCountsByCity.set(compound.cityId, (compoundCountsByCity.get(compound.cityId) || 0) + 1);
+    }
+    for (const city of cities) {
+      assertClose(dataForCity(city.id).compounds, compoundCountsByCity.get(city.id) || 0, `${city.id} compound count`);
     }
     for (const ward of wards.values()) {
       let population = 0;
