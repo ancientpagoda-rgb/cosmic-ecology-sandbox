@@ -100,8 +100,20 @@ export function createSumerianSocialLayer({
   const households = new Map();
   const cityData = new Map();
   const maturitySchedule = new Map();
+  const dirtyHouseholdIds = new Set();
+  let trackUrbanChanges = false;
   let personSerial = 0;
   let householdSerial = 0;
+
+  function markHouseholdDirty(householdId) {
+    if (trackUrbanChanges && householdId) dirtyHouseholdIds.add(householdId);
+  }
+
+  function drainUrbanChanges() {
+    const householdIds = [...dirtyHouseholdIds];
+    dirtyHouseholdIds.clear();
+    return householdIds;
+  }
 
   function makeCityData(city) {
     const occupations = Object.fromEntries(SUMER_OCCUPATIONS.map(name => [name, 0]));
@@ -147,6 +159,7 @@ export function createSumerianSocialLayer({
     };
     households.set(id, household);
     cityData.get(cityId).householdIds.add(id);
+    markHouseholdDirty(id);
     return household;
   }
 
@@ -156,6 +169,7 @@ export function createSumerianSocialLayer({
     person.occupation = occupation;
     person.status = STATUS_BY_OCCUPATION[occupation] || 0.25;
     data.occupations[occupation] += 1;
+    markHouseholdDirty(person.householdId);
   }
 
   function assignOccupation(person, city, reason = 'adulthood') {
@@ -201,6 +215,7 @@ export function createSumerianSocialLayer({
       data.statusTotal += person.status;
       scheduleMaturity(person);
     }
+    markHouseholdDirty(household.id);
     return person;
   }
 
@@ -238,6 +253,7 @@ export function createSumerianSocialLayer({
         data.householdIds.delete(household.id);
       }
     }
+    markHouseholdDirty(person.householdId);
     return true;
   }
 
@@ -334,6 +350,7 @@ export function createSumerianSocialLayer({
   }
 
   for (const city of cities) initializeCity(city);
+  trackUrbanChanges = true;
 
   function beginYear() {
     const maturities = maturitySchedule.get(state.yearIndex) || [];
@@ -349,6 +366,7 @@ export function createSumerianSocialLayer({
       data.statusTotal -= person.status || 0;
       const occupation = assignOccupation(person, city, 'adulthood');
       data.statusTotal += person.status || 0;
+      markHouseholdDirty(person.householdId);
       const counts = byCity.get(city.id) || {};
       counts[occupation] = (counts[occupation] || 0) + 1;
       byCity.set(city.id, counts);
@@ -424,6 +442,7 @@ export function createSumerianSocialLayer({
     }
     from.migrantsOut += moved;
     to.migrantsIn += moved;
+    markHouseholdDirty(household.id);
     return moved;
   }
 
@@ -566,5 +585,6 @@ export function createSumerianSocialLayer({
     observePerson,
     snapshot,
     assertConsistent,
+    drainUrbanChanges,
   };
 }

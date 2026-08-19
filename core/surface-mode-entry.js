@@ -1,8 +1,11 @@
 import './pointer-lock-compat.js';
-// The original project’s production surface stack: a lightweight controller,
-// cached CPU reads, and a view-priority WebGL terrain renderer. Keeping these
-// separate prevents simulation work from leaking into the display frame.
+// Install the Three.js capture hook before the surface renderer creates its
+// scene, then attach only the plant presentation layers needed by the flora
+// world. This keeps the current production controller authoritative without
+// re-enabling the retired presentation bundle.
+import './surface-light-hook-v36.js';
 import './surface-mode-sphere-controller-v33.js';
 import './surface-cpu-relief.js';
 import './surface-mode-dblclick-bridge.js';
 import './presentation-invariant-compat.js';
+import './surface-flora-v78.js';

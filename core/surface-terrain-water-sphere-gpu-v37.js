@@ -6,16 +6,17 @@ const SEA_LEVEL = 0.53;
 const Z_SCALE = 62;
 const TILE_SIZE = 420;
 const TILE_HALF = TILE_SIZE / 2;
-const CHUNK_STRIDE = 72;
-const NEAR_SEGMENTS_DESKTOP = 52;
-const NEAR_SEGMENTS_MOBILE = 52;
-const MID_SEGMENTS_DESKTOP = 18;
-const MID_SEGMENTS_MOBILE = 14;
-const FAR_SEGMENTS_DESKTOP = 10;
-const FAR_SEGMENTS_MOBILE = 8;
-const NEAR_SAMPLES_PER_SLICE = 220;
-const DISTANT_SAMPLES_PER_SLICE = 80;
-const DISTANT_START_DELAY_MS = 360;
+const CHUNK_STRIDE = 180;
+const NEAR_REBUILD_RADIUS = 145;
+const NEAR_SEGMENTS_DESKTOP = 36;
+const NEAR_SEGMENTS_MOBILE = 30;
+const MID_SEGMENTS_DESKTOP = 14;
+const MID_SEGMENTS_MOBILE = 12;
+const FAR_SEGMENTS_DESKTOP = 8;
+const FAR_SEGMENTS_MOBILE = 6;
+const NEAR_SAMPLES_PER_SLICE = 160;
+const DISTANT_SAMPLES_PER_SLICE = 60;
+const DISTANT_START_DELAY_MS = 900;
 const FOV_DEGREES = 100;
 const TILE_OVERLAP = 1.003;
 // Eidolon is geographically vast.  The simulation remains compact, while the
@@ -25,7 +26,7 @@ const CURVATURE_RADIUS_FACTOR = 22.0;
 const NEAR_CACHE_LIMIT = 3;
 const REAR_VIEW_DOT_THRESHOLD = -0.22;
 const FAUNA_CAPACITY = 96;
-const FAUNA_REFRESH_MS = 180;
+const FAUNA_REFRESH_MS = 260;
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const wrap = (value, max) => ((value % max) + max) % max;
@@ -648,8 +649,19 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
   }
 
   function requestNearBuild(player) {
+    // Do not thrash the builder by cancelling an in-flight tile every time the
+    // player crosses another chunk boundary. Finish the current near tile,
+    // then decide whether a recenter is actually needed.
+    if (requestedChunkKey) return;
+
+    if (activeChunkKey && Number.isFinite(anchorX) && Number.isFinite(anchorY)) {
+      const dx = shortestWrappedDelta(player.x, anchorX, world.width);
+      const dz = player.y - anchorY;
+      if (dx * dx + dz * dz < NEAR_REBUILD_RADIUS * NEAR_REBUILD_RADIUS) return;
+    }
+
     const chunk = chunkForPlayer(player);
-    if (chunk.key === activeChunkKey || chunk.key === requestedChunkKey) return;
+    if (chunk.key === activeChunkKey) return;
 
     const cached = nearCache.get(chunk.key);
     if (cached) {
@@ -995,10 +1007,12 @@ function install({ planet, modules, mode, layer, inputCanvas }) {
       farSegments,
       tileSize: TILE_SIZE,
       chunkStride: CHUNK_STRIDE,
+      nearRebuildRadius: NEAR_REBUILD_RADIUS,
       plannedDistantTiles: 24,
       viewPriorityEnabled: true,
       bestAvailableRefinement: true,
       rearTileDeferral: true,
+      nearBuildThrashSuppressed: true,
       nearCacheLimit: NEAR_CACHE_LIMIT,
       nearCacheSize: nearCache.size,
     }),

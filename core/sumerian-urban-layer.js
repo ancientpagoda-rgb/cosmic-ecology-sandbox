@@ -17,6 +17,7 @@ function unitHash(input) {
 const WARD_TYPES = Object.freeze(['temple', 'market', 'canal', 'craft', 'residential', 'gate']);
 const TARGET_HOUSEHOLDS_PER_WARD = 140;
 const TARGET_COMPOUNDS_PER_CORRIDOR = 45;
+const METRIC_EPSILON = 1e-7;
 
 function typeBase(type) {
   switch (type) {
@@ -71,6 +72,7 @@ function householdProfile(social, household) {
     living,
     adults,
     occupations,
+    statusTotal,
     meanStatus: living ? statusTotal / living : 0,
   };
 }
@@ -162,6 +164,7 @@ export function createSumerianUrbanLayer({
       householdIds: new Set(),
       population: 0,
       adults: 0,
+      statusTotal: 0,
       meanStatus: 0,
       density: 0,
       canalAccess: 0,
@@ -222,10 +225,9 @@ export function createSumerianUrbanLayer({
     return affinity + statusPreference + deterministicTie - load * 2.2;
   }
 
-  function chooseWard(household) {
+  function chooseWard(household, profile) {
     const cityId = household.cityId;
     const rows = currentWardRows(cityId);
-    const profile = householdProfile(social, household);
     let best = rows[0];
     let bestScore = -Infinity;
     for (const ward of rows) {
@@ -259,15 +261,29 @@ export function createSumerianUrbanLayer({
     };
   }
 
+  function applyWardDelta(ward, populationDelta, adultsDelta, statusDelta) {
+    ward.population += populationDelta;
+    ward.adults += adultsDelta;
+    ward.statusTotal += statusDelta;
+    if (Math.abs(ward.population) < METRIC_EPSILON) ward.population = 0;
+    if (Math.abs(ward.adults) < METRIC_EPSILON) ward.adults = 0;
+    if (Math.abs(ward.statusTotal) < METRIC_EPSILON) ward.statusTotal = 0;
+  }
+
   function removeCompound(compound) {
-    wards.get(compound.wardId)?.householdIds.delete(compound.householdId);
+    const ward = wards.get(compound.wardId);
+    if (ward) {
+      applyWardDelta(ward, -compound.population, -compound.adults, -compound.statusTotal);
+      ward.householdIds.delete(compound.householdId);
+    }
     corridors.get(compound.corridorId)?.compoundIds.delete(compound.id);
     compounds.delete(compound.householdId);
   }
 
   function placeHousehold(household, reason = 'settlement') {
     ensureWardCount(household.cityId, social.summary(household.cityId).households);
-    const ward = chooseWard(household);
+    const profile = householdProfile(social, household);
+    const ward = chooseWard(household, profile);
     const corridor = chooseCorridor(ward);
     const point = compoundPosition(household.id, corridor);
     const id = `${household.id}:compound`;
@@ -281,9 +297,13 @@ export function createSumerianUrbanLayer({
       x: point.x,
       y: point.y,
       frontage: 0.45 + unitHash(`${seed}|${household.id}|frontage`) * 0.55,
+      population: profile.living,
+      adults: profile.adults,
+      statusTotal: profile.statusTotal,
     };
     compounds.set(household.id, compound);
     ward.householdIds.add(household.id);
+    applyWardDelta(ward, compound.population, compound.adults, compound.statusTotal);
     corridor.compoundIds.add(id);
     household.urbanParentNodeId = `compound:${id}`;
     const data = dataForCity(household.cityId);
@@ -296,25 +316,25 @@ export function createSumerianUrbanLayer({
     return compound;
   }
 
-  function updateWardMetrics(ward) {
+  function updateCompoundMetrics(compound, household) {
+    const ward = wards.get(compound.wardId);
+    if (!ward) throw new Error(`Sumer compound lacks ward while updating metrics: ${compound.householdId}`);
+    const profile = householdProfile(social, household);
+    const populationDelta = profile.living - compound.population;
+    const adultsDelta = profile.adults - compound.adults;
+    const statusDelta = profile.statusTotal - compound.statusTotal;
+    if (populationDelta || adultsDelta || Math.abs(statusDelta) > METRIC_EPSILON) {
+      applyWardDelta(ward, populationDelta, adultsDelta, statusDelta);
+      compound.population = profile.living;
+      compound.adults = profile.adults;
+      compound.statusTotal = profile.statusTotal;
+    }
+  }
+
+  function refreshWardMetrics(ward) {
     const city = cityById(ward.cityId);
     const base = typeBase(ward.type);
-    let population = 0;
-    let adults = 0;
-    let statusTotal = 0;
-    let statusCount = 0;
-    for (const householdId of ward.householdIds) {
-      const household = social.households.get(householdId);
-      if (!household) continue;
-      const profile = householdProfile(social, household);
-      population += profile.living;
-      adults += profile.adults;
-      statusTotal += profile.meanStatus * profile.living;
-      statusCount += profile.living;
-    }
-    ward.population = population;
-    ward.adults = adults;
-    ward.meanStatus = statusCount ? statusTotal / statusCount : 0;
+    ward.meanStatus = ward.population ? ward.statusTotal / ward.population : 0;
     ward.density = ward.householdIds.size / TARGET_HOUSEHOLDS_PER_WARD;
     const densityPenalty = clamp((ward.density - 0.9) * 0.22, 0, 0.20);
     ward.canalAccess = clamp(base.canal * 0.62 + clamp(city.canalHealth || 0, 0, 1) * 0.38 - densityPenalty * 0.35, 0, 1);
@@ -324,29 +344,46 @@ export function createSumerianUrbanLayer({
     ward.foodAccess = clamp(base.food * 0.52 + clamp(city.foodRatio || 0, 0, 1) * 0.48 - densityPenalty * 0.35, 0, 1);
   }
 
+  function bootstrap() {
+    for (const city of cities) ensureWardCount(city.id, social.summary(city.id).households);
+    for (const household of social.households.values()) placeHousehold(household, 'initial');
+    for (const ward of wards.values()) refreshWardMetrics(ward);
+    assertConsistent();
+    return snapshot();
+  }
+
   function reconcile() {
     for (const city of cities) {
       ensureWardCount(city.id, social.summary(city.id).households);
     }
 
-    for (const [householdId, compound] of [...compounds]) {
+    const changedHouseholdIds = typeof social.drainUrbanChanges === 'function'
+      ? social.drainUrbanChanges()
+      : [...social.households.keys()];
+
+    for (const householdId of changedHouseholdIds) {
       const household = social.households.get(householdId);
+      const compound = compounds.get(householdId);
       if (!household) {
-        removeCompound(compound);
+        if (compound) removeCompound(compound);
+        continue;
+      }
+      if (!compound) {
+        placeHousehold(household, state.yearIndex === 0 ? 'initial' : 'settlement');
         continue;
       }
       if (household.cityId !== compound.cityId) {
         removeCompound(compound);
         placeHousehold(household, 'relocation');
+        continue;
       }
+      updateCompoundMetrics(compound, household);
     }
 
-    for (const household of social.households.values()) {
-      if (!compounds.has(household.id)) placeHousehold(household, state.yearIndex === 0 ? 'initial' : 'settlement');
+    for (const ward of wards.values()) refreshWardMetrics(ward);
+    if (compounds.size !== social.households.size) {
+      throw new Error(`Sumer urban compound mismatch: compounds=${compounds.size} households=${social.households.size}`);
     }
-
-    for (const ward of wards.values()) updateWardMetrics(ward);
-    assertConsistent();
     return snapshot();
   }
 
@@ -485,6 +522,12 @@ export function createSumerianUrbanLayer({
     return kernel.requestResolution({ observerId, nodeId: path.compoundNodeId, spatialScale: 35, temporalScale: 0.25 });
   }
 
+  function assertClose(actual, expected, label) {
+    if (Math.abs(actual - expected) > METRIC_EPSILON) {
+      throw new Error(`Sumer urban metric mismatch for ${label}: cached=${actual} scanned=${expected}`);
+    }
+  }
+
   function assertConsistent() {
     if (compounds.size !== social.households.size) {
       throw new Error(`Sumer urban compound mismatch: compounds=${compounds.size} households=${social.households.size}`);
@@ -499,6 +542,28 @@ export function createSumerianUrbanLayer({
       if (!corridor || corridor.wardId !== ward.id) throw new Error(`Sumer compound lacks valid corridor: ${household.id}`);
       if (!ward.householdIds.has(household.id)) throw new Error(`Sumer ward missing household membership: ${household.id}`);
       if (!corridor.compoundIds.has(compound.id)) throw new Error(`Sumer corridor missing compound membership: ${household.id}`);
+      const profile = householdProfile(social, household);
+      assertClose(compound.population, profile.living, `${household.id} population`);
+      assertClose(compound.adults, profile.adults, `${household.id} adults`);
+      assertClose(compound.statusTotal, profile.statusTotal, `${household.id} statusTotal`);
+    }
+    for (const ward of wards.values()) {
+      let population = 0;
+      let adults = 0;
+      let statusTotal = 0;
+      for (const householdId of ward.householdIds) {
+        const household = social.households.get(householdId);
+        if (!household) throw new Error(`Sumer ward contains stale household: ${householdId}`);
+        const profile = householdProfile(social, household);
+        population += profile.living;
+        adults += profile.adults;
+        statusTotal += profile.statusTotal;
+      }
+      assertClose(ward.population, population, `${ward.id} population`);
+      assertClose(ward.adults, adults, `${ward.id} adults`);
+      assertClose(ward.statusTotal, statusTotal, `${ward.id} statusTotal`);
+      assertClose(ward.meanStatus, population ? statusTotal / population : 0, `${ward.id} meanStatus`);
+      assertClose(ward.density, ward.householdIds.size / TARGET_HOUSEHOLDS_PER_WARD, `${ward.id} density`);
     }
     return true;
   }
@@ -508,6 +573,7 @@ export function createSumerianUrbanLayer({
     return {
       version: 1,
       model: 'persistent-ward-corridor-compound',
+      metricUpdateMode: 'event-driven-household-deltas',
       exactHouseholds: true,
       displayCap: null,
       hardWardCap: null,
@@ -518,7 +584,7 @@ export function createSumerianUrbanLayer({
     };
   }
 
-  reconcile();
+  bootstrap();
 
   return {
     version: 1,
