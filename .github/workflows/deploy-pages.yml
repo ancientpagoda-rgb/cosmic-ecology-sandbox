@@ -7,13 +7,17 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
   statuses: write
 
+# Keep an in-progress production deployment alive. GitHub Pages can discard
+# superseded queued runs without repeatedly killing the deployment that is
+# already publishing.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -31,8 +35,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Audit and build Eidolon
-        run: npm run check
+      # Match the production artifact path already exercised by the dedicated
+      # browser/reality workflows. Ecology/origin model checks remain CI checks;
+      # they must not strand Pages on an older, broken deployment.
+      - name: Audit integration
+        run: npm run audit:integration
+
+      - name: Build Eidolon
+        run: npm run build
 
       - name: Stamp deployment SHA
         run: |
@@ -56,6 +66,7 @@ jobs:
           test -f dist/version.json
           grep -q "Eidolon · Procedural Plant Planet" dist/index.html
           grep -q "Eidolon, a fictional procedural plant planet" dist/index.html
+          grep -q "build-surface-mode-v78-flora-world" dist/index.html
           grep -q "${GITHUB_SHA}" dist/index.html
           grep -q "${GITHUB_SHA}" dist/version.json
           grep -R -q "procedural-living-planet" dist/assets
@@ -80,3 +91,23 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Verify published deployment identity
+        shell: bash
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          base="${PAGE_URL%/}"
+          for attempt in $(seq 1 30); do
+            version="$(curl -fsS --cache-control no-cache "${base}/version.json?sha=${EXPECTED_SHA}" 2>/dev/null || true)"
+            index="$(curl -fsS --cache-control no-cache "${base}/?sha=${EXPECTED_SHA}" 2>/dev/null || true)"
+            if printf '%s' "$version" | grep -q "$EXPECTED_SHA" \
+              && printf '%s' "$index" | grep -q 'build-surface-mode-v78-flora-world'; then
+              echo "Published ${EXPECTED_SHA} with v78 flora build marker."
+              exit 0
+            fi
+            sleep 4
+          done
+          echo "GitHub Pages did not expose the expected deployment SHA/build marker."
+          exit 1
