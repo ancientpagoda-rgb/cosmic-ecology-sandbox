@@ -29,7 +29,7 @@ jobs:
               sha: context.sha,
               state: 'pending',
               context: 'browser/visual-quality',
-              description: 'Classic renderer and screenshot regression checks are running',
+              description: 'Smooth default and classic fallback checks are running',
               target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             });
 
@@ -64,15 +64,15 @@ jobs:
           cat /tmp/reality-preview.log
           exit 1
 
-      - name: Verify classic Surface Mode behavior
+      - name: Verify classic Surface Mode fallback behavior
         id: surface_test
         continue-on-error: true
         env:
-          REALITY_BASE_URL: http://127.0.0.1:4173/
+          REALITY_BASE_URL: http://127.0.0.1:4173/?renderer=classic
           REALITY_SURFACE_MODE_ARTIFACT_DIR: artifacts/surface-mode-smoke
         run: node scripts/surface-mode-smoke.cjs
 
-      - name: Capture and enforce visual regression quality
+      - name: Capture and enforce production visual quality
         id: visual_test
         continue-on-error: true
         env:
@@ -107,14 +107,14 @@ jobs:
               sha: context.sha,
               state: ok ? 'success' : 'failure',
               context: 'browser/visual-quality',
-              description: ok ? 'Classic Surface Mode and screenshot quality checks passed' : `Surface=${surfaceOk ? 'ok' : 'failed'} visual=${visualOk ? 'ok' : 'failed'}`,
+              description: ok ? 'Smooth default and classic fallback checks passed' : `Surface=${surfaceOk ? 'ok' : 'failed'} visual=${visualOk ? 'ok' : 'failed'}`,
               target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
             });
 
-      - name: Fail because classic Surface smoke failed
+      - name: Fail because classic Surface fallback smoke failed
         if: always() && steps.surface_test.outcome != 'success'
         run: exit 1
 
-      - name: Fail because visual regression failed
+      - name: Fail because production visual regression failed
         if: always() && steps.visual_test.outcome != 'success'
         run: exit 1
