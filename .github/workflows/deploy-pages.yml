@@ -66,7 +66,7 @@ jobs:
           test -f dist/version.json
           grep -q "Eidolon · Procedural Plant Planet" dist/index.html
           grep -q "Eidolon, a fictional procedural plant planet" dist/index.html
-          grep -q "build-surface-mode-v78-flora-world" dist/index.html
+          grep -q "build-v86-smooth-spherical-default" dist/index.html
           grep -q "${GITHUB_SHA}" dist/index.html
           grep -q "${GITHUB_SHA}" dist/version.json
           grep -R -q "procedural-living-planet" dist/assets
@@ -103,11 +103,11 @@ jobs:
             version="$(curl -fsS --cache-control no-cache "${base}/version.json?sha=${EXPECTED_SHA}" 2>/dev/null || true)"
             index="$(curl -fsS --cache-control no-cache "${base}/?sha=${EXPECTED_SHA}" 2>/dev/null || true)"
             if printf '%s' "$version" | grep -q "$EXPECTED_SHA" \
-              && printf '%s' "$index" | grep -q 'build-surface-mode-v78-flora-world'; then
-              echo "Published ${EXPECTED_SHA} with v78 flora build marker."
+              && printf '%s' "$index" | grep -q 'build-v86-smooth-spherical-default'; then
+              echo "Published ${EXPECTED_SHA} with v86 smooth spherical default."
               exit 0
             fi
             sleep 4
           done
-          echo "GitHub Pages did not expose the expected deployment SHA/build marker."
+          echo "GitHub Pages did not expose the expected v86 deployment SHA/build marker."
           exit 1
