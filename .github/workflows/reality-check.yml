@@ -26,7 +26,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          payload=$(printf '{"state":"pending","context":"reality-check/browser","description":"Classic renderer reality check is running","target_url":"%s"}' "$TARGET_URL")
+          payload=$(printf '{"state":"pending","context":"reality-check/browser","description":"Smooth default and fallback reality check is running","target_url":"%s"}' "$TARGET_URL")
           curl --fail-with-body -L \
             -X POST \
             -H 'Accept: application/vnd.github+json' \
@@ -67,14 +67,16 @@ jobs:
           cat /tmp/eidolon-preview.log
           exit 1
 
-      - name: Interact with classic renderer and run visual stress gate
+      - name: Interact with production renderer and classic fallback
         id: reality
         continue-on-error: true
-        run: npm run check:surface && npm run check:visual
+        shell: bash
         env:
-          REALITY_BASE_URL: http://127.0.0.1:4173/
           REALITY_SURFACE_MODE_ARTIFACT_DIR: artifacts/reality-check/surface-mode
           REALITY_VISUAL_ARTIFACT_DIR: artifacts/reality-check/visual-regression
+        run: |
+          REALITY_BASE_URL='http://127.0.0.1:4173/?renderer=classic' npm run check:surface
+          REALITY_BASE_URL='http://127.0.0.1:4173/' npm run check:visual
 
       - name: Preserve preview log
         if: always()
@@ -103,10 +105,10 @@ jobs:
         run: |
           if [ "$REALITY_OUTCOME" = "success" ]; then
             state=success
-            description='Classic renderer interaction and visual regression checks passed'
+            description='Smooth default and classic fallback regression checks passed'
           else
             state=failure
-            description='Classic renderer interaction or visual regression failed'
+            description='Production renderer or classic fallback regression failed'
           fi
           payload=$(printf '{"state":"%s","context":"reality-check/browser","description":"%s","target_url":"%s"}' "$state" "$description" "$TARGET_URL")
           curl --fail-with-body -L \
