@@ -116,12 +116,15 @@ jobs:
         run: |
           base="${PAGE_URL%/}"
           for attempt in $(seq 1 30); do
-            version="$(curl -fsS --cache-control no-cache "${base}/version.json?sha=${EXPECTED_SHA}" 2>/dev/null || true)"
-            index="$(curl -fsS --cache-control no-cache "${base}/?sha=${EXPECTED_SHA}" 2>/dev/null || true)"
+            version="$(curl -fsS -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${base}/version.json?sha=${EXPECTED_SHA}&attempt=${attempt}" 2>/dev/null || true)"
+            index="$(curl -fsS -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${base}/?sha=${EXPECTED_SHA}&attempt=${attempt}" 2>/dev/null || true)"
             if printf '%s' "$version" | grep -q "$EXPECTED_SHA" \
               && printf '%s' "$index" | grep -q 'build-v86-smooth-spherical-default'; then
               echo "Published ${EXPECTED_SHA} with v86 smooth spherical default."
               exit 0
+            fi
+            if [ "$attempt" -eq 1 ] || [ $((attempt % 10)) -eq 0 ]; then
+              echo "Waiting for Pages propagation (attempt ${attempt}); observed version: ${version:-<none>}"
             fi
             sleep 4
           done
