@@ -26,6 +26,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Publish pending Pages status
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: 'pending',
+              context: 'pages/deploy',
+              description: 'Eidolon v86 Pages deployment is running',
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            });
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -93,6 +108,7 @@ jobs:
         uses: actions/deploy-pages@v4
 
       - name: Verify published deployment identity
+        id: verify
         shell: bash
         env:
           PAGE_URL: ${{ steps.deployment.outputs.page_url }}
@@ -111,3 +127,22 @@ jobs:
           done
           echo "GitHub Pages did not expose the expected v86 deployment SHA/build marker."
           exit 1
+
+      - name: Publish final Pages status
+        if: always()
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployed = '${{ steps.deployment.outcome }}' === 'success';
+            const verified = '${{ steps.verify.outcome }}' === 'success';
+            const ok = deployed && verified;
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: ok ? 'success' : 'failure',
+              context: 'pages/deploy',
+              description: ok ? 'Eidolon v86 is live on GitHub Pages' : `Pages deploy=${deployed ? 'ok' : 'failed'} verify=${verified ? 'ok' : 'failed'}`,
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            });
