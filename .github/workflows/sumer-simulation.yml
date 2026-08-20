@@ -1,0 +1,59 @@
+name: Sumer civilization simulation
+
+on:
+  pull_request:
+    paths:
+      - 'sumer.html'
+      - 'core/sumerian-*.js'
+      - 'scripts/sumerian-*'
+      - 'packages/multiscale-reality-kernel/**'
+      - 'vite.config.js'
+      - 'package.json'
+      - '.github/workflows/sumer-simulation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sumer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify kernel package and Sumer model
+        run: npm run check:sumer
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build production site
+        run: npm run build
+
+      - name: Start preview
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 --strictPort > /tmp/sumer-preview.log 2>&1 &
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:4173/sumer.html > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/sumer-preview.log
+          exit 1
+
+      - name: Interact with Sumer simulation
+        env:
+          REALITY_BASE_URL: http://127.0.0.1:4173/
+        run: npm run check:sumer-browser
