@@ -24,16 +24,18 @@ function forbidText(file, marker, label = marker) {
 
 requireText('index.html', 'Procedural Living Planet', 'fictional living-planet title');
 requireText('index.html', 'src="./app-seeded.js?', 'seeded simulation root');
-requireText('index.html', 'src="./core/surface-mode-entry.js?', 'classic surface stack is authoritative');
-requireText('index.html', 'src="./core/experimental-spherical-world.js?', 'experimental spherical loader');
+requireText('index.html', 'src="./core/surface-mode-entry.js?', 'legacy surface stack retained as fallback');
+requireText('index.html', 'src="./core/experimental-spherical-world.js?', 'spherical production loader');
 forbidText('index.html', 'src="./core/single-spherical-world-renderer.js?', 'direct spherical renderer boot');
-requireText('index.html', 'build-surface-mode-v77-classic-authoritative-experimental-sphere', 'v77 build marker');
+requireText('index.html', 'build-v86-smooth-spherical-default', 'v86 smooth default build marker');
 
-requireText('core/experimental-spherical-world.js', "params.get('renderer') === 'spherical'", 'explicit spherical query flag');
-requireText('core/experimental-spherical-world.js', "import('./single-spherical-world-renderer.js')", 'lazy experimental renderer import');
+requireText('core/experimental-spherical-world.js', "rendererChoice === 'spherical'", 'explicit spherical query flag');
+requireText('core/experimental-spherical-world.js', "rendererChoice === 'classic'", 'explicit legacy fallback query flag');
+requireText('core/experimental-spherical-world.js', 'productionDefault: true', 'spherical renderer production default');
+requireText('core/experimental-spherical-world.js', "import('./single-spherical-world-renderer.js?", 'lazy production renderer import');
 requireText('core/hide-foundry-panel.js', "selector: '.planet-foundry'", 'foundry panel cleanup retained');
-forbidText('core/hide-foundry-panel.js', "selector: '#enterSurfaceMode'", 'classic enter control hiding');
-forbidText('core/hide-foundry-panel.js', "selector: '#surfaceModeHud button'", 'classic exit control hiding');
+forbidText('core/hide-foundry-panel.js', "selector: '#enterSurfaceMode'", 'legacy enter control hiding');
+forbidText('core/hide-foundry-panel.js', "selector: '#surfaceModeHud button'", 'legacy exit control hiding');
 
 for (const marker of [
   'createOrbitalSystem', 'configurePlanetGeneration', 'createWaterCycle', 'createLivingSystems',
@@ -56,12 +58,12 @@ for (const marker of [
   'function updateAdaptiveDpr(dt, now)',
   'buildPatch();',
   'renderPixelRatio',
-]) requireText('core/single-spherical-world-renderer.js', marker, `experimental quality ${marker}`);
+]) requireText('core/single-spherical-world-renderer.js', marker, `production quality ${marker}`);
 forbidText('core/single-spherical-world-renderer.js', '.eidolon-creatures{display:none', 'forced creature-layer hiding');
 
-requireText('scripts/visual-quality-check.cjs', "classic-overview.png", 'overview screenshot artifact');
-requireText('scripts/visual-quality-check.cjs', "classic-surface.png", 'surface screenshot artifact');
-requireText('scripts/visual-quality-check.cjs', "experimental-spherical.png", 'experimental screenshot artifact');
+requireText('scripts/visual-quality-check.cjs', "classic-overview.png", 'legacy fallback screenshot artifact');
+requireText('scripts/visual-quality-check.cjs', "classic-surface.png", 'legacy surface screenshot artifact');
+requireText('scripts/visual-quality-check.cjs', "experimental-spherical.png", 'smooth default screenshot artifact');
 requireText('scripts/visual-quality-check.cjs', 'colorBuckets', 'visual diversity regression metric');
 requireText('scripts/visual-quality-check.cjs', 'edgeMean', 'spatial-detail regression metric');
 requireText('.github/workflows/browser-smoke.yml', 'node scripts/visual-quality-check.cjs', 'CI visual regression gate');
@@ -69,10 +71,10 @@ requireText('package.json', '"check:visual"', 'visual regression command');
 requireText('README.md', 'Eidolon is not Earth', 'fictional-world boundary');
 
 if (failures.length) {
-  console.error('Reality Sandbox v77 integration audit failed:\n');
+  console.error('Reality Sandbox v86 integration audit failed:\n');
   for (const failure of failures) console.error(`  ✗ ${failure}`);
   console.error(`\n${passes.length} checks passed; ${failures.length} failed.`);
   process.exit(1);
 }
-console.log(`Reality Sandbox v77 integration audit passed: ${passes.length} checks.`);
+console.log(`Reality Sandbox v86 integration audit passed: ${passes.length} checks.`);
 for (const pass of passes) console.log(`  ✓ ${pass}`);
