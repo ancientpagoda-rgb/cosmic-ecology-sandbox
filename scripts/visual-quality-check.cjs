@@ -22,9 +22,13 @@ const BASELINES = {
 
   const results = { classic: {}, experimental: {}, pageErrors: [] };
   try {
+    // The blocky Pixi/Surface renderer remains a deliberate diagnostic fallback.
+    // Exercise it explicitly instead of treating it as the public default.
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
     page.on('pageerror', error => results.pageErrors.push(`classic: ${error.message}`));
-    await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
+    const classicUrl = new URL(baseUrl);
+    classicUrl.searchParams.set('renderer', 'classic');
+    await page.goto(classicUrl.toString(), { waitUntil: 'domcontentloaded', timeout: 120000 });
     await page.waitForFunction(() => Boolean(window.realitySandboxSurfaceMode && window.realitySandboxPlanet && window.realitySandboxUnified), null, { timeout: 120000 });
     await page.waitForTimeout(800);
 
@@ -41,16 +45,16 @@ const BASELINES = {
         return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
       })(),
     }));
-    assert(results.classic.bootstrap.experimentalFlag === 'disabled', `Default route unexpectedly enabled experimental spherical renderer (${results.classic.bootstrap.experimentalFlag}).`);
-    assert(!results.classic.bootstrap.sphericalInstalled, 'Default route installed the experimental spherical renderer.');
-    assert(results.classic.bootstrap.classicSurfaceAvailable, 'Classic Surface Mode is not the authoritative available renderer.');
+    assert(results.classic.bootstrap.experimentalFlag === 'disabled', `Classic fallback unexpectedly enabled spherical renderer (${results.classic.bootstrap.experimentalFlag}).`);
+    assert(!results.classic.bootstrap.sphericalInstalled, 'Classic fallback installed the spherical renderer.');
+    assert(results.classic.bootstrap.classicSurfaceAvailable, 'Classic Surface Mode fallback is unavailable.');
     assert(results.classic.bootstrap.rootCanvasPresent, 'Classic root living canvas is missing.');
-    assert(results.classic.bootstrap.surfaceEnterVisible, 'Classic Enter Surface control is hidden on the default route.');
+    assert(results.classic.bootstrap.surfaceEnterVisible, 'Classic Enter Surface control is hidden on the fallback route.');
 
     const overview = await captureVisual(page, 'classic-overview.png');
     results.classic.overviewSignature = overview.signature;
     results.classic.overviewScreenshotBytes = overview.buffer.length;
-    assertVisual('classic overview', overview.signature, overview.buffer.length, BASELINES.overview);
+    assertVisual('classic overview fallback', overview.signature, overview.buffer.length, BASELINES.overview);
 
     await page.evaluate(() => {
       const { position, agent } = window.realitySandboxPlanet.world.ecs.components;
@@ -88,35 +92,44 @@ const BASELINES = {
     if (results.classic.creatureLayer.present) {
       assert(results.classic.creatureLayer.display !== 'none' && results.classic.creatureLayer.visibility !== 'hidden', 'Established .eidolon-creatures layer is being forcibly hidden.');
     }
-    assert(results.classic.surfaceState.gpu?.active === true, 'Classic GPU Surface renderer is not presenting.');
+    assert(results.classic.surfaceState.gpu?.active === true, 'Classic GPU Surface renderer is not presenting on fallback route.');
     assert(results.classic.surfaceState.sphere?.nearBuildsCompleted >= 1, 'Classic high-detail near terrain never completed.');
 
     const surface = await captureVisual(page, 'classic-surface.png');
     results.classic.surfaceSignature = surface.signature;
     results.classic.surfaceScreenshotBytes = surface.buffer.length;
-    assertVisual('classic surface', surface.signature, surface.buffer.length, BASELINES.surface);
+    assertVisual('classic surface fallback', surface.signature, surface.buffer.length, BASELINES.surface);
 
+    // The unmodified public route must now install the smooth continuous
+    // single-scene spherical renderer automatically.
     const experimental = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
-    experimental.on('pageerror', error => results.pageErrors.push(`experimental: ${error.message}`));
-    const experimentalUrl = new URL(baseUrl);
-    experimentalUrl.searchParams.set('renderer', 'spherical');
-    await experimental.goto(experimentalUrl.toString(), { waitUntil: 'domcontentloaded', timeout: 120000 });
+    experimental.on('pageerror', error => results.pageErrors.push(`smooth-default: ${error.message}`));
+    await experimental.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
     await experimental.waitForFunction(() => Boolean(window.realitySandboxSingleSphericalRenderer?.installed), null, { timeout: 120000 });
     await experimental.waitForTimeout(1200);
 
+    results.experimental.bootstrap = await experimental.evaluate(() => ({
+      rendererFlag: document.documentElement.dataset.experimentalSphericalRenderer,
+      rootRenderer: document.documentElement.dataset.rootRenderer,
+      productionDefault: window.realitySandboxExperimentalSphericalRenderer?.productionDefault === true,
+    }));
+    assert(results.experimental.bootstrap.rendererFlag === 'enabled', `Default route did not enable the spherical renderer (${results.experimental.bootstrap.rendererFlag}).`);
+    assert(results.experimental.bootstrap.rootRenderer === 'single-spherical-world', `Default root renderer is unexpected (${results.experimental.bootstrap.rootRenderer}).`);
+    assert(results.experimental.bootstrap.productionDefault, 'Spherical loader is not marked as the production default.');
+
     results.experimental.state = await experimental.evaluate(() => window.realitySandboxSingleSphericalRenderer.getState());
-    assert(results.experimental.state.altitude <= 18, `Experimental spherical renderer starts too far from the surface (${results.experimental.state.altitude}).`);
-    assert(results.experimental.state.globalLod === 'ground', `Experimental spherical renderer did not start in ground LOD (${results.experimental.state.globalLod}).`);
+    assert(results.experimental.state.altitude <= 18, `Smooth spherical renderer starts too far from the surface (${results.experimental.state.altitude}).`);
+    assert(results.experimental.state.globalLod === 'ground', `Smooth spherical renderer did not start in ground LOD (${results.experimental.state.globalLod}).`);
     assert(results.experimental.state.globalSegments?.[0] >= 160 && results.experimental.state.globalSegments?.[1] >= 96, `Ground globe LOD is too coarse (${results.experimental.state.globalSegments}).`);
     assert(results.experimental.state.localPatchSegments >= 96, `Local terrain patch is too coarse (${results.experimental.state.localPatchSegments}).`);
     assert(results.experimental.state.localPatchBuildAltitude >= 300, `Local terrain patch activates too late (${results.experimental.state.localPatchBuildAltitude}).`);
-    assert(results.experimental.state.patchBuilds >= 1, 'Experimental renderer did not prebuild local terrain before its first close view.');
+    assert(results.experimental.state.patchBuilds >= 1, 'Smooth renderer did not prebuild local terrain before its first close view.');
     assert(results.experimental.state.renderDprCap >= 1.9, `Desktop DPR cap is unexpectedly low (${results.experimental.state.renderDprCap}).`);
 
     const experimentalShot = await captureVisual(experimental, 'experimental-spherical.png');
     results.experimental.signature = experimentalShot.signature;
     results.experimental.screenshotBytes = experimentalShot.buffer.length;
-    assertVisual('experimental spherical', experimentalShot.signature, experimentalShot.buffer.length, BASELINES.experimental);
+    assertVisual('smooth spherical default', experimentalShot.signature, experimentalShot.buffer.length, BASELINES.experimental);
     await experimental.close();
 
     assert(results.pageErrors.length === 0, `Browser visual regression emitted errors: ${results.pageErrors.join(' | ')}`);
