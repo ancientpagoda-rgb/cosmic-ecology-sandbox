@@ -5,7 +5,7 @@ const root = path.resolve(__dirname, '..');
 const app = fs.readFileSync(path.join(root, 'app-seeded.js'), 'utf8');
 const runtime = fs.readFileSync(path.join(root, 'core/lofi-living-runtime.js'), 'utf8');
 const classicEntry = fs.readFileSync(path.join(root, 'core/surface-mode-entry.js'), 'utf8');
-const experimentalLoader = fs.readFileSync(path.join(root, 'core/experimental-spherical-world.js'), 'utf8');
+const productionLoader = fs.readFileSync(path.join(root, 'core/experimental-spherical-world.js'), 'utf8');
 const spherical = fs.readFileSync(path.join(root, 'core/single-spherical-world-renderer.js'), 'utf8');
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const failures = [];
@@ -17,13 +17,15 @@ for (const marker of ['root-module-host-fixed-step', 'living.sampleDynamicPlanet
   if (!runtime.includes(marker)) failures.push(`simulation/runtime contract missing: ${marker}`);
 }
 for (const marker of ['surface-mode-sphere-controller-v33.js', 'surface-cpu-relief.js', 'presentation-invariant-compat.js']) {
-  if (!classicEntry.includes(marker)) failures.push(`classic renderer entry missing: ${marker}`);
+  if (!classicEntry.includes(marker)) failures.push(`legacy renderer entry missing: ${marker}`);
 }
-if (!index.includes('src="./core/surface-mode-entry.js?')) failures.push('index does not load the classic surface stack');
-if (!index.includes('src="./core/experimental-spherical-world.js?')) failures.push('index does not load the experimental renderer gate');
-if (index.includes('src="./core/single-spherical-world-renderer.js?')) failures.push('experimental spherical renderer is booted directly by index');
-if (!experimentalLoader.includes("params.get('renderer') === 'spherical'")) failures.push('experimental spherical renderer lacks an explicit URL flag');
-if (!experimentalLoader.includes("import('./single-spherical-world-renderer.js')")) failures.push('experimental loader does not lazy-load the spherical renderer');
+if (!index.includes('src="./core/surface-mode-entry.js?')) failures.push('index does not retain the legacy surface stack');
+if (!index.includes('src="./core/experimental-spherical-world.js?')) failures.push('index does not load the spherical production gate');
+if (index.includes('src="./core/single-spherical-world-renderer.js?')) failures.push('spherical renderer is booted directly rather than through its fallback-safe loader');
+if (!productionLoader.includes("rendererChoice === 'spherical'")) failures.push('spherical renderer lacks an explicit URL enable flag');
+if (!productionLoader.includes("rendererChoice === 'classic'")) failures.push('legacy renderer lacks an explicit URL fallback flag');
+if (!productionLoader.includes('productionDefault: true')) failures.push('spherical renderer is not marked as the production default');
+if (!productionLoader.includes("import('./single-spherical-world-renderer.js?")) failures.push('production loader does not lazy-load the spherical renderer');
 
 for (const marker of [
   "import * as THREE from 'three'",
@@ -36,7 +38,7 @@ for (const marker of [
   'rendererSwaps: 0',
   'canvasSwaps: 0',
 ]) {
-  if (!spherical.includes(marker)) failures.push(`experimental spherical renderer missing: ${marker}`);
+  if (!spherical.includes(marker)) failures.push(`production spherical renderer missing: ${marker}`);
 }
 
 if (failures.length) {
@@ -44,4 +46,4 @@ if (failures.length) {
   for (const failure of failures) console.error(`  ✗ ${failure}`);
   process.exit(1);
 }
-console.log('Root renderer audit passed: classic v74-style presentation is authoritative and the improved spherical renderer is opt-in.');
+console.log('Root renderer audit passed: the smooth single-scene spherical renderer is authoritative and the classic Pixi/Surface stack remains available as an explicit fallback.');
