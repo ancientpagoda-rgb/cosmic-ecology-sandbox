@@ -111,13 +111,18 @@ const zAxis = new THREE.Vector3(0, 0, 1);
 
 function looksLikeDefaultFauna(object) {
   const material = object?.material;
-  return Boolean(
-    object?.isInstancedMesh &&
-    !object.userData?.sphericalFaunaV88 &&
+  const originalSignature = Boolean(
     material?.isMeshStandardMaterial &&
     material.flatShading === true &&
     Math.abs(Number(material.roughness) - 0.45) < 0.08 &&
     Math.abs(Number(material.metalness) - 0.08) < 0.08
+  );
+  const reusedPolishedMaterial = material?.userData?.sphericalFaunaV88Material === BUILD;
+  return Boolean(
+    object?.isInstancedMesh &&
+    !object.userData?.sphericalFaunaV88 &&
+    material?.isMeshStandardMaterial &&
+    (originalSignature || reusedPolishedMaterial)
   );
 }
 
@@ -128,6 +133,7 @@ function polishFauna(object) {
   object.userData.sphericalFaunaV88 = BUILD;
 
   if (object.material) {
+    object.material.userData.sphericalFaunaV88Material = BUILD;
     object.material.roughness = 0.86;
     object.material.metalness = 0;
     object.material.flatShading = false;
