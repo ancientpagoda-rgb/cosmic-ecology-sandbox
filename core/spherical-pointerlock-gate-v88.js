@@ -1,12 +1,11 @@
 const BUILD = 'v88-right-click-pointer-lock';
 const html = document.documentElement;
 
-async function waitForInput() {
+async function waitForRenderer() {
   for (let attempt = 0; attempt < 360; attempt += 1) {
     const canvas = document.getElementById('eidolonSingleWorldCanvas');
-    const input = window.realitySandboxSphericalInputV88;
     const renderer = window.realitySandboxSingleSphericalRenderer;
-    if (canvas && input?.installed && renderer?.getState) return { canvas, renderer };
+    if (canvas && renderer?.getState) return { canvas, renderer };
     await new Promise(resolve => setTimeout(resolve, 35));
   }
   return null;
@@ -73,7 +72,7 @@ function install({ canvas, renderer }) {
   html.dataset.sphericalPointerLockGate = BUILD;
 }
 
-waitForInput().then(state => {
+waitForRenderer().then(state => {
   if (!state) {
     html.dataset.sphericalPointerLockGate = 'v88-unavailable';
     return;
