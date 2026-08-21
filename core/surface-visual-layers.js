@@ -1,7 +1,7 @@
 // The richer Surface Mode presentation is loaded only after a visitor enters
 // the first-person view. Keeping this bundle separate from the world overview
 // preserves quick startup while retaining atmospheric lighting, weather,
-// rivers, horizon, celestial detail, and the native fauna renderer.
+// rivers, horizon, celestial detail, and layered procedural flora.
 import './surface-wide-pitch-v46d.js';
 import './surface-idle-scheduler-v34.js';
 import './surface-light-hook-v36.js';
@@ -17,7 +17,12 @@ import './surface-horizon-v38.js';
 import './surface-weather-v39.js';
 import './surface-radar-weather-v84.js';
 import './surface-large-planet-coverage-v43.js';
+// Biome-driven trees/shrubs provide the middle and upper vegetation tiers;
+// v88 adds ground cover, readable plant materials, contact shadows, and cheap
+// near-field soil/rock/moisture detail without raising distant terrain LOD.
+import './surface-vegetation-v38.js?v=20260821-v88';
+import './surface-ecology-polish-v88.js?v=20260821-v88';
 import './surface-gpu-backend-diagnostics.js';
 import './surface-mobile-controls.js';
 
-export const surfaceVisualLayers = 'v87-native-fauna-mouse-gamepad';
+export const surfaceVisualLayers = 'v88-layered-procedural-ecology';
