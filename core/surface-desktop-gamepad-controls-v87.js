@@ -99,7 +99,12 @@ function install({ mode, canvas }) {
 
   canvas.addEventListener('click', event => {
     if (!isSurfaceActive() || event.pointerType === 'touch') return;
-    if (document.pointerLockElement !== canvas) canvas.requestPointerLock?.().catch?.(() => {});
+    if (document.pointerLockElement !== canvas) {
+      try {
+        const lockResult = canvas.requestPointerLock?.();
+        lockResult?.catch?.(() => {});
+      } catch {}
+    }
   });
 
   canvas.addEventListener('contextmenu', event => {
@@ -233,10 +238,10 @@ function install({ mode, canvas }) {
     const moveX = deadzone(pad.axes?.[0]);
     const moveY = deadzone(pad.axes?.[1]);
     const moveMagnitude = Math.hypot(moveX, moveY);
-    dispatchKey('KeyA', moveX < -0.08);
-    dispatchKey('KeyD', moveX > 0.08);
-    dispatchKey('KeyW', moveY < -0.08);
-    dispatchKey('KeyS', moveY > 0.08);
+    dispatchKey('KeyA', moveX < -0.02);
+    dispatchKey('KeyD', moveX > 0.02);
+    dispatchKey('KeyW', moveY < -0.02);
+    dispatchKey('KeyS', moveY > 0.02);
 
     const sprint = moveMagnitude > 0.86 || buttonPressed(pad, 10) || buttonPressed(pad, 7, 0.7);
     dispatchKey('ShiftLeft', sprint);
@@ -250,9 +255,13 @@ function install({ mode, canvas }) {
 
     const startPressed = buttonPressed(pad, 9);
     if (startPressed && !previousStartPressed) {
-      const escape = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, code: 'Escape', key: 'Escape' });
-      try { Object.defineProperty(escape, '__surfaceInputV87', { value: true }); } catch {}
-      window.dispatchEvent(escape);
+      if (document.pointerLockElement === canvas) {
+        document.exitPointerLock?.();
+      } else {
+        const escape = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, code: 'Escape', key: 'Escape' });
+        try { Object.defineProperty(escape, '__surfaceInputV87', { value: true }); } catch {}
+        window.dispatchEvent(escape);
+      }
     }
     previousStartPressed = startPressed;
   }
