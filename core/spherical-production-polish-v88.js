@@ -107,6 +107,7 @@ const workMatrix = new THREE.Matrix4();
 const localYaw = new THREE.Quaternion();
 const radial = new THREE.Vector3();
 const tintTarget = new THREE.Color(0xd9ead6);
+const zAxis = new THREE.Vector3(0, 0, 1);
 
 function looksLikeDefaultFauna(object) {
   const material = object?.material;
@@ -149,7 +150,7 @@ function polishFauna(object) {
     // Give each individual a stable tangent heading. The production renderer
     // only aligns one axis to the planet normal, so without this correction the
     // old animal geometry appeared to stand upright like a tiny person.
-    localYaw.setFromAxisAngle(new THREE.Vector3(0, 0, 1), hash01(index, 9) * Math.PI * 2);
+    localYaw.setFromAxisAngle(zAxis, hash01(index, 9) * Math.PI * 2);
     workQuaternion.multiply(localYaw);
 
     const width = 0.9 + hash01(index, 1) * 0.22;
@@ -225,13 +226,15 @@ function featherLocalPatch(object) {
   return true;
 }
 
-THREE.Scene.prototype.add = function sphericalProductionPolishAdd(...objects) {
+function sphericalProductionPolishAdd(...objects) {
   for (const object of objects) {
     polishFauna(object);
     featherLocalPatch(object);
   }
   return nativeSceneAdd.apply(this, objects);
-};
+}
+
+THREE.Scene.prototype.add = sphericalProductionPolishAdd;
 
 window.realitySandboxSphericalPolishV88 = {
   installed: true,
