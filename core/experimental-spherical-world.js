@@ -1,3 +1,5 @@
+import { PLANET_RADIUS, PLANET_SCALE } from './planet-scale.js';
+
 const params = new URLSearchParams(globalThis.location?.search || '');
 const rendererChoice = params.get('renderer');
 const explicitEnable = rendererChoice === 'spherical' || params.get('experimentalSpherical') === '1';
@@ -16,10 +18,15 @@ const enabled = explicitDisable ? false : explicitEnable ? true : storedChoice =
 
 document.documentElement.dataset.experimentalSphericalRenderer = enabled ? 'enabled' : 'disabled';
 document.documentElement.dataset.rootRenderer = enabled ? 'single-spherical-world' : 'legacy-pixi-globe';
+document.documentElement.dataset.sphericalPlanetScale = String(PLANET_SCALE);
+document.documentElement.dataset.sphericalPlanetRadius = String(PLANET_RADIUS);
+document.documentElement.dataset.sphericalPlanetScaleMode = 'native-renderer-build';
 
 window.realitySandboxExperimentalSphericalRenderer = {
   enabled,
   productionDefault: true,
+  planetScale: PLANET_SCALE,
+  planetRadius: PLANET_RADIUS,
   enablePersistently() {
     try { localStorage.setItem('eidolon.experimentalSphericalRenderer', '1'); } catch {}
     return true;
@@ -35,19 +42,16 @@ window.realitySandboxExperimentalSphericalRenderer = {
 };
 
 if (enabled) {
-  // Install presentation hooks before the renderer creates its local terrain
-  // patch or fauna mesh. v90 then expands the spherical embedding to 10x the
-  // radius while preserving local relief/creature scale. Once the renderer
-  // exists, gate right-click capture, install natural mouse/gamepad look, then
-  // let v89 own robust Firefox-safe left-drag.
+  // Planet scale is compiled directly into the renderer before any geometry,
+  // camera, patch, fauna, atmosphere, or star objects exist. No runtime radial
+  // remapping is involved, so the local surface frame stays coherent.
   const polishReady = import('./spherical-production-polish-v88.js?v=20260821-v88')
-    .then(() => import('./spherical-planet-scale-v90.js?v=20260821-v90-ten-x-radius'))
     .catch(error => console.warn('[experimental-spherical-world] spherical presentation polish unavailable:', error));
 
   polishReady
-    .then(() => import('./single-spherical-world-renderer.js?v=20260821-v90-ten-x-planet'))
+    .then(() => import('./single-spherical-world-renderer.js?v=20260821-v91-native-ten-x'))
     .then(() => import('./spherical-pointerlock-gate-v88.js?v=20260821-v88c'))
-    .then(() => import('./spherical-input-polish-v88.js?v=20260821-v89-natural-look'))
+    .then(() => import('./spherical-input-polish-v88.js?v=20260821-v91-ten-x-speed'))
     .then(() => import('./spherical-drag-controls-v89.js?v=20260821-v89-natural-drag'))
     .catch(error => {
       // Input polish is optional. Only mark the renderer as failed if the
