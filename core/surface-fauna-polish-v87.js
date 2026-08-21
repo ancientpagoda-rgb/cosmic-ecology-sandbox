@@ -93,7 +93,10 @@ function polishFauna(object) {
     object.material.roughness = 0.82;
     object.material.metalness = 0;
     object.material.flatShading = false;
-    object.material.vertexColors = true;
+    // Instance colors are already supplied by the renderer. Keeping geometry
+    // vertex colors disabled avoids multiplying them by a missing color stream,
+    // which is what made some animals collapse into nearly-black silhouettes.
+    object.material.vertexColors = false;
     object.material.emissive?.setHex?.(0x0b1711);
     object.material.emissiveIntensity = 0.16;
     object.material.needsUpdate = true;
