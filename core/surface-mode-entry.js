@@ -17,4 +17,20 @@ import './surface-cpu-relief.js';
 import './surface-mode-dblclick-bridge.js';
 import './presentation-invariant-compat.js';
 
+// v33 intentionally lazy-loads its visual bundle after Surface Mode is entered.
+// Import the same bundle with a v88 key at that exact moment so Pages/browser
+// caches cannot strand a visitor on the previous native-fauna presentation.
+let v88VisualsRequested = false;
+function requestV88Visuals() {
+  if (v88VisualsRequested || document.documentElement.dataset.surfaceMode !== 'active') return;
+  v88VisualsRequested = true;
+  import('./surface-visual-layers.js?v=20260821-v88').catch(error => {
+    v88VisualsRequested = false;
+    console.warn('[Surface Mode] v88 ecology visuals could not start.', error);
+  });
+}
+const surfaceModeObserver = new MutationObserver(requestV88Visuals);
+surfaceModeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-surface-mode'] });
+requestV88Visuals();
+
 document.documentElement.dataset.surfaceModeEntry = 'v88-flora-ecology-mouse-gamepad';
