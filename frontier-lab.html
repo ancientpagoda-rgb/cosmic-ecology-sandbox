@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a1315" />
+  <title>Frontier Lab · Pirates and Castles</title>
+  <link rel="stylesheet" href="./frontier-lab.css" />
+</head>
+<body>
+  <main class="frontier-app">
+    <canvas id="frontier-canvas" aria-label="Frontier simulation map"></canvas>
+
+    <section class="frontier-panel frontier-panel--masthead">
+      <p class="frontier-eyebrow">Frontier Lab</p>
+      <h1>Pirates, Ports, and Castles</h1>
+      <p class="frontier-copy">An emergent frontier sandbox where trade routes create raiders, and repeated raids push towns toward forts and castles.</p>
+      <div class="frontier-links">
+        <a href="./index.html">Return to Eidolon</a>
+        <a href="./origins.html">Trace origins</a>
+      </div>
+    </section>
+
+    <section class="frontier-panel frontier-panel--hud">
+      <p class="frontier-hud-title">Pirates, Ports, and Castles</p>
+      <div class="frontier-stats">
+        <article><span>Season</span><strong id="stat-season">spring</strong></article>
+        <article><span>Population</span><strong id="stat-population">0</strong></article>
+        <article><span>Trade</span><strong id="stat-trade">0</strong></article>
+        <article><span>Raiders</span><strong id="stat-raiders">0</strong></article>
+        <article><span>Castles</span><strong id="stat-castles">0</strong></article>
+        <article><span>State Pressure</span><strong id="stat-pressure">0</strong></article>
+      </div>
+      <div class="frontier-pressures">
+        <label><span>Piracy</span><i id="bar-piracy"></i></label>
+        <label><span>Castle</span><i id="bar-castle"></i></label>
+        <label><span>Food Stress</span><i id="bar-food"></i></label>
+      </div>
+    </section>
+
+    <section class="frontier-panel frontier-panel--controls">
+      <div class="frontier-button-row">
+        <button id="toggle-run" type="button">Pause</button>
+        <button id="step-once" type="button">Step</button>
+        <button id="reset-world" type="button">Reset</button>
+      </div>
+      <label class="frontier-speed">
+        <span>Speed</span>
+        <input id="speed-range" type="range" min="1" max="12" step="1" value="4" />
+        <strong id="speed-readout">4×</strong>
+      </label>
+      <div class="frontier-toggle-grid">
+        <label><input id="toggle-routes" type="checkbox" checked /> Routes</label>
+        <label><input id="toggle-units" type="checkbox" checked /> Units</label>
+        <label><input id="toggle-sites" type="checkbox" checked /> Sites</label>
+        <label><input id="toggle-notes" type="checkbox" checked /> Labels</label>
+      </div>
+      <p class="frontier-tip">Click a settlement, fort, or ship to inspect it.</p>
+    </section>
+
+    <section class="frontier-panel frontier-panel--inspector">
+      <p class="frontier-eyebrow">Inspector</p>
+      <h2 id="inspector-title">No selection</h2>
+      <p id="inspector-subtitle" class="frontier-subtitle">Pick a settlement, site, or ship.</p>
+      <dl id="inspector-grid" class="frontier-grid"></dl>
+    </section>
+
+    <section class="frontier-panel frontier-panel--legend">
+      <span><i class="swatch swatch--port"></i> Ports and towns</span>
+      <span><i class="swatch swatch--route"></i> Trade routes</span>
+      <span><i class="swatch swatch--raider"></i> Raider ships</span>
+      <span><i class="swatch swatch--fort"></i> Forts and castles</span>
+    </section>
+  </main>
+
+  <script type="module" src="./frontier-lab.js"></script>
+</body>
+</html>

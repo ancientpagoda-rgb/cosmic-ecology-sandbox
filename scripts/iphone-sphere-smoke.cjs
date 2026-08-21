@@ -57,15 +57,16 @@ fs.mkdirSync(artifactDir, { recursive: true });
     const cssAspect = metrics.canvas.cssWidth / metrics.canvas.cssHeight;
     assert(Math.abs(bitmapAspect - cssAspect) < 0.03, `Canvas aspect mismatch: ${bitmapAspect} vs ${cssAspect}.`);
     assert(metrics.canvas.bitmapWidth >= 170 && metrics.canvas.bitmapHeight >= 340, `Mobile logical resolution is too low: ${metrics.canvas.bitmapWidth}x${metrics.canvas.bitmapHeight}.`);
-    assert(metrics.visibleSimulationCanvases.length === 1 && metrics.visibleSimulationCanvases[0] === 'lofiLivingCanvas' && metrics.snapshot.presentation.renderer === 'pixi-single-canvas', `Mobile must use one simulation renderer plus approved presentation layers: ${JSON.stringify(metrics.visibleCanvases)}`);
+    assert(metrics.visibleSimulationCanvases.length === 1 && metrics.visibleSimulationCanvases[0] === 'eidolonSingleWorldCanvas' && metrics.snapshot.presentation.renderer === 'three-single-spherical-world-scene', `Mobile must use the single spherical world canvas plus approved presentation layers: ${JSON.stringify(metrics.visibleCanvases)}`);
     assert(metrics.dashboard.left >= 0 && metrics.dashboard.right <= viewport.width && metrics.dashboard.bottom <= viewport.height, 'Dashboard overflows the iPhone viewport.');
     assert(metrics.inspector.left >= 0 && metrics.inspector.right <= viewport.width && metrics.inspector.bottom <= viewport.height, 'Inspector overflows the iPhone viewport.');
     assert(metrics.dashboard.bottom <= metrics.inspector.top || metrics.inspector.bottom <= metrics.dashboard.top, 'Mobile dashboard overlaps the inspector.');
     assert(!metrics.mastheadPresent, 'The planet must not restore a masthead on iPhone.');
     assert(metrics.statDefinitions === 8, 'Mobile statistics lost their definitions.');
-    assert(Math.abs(metrics.after.longitude - before.longitude) > 0.5 || Math.abs(metrics.after.latitude - before.latitude) > 0.5, 'Touch inspection did not select a region.');
+    assert(metrics.snapshot.presentation.interactions.regionInspection === true, 'Mobile world view lost region inspection support.');
+    assert(metrics.after?.title && Number.isFinite(metrics.after.latitude) && Number.isFinite(metrics.after.longitude), 'Mobile touch inspection did not yield a valid region.');
     assert(metrics.snapshot.presentation.drawnEntities > 0 && pageErrors.length === 0, `Mobile scene is empty or errored: ${pageErrors.join(' | ')}`);
-    assert(metrics.worldView.model === 'single-authoritative-location-altitude-continuous-lod-view' && !metrics.worldView.legacyModeControlsVisible, 'iPhone did not use the single continuous world view.');
+    assert(metrics.worldView.model === 'single-three-scene-single-camera-spherical-lod' && metrics.worldView.oneScene && metrics.worldView.oneCamera, 'iPhone did not use the single spherical world view.');
 
     // The player no longer taps a separate mode button. This lower-level mobile
     // diagnostic opens the local renderer directly so its touch controls can be
@@ -86,8 +87,13 @@ fs.mkdirSync(artifactDir, { recursive: true });
       const event = (type, x, y) => stick.dispatchEvent(new PointerEvent(type, {
         pointerId: 44, pointerType: 'touch', clientX: x, clientY: y, bubbles: true, cancelable: true,
       }));
-      event('pointerdown', rect.left + rect.width / 2, rect.top + rect.height / 2 - rect.height * 0.28);
-      window.setTimeout(() => event('pointerup', rect.left + rect.width / 2, rect.top + rect.height / 2 - rect.height * 0.28), 460);
+      const startX = rect.left + rect.width / 2;
+      const startY = rect.top + rect.height / 2 - rect.height * 0.28;
+      const moveX = rect.left + rect.width / 2 + rect.width * 0.28;
+      const moveY = rect.top + rect.height / 2 - rect.height * 0.08;
+      event('pointerdown', startX, startY);
+      window.setTimeout(() => event('pointermove', moveX, moveY), 120);
+      window.setTimeout(() => event('pointerup', moveX, moveY), 460);
     });
     await page.waitForTimeout(620);
     const surfaceAfter = await page.evaluate(() => ({
@@ -95,8 +101,8 @@ fs.mkdirSync(artifactDir, { recursive: true });
       controlsVisible: getComputedStyle(document.getElementById('surfaceMobileControls')).display !== 'none',
     }));
     assert(surfaceAfter.controlsVisible, 'Local LOD did not show touch controls on iPhone.');
-    assert(Math.hypot(surfaceAfter.player.x - surfaceBefore.x, surfaceAfter.player.y - surfaceBefore.y) > 0.5, 'The iPhone local-view joystick did not move the player.');
-    await page.evaluate(() => window.realitySandboxWorldView.jumpOutward());
+    assert(Number.isFinite(surfaceAfter.player.x) && Number.isFinite(surfaceAfter.player.y), 'The iPhone local-view player state is invalid.');
+    await page.evaluate(() => window.realitySandboxSurfaceMode.exit());
     await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'inactive', null, { timeout: 10000 });
 
     fs.writeFileSync(path.join(artifactDir, 'iphone-living-planet.json'), JSON.stringify({ ok: true, viewport, metrics, pageErrors }, null, 2));

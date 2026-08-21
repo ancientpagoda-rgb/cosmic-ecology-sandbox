@@ -77,7 +77,7 @@ async function runProfile(browser, name, viewport, exerciseSimulation, isMobile 
         const rect = element.getBoundingClientRect();
         return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0 && rect.width > 0 && rect.height > 0;
       };
-      const buildText = [...document.querySelectorAll('#world > span[hidden]')].map(node => node.textContent.trim()).find(text => text.startsWith('build-surface-mode-v')) || '';
+      const buildText = [...document.querySelectorAll('#world > span[hidden]')].map(node => node.textContent.trim()).find(text => text.includes('build-surface-mode-v')) || '';
       const buildMatch = buildText.match(/build-surface-mode-v(\d+)-/);
       const visibleCanvases = [...document.querySelectorAll('canvas')]
         .filter(visible)
@@ -120,7 +120,7 @@ async function runProfile(browser, name, viewport, exerciseSimulation, isMobile 
     }, { requiredSystems, approved: [...approvedPresentationCanvases] });
 
     writeJson(path.join(name, 'initial.json'), initial);
-    assert(initial.title.includes('Procedural Living Planet'), `${name}: unexpected title ${initial.title}`);
+    assert(initial.title.includes('Procedural Plant Planet'), `${name}: unexpected title ${initial.title}`);
     assert(initial.buildVersion >= 76, `${name}: build marker is stale or missing: ${initial.buildText}`);
     assert(initial.diagnostics?.ok, `${name}: initial diagnostics failed: ${(initial.diagnostics?.failures || []).join(', ')}`);
     assert(initial.worldView?.oneScene && initial.worldView?.oneCamera, `${name}: true one-scene/one-camera world view did not initialize`);
@@ -206,7 +206,7 @@ async function exerciseDesktopInteraction(page) {
     camera: window.realitySandboxUnified.getCamera(),
     view: window.realitySandboxWorldView.getSnapshot(),
   }));
-  assert(Math.abs(dragged.view.x - zoomed.view.x) > 0.01 || Math.abs(dragged.view.y - zoomed.view.y) > 0.01, 'desktop: drag did not move around spherical world');
+  assert(Math.abs(dragged.view.yaw - zoomed.view.yaw) > 0.05 || Math.abs(dragged.view.pitch - zoomed.view.pitch) > 0.05, 'desktop: drag did not orbit around spherical world');
   assert(dragged.view.rendererSwaps === 0 && dragged.view.canvasSwaps === 0, 'desktop: drag swapped renderer/canvas');
 
   const regionBefore = await page.evaluate(() => window.realitySandboxUnified.getSnapshot().selectedRegion);
@@ -221,7 +221,7 @@ async function exerciseDesktopInteraction(page) {
     camera: window.realitySandboxUnified.getCamera(),
     view: window.realitySandboxWorldView.getSnapshot(),
   }));
-  assert(Math.abs(reset.view.altitude - 300) < 0.01, `desktop: continuous camera reset did not restore orbital altitude (${reset.view.altitude})`);
+  assert(Math.abs(reset.view.altitude - before.view.altitude) < 0.01, `desktop: continuous camera reset did not restore orbital altitude (${reset.view.altitude})`);
   assert(reset.view.rendererSwaps === 0 && reset.view.canvasSwaps === 0, 'desktop: reset swapped renderer/canvas');
 
   return { before, zoomed, dragged, reset, regionBefore, regionAfter };

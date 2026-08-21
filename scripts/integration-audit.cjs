@@ -29,25 +29,20 @@ function requireMissing(file, label) {
   else passes.push(`${file}: ${label}`);
 }
 
-const rootEntry = 'app-seeded.js';
-
-requireText('index.html', 'Procedural Living Planet', 'honest fictional-planet title');
-requireText('index.html', 'fictional procedural living planet', 'fictional-world accessibility label');
+requireText('index.html', 'Procedural Plant Planet', 'fictional-planet title');
+requireText('index.html', 'fictional procedural plant planet', 'fictional-world accessibility label');
 requireText('index.html', 'src="./app-seeded.js?', 'seeded project-relative root entry point');
+requireText('index.html', 'src="./core/flora-world-presentation.js?', 'flora presentation entry point');
+requireText('index.html', 'src="./core/monotonic-world-clock.js?', 'monotonic world clock entry point');
 requireText('index.html', 'src="./core/surface-mode-entry.js?', 'bundled local-detail renderer entry point');
-requireText('index.html', 'src="./core/continuous-world-view.js?', 'single continuous world-view controller');
+requireText('index.html', 'src="./core/experimental-spherical-world.js?', 'production spherical loader');
+requireText('index.html', 'build-surface-mode-v78-flora-world', 'flora build marker');
+requireText('index.html', 'build-surface-v85-stable-water-radar', 'surface build marker');
+requireText('index.html', 'build-v86-smooth-spherical-default', 'smooth spherical build marker');
 forbidText('index.html', 'scientific-earth-presentation', 'retired Earth renderer');
 forbidText('index.html', 'lilac-cloud-overlay', 'retired cloud sidecar');
 forbidText('index.html', 'rain-runoff-overlay', 'retired rain sidecar');
 forbidText('index.html', 'iphone-performance-mode', 'retired mobile sidecar');
-requireText('origins.html', 'id="originForm"', 'separate Origins scenario form');
-requireText('origins.html', 'From a universe to one living world', 'Origins narrative handoff');
-requireText('origins.html', 'id="cosmosCanvas"', 'interactive Origins cosmic canvas');
-requireText('origins.html', 'id="cosmicTimeline"', 'interactive Origins time control');
-requireText('origins.js', 'originScenarioParams', 'Origins route emits a portable scenario URL');
-requireText('origins.js', 'function drawCosmos', 'Origins route renders a seed-driven cosmic timeline');
-requireText('core/origin-scenario.js', "origin: 'epic'", 'explicit Origins handoff contract');
-requireText('app-seeded.js', 'readOriginScenario', 'planet root consumes Origins scenario');
 
 for (const marker of [
   'createOrbitalSystem',
@@ -64,103 +59,66 @@ for (const marker of [
   'planet.living-ecology',
   'ecology.seasonal-resource-fields',
   'planet.climate-terrain-feedbacks',
-]) requireText(rootEntry, marker, `root chain ${marker}`);
-requireText(
-  'core/lofi-living-runtime.js',
-  "id: 'runtime.procedural-living-planet'",
-  'root chain runtime.procedural-living-planet'
-);
+]) requireText('app-seeded.js', marker, `root chain ${marker}`);
 
-for (const marker of [
-  'createGalaxySystem',
-  'createCosmicOrigin',
-  'createPhase8Engine',
-  'createPhase9Engine',
-  'createPhase10Engine',
-  'createPhase11Engine',
-  'createHeadlessCivilizationEngine',
-  'installUnifiedDebugExtension',
-  'createDebugBridge',
-]) forbidText(rootEntry, marker, `frozen root import ${marker}`);
-
-requireText('core/plate-tectonics.js', 'createGeodynamicModel', 'seeded planetary interior and convection model');
-requireText('core/plate-tectonics.js', 'stepTectonics', 'evolving tectonic plates');
-requireText('core/plate-tectonics.js', "boundaryType = 'ridge'", 'divergent ridge classification');
-requireText('core/plate-tectonics.js', "boundaryType = 'trench'", 'convergent trench classification');
-requireText('core/plate-tectonics.js', "boundaryType = 'transform'", 'transform-fault classification');
-
-requireText('core/lofi-living-runtime.js', "from 'pixi.js'", 'single PixiJS root renderer');
-requireText('core/lofi-living-runtime.js', 'living.sampleDynamicPlanet', 'renderer uses simulated terrain and climate');
-requireText('core/lofi-living-runtime.js', 'waterCycle.sample', 'renderer uses simulated water state');
-requireText('core/lofi-living-runtime.js', 'biosphere.getSpeciesForEntity', 'renderer uses simulated lineages');
-requireText('core/lofi-living-runtime.js', 'selectAtClientPoint', 'regional inspection interaction');
-requireText('core/lofi-living-runtime.js', 'statisticDefinitions: true', 'inspectable statistic contract');
-requireText('core/lofi-living-runtime.js', "model: 'procedural'", 'procedural-world labeling');
-requireText('core/lofi-living-runtime.js', 'earthData: false', 'explicit no-Earth-data boundary');
-requireText('core/lofi-living-runtime.js', 'root-module-host-fixed-step', 'single authoritative clock');
-forbidText('core/lofi-living-runtime.js', 'ReboundWasmSystem', 'root REBOUND client');
-requireText(
-  'core/lofi-living-runtime.js',
-  "document.getElementById('lofiLivingCanvasBacking')",
-  'retired backing-canvas absence invariant'
-);
-forbidText('core/lofi-living-runtime.js', 'scientific-earth', 'scientific Earth claim');
+requireText('core/lofi-living-runtime.js', "id: 'runtime.procedural-living-planet'", 'root chain runtime.procedural-living-planet');
+requireText('core/flora-world-presentation.js', 'procedural-3d-plants', 'flora presentation contract');
+requireText('core/experimental-spherical-world.js', "rendererChoice === 'spherical'", 'explicit spherical query flag');
+requireText('core/experimental-spherical-world.js', "rendererChoice === 'classic'", 'explicit classic fallback flag');
+requireText('core/experimental-spherical-world.js', 'productionDefault: true', 'spherical renderer production default');
+requireText('core/experimental-spherical-world.js', "import('./single-spherical-world-renderer.js?", 'lazy production renderer import');
+requireText('core/hide-foundry-panel.js', "selector: '.planet-foundry'", 'foundry panel cleanup retained');
+forbidText('core/hide-foundry-panel.js', "selector: '#enterSurfaceMode'", 'legacy enter control hiding');
+forbidText('core/hide-foundry-panel.js', "selector: '#surfaceModeHud button'", 'legacy exit control hiding');
 
 for (const file of ['core/world.js', 'core/living-systems.js', 'core/biosphere.js', 'core/planet-dynamics.js']) {
   forbidText(file, 'Math.random()', 'unseeded random call');
 }
-requireText('core/living-systems.js', 'createLivingSystems(world, rng', 'seeded living systems');
-requireText('core/biosphere.js', 'createBiosphere(world, rng', 'seeded evolution');
-requireText('core/seasonal-resource-fields.js', 'createSeasonalResourceFields', 'seasonal ecology resource field');
-requireText('core/ecology-journal.js', 'createEcologyJournal', 'evolution journal');
-requireText('core/planet-dynamics.js', 'createPlanetDynamics(world, living, waterCycle, rng', 'seeded planet dynamics');
 
-requireText('unified-runtime.css', '#lofiLivingCanvas', 'single canvas styling');
-requireText('unified-runtime.css', '.planet-inspector', 'integrated inspector styling');
-requireText('unified-runtime.css', '.planet-dashboard', 'integrated statistics styling');
-forbidText('unified-runtime.css', '#lofiLivingCanvasBacking', 'backing-canvas styling');
+requireText('scripts/reality-check.cjs', 'exerciseDesktopInteraction', 'desktop browser camera interaction');
+requireText('scripts/reality-check.cjs', 'exerciseBiology', 'causal reproduction browser scenario');
+requireText('scripts/reality-check.cjs', 'exerciseLongRun', 'deterministic long-run browser stress test');
+requireText('scripts/frontier-lab-smoke.cjs', 'Estuary Town', 'frontier settlement selection assertion');
+requireText('scripts/frontier-lab-smoke.cjs', 'frontier-lab.png', 'frontier smoke artifact');
+requireText('scripts/iphone-sphere-smoke.cjs', 'Mobile dashboard overlaps the inspector.', 'mobile panel overlap assertion');
+requireText('scripts/iphone-sphere-smoke.cjs', 'Movement joystick', 'mobile local-view joystick assertion');
+requireText('scripts/iphone-sphere-smoke.cjs', 'window.realitySandboxSurfaceMode.exit()', 'mobile surface-mode exit handoff');
+requireText('scripts/surface-mode-smoke.cjs', "document.documentElement.dataset.surfaceMode === 'active'", 'classic Surface Mode activates in browser');
+requireText('scripts/surface-mode-smoke.cjs', "page.click('#enterSurfaceMode')", 'surface button click assertion');
+requireText('scripts/surface-mode-smoke.cjs', "page.keyboard.down('w')", 'local movement browser assertion');
+requireText('scripts/surface-mode-smoke.cjs', 'surfaceFloraV78?.installed === true', 'flora presentation assertion');
+requireText('scripts/surface-mode-smoke.cjs', 'window.realitySandboxWorldView.jumpOutward()', 'local renderer rejoins unified view');
+requireText('scripts/continuous-world-view-check.cjs', "page.mouse.wheel(0, -520)", 'globe-to-ground zoom descent assertion');
+requireText('scripts/continuous-world-view-check.cjs', "page.mouse.wheel(0, 900)", 'ground-to-globe zoom ascent assertion');
+requireText('scripts/continuous-world-view-check.cjs', 'Simulation stopped in local LOD', 'simulation remains continuous at local scale');
+requireText('scripts/performance-smoke.cjs', 'webglcontextlost', 'surface context-loss fallback assertion');
+requireText('scripts/performance-smoke.cjs', 'STARTUP_PIXEL_BUDGET', 'startup canvas performance budget');
+requireText('scripts/performance-smoke.cjs', 'preEntrySurfaceResources', 'lazy Surface resource performance budget');
+requireText('scripts/visual-quality-check.cjs', 'classic-overview.png', 'legacy fallback screenshot artifact');
+requireText('scripts/visual-quality-check.cjs', 'classic-surface.png', 'legacy surface screenshot artifact');
+requireText('scripts/visual-quality-check.cjs', 'experimental-spherical.png', 'smooth default screenshot artifact');
+requireText('scripts/visual-quality-check.cjs', 'colorBuckets', 'visual diversity regression metric');
+requireText('scripts/visual-quality-check.cjs', 'edgeMean', 'spatial-detail regression metric');
+requireText('core/continuous-world-view.js', "model: 'single-authoritative-location-altitude-continuous-lod-view'", 'single authoritative continuous camera model');
+requireText('core/continuous-world-view.js', "rendererPolicy: 'globe-and-local-renderers-are-private-lod-backends'", 'globe and local renderers are private LOD backends');
 
 requireMissing('.github/workflows/phase8-live.yml', 'Phase 8 live workflow frozen');
 requireMissing('.github/workflows/phase9-live.yml', 'Phase 9 live workflow frozen');
 requireMissing('.github/workflows/phase10-live.yml', 'Phase 10 live workflow frozen');
 requireMissing('.github/workflows/phase11-live.yml', 'Phase 11 live workflow frozen');
-forbidText('.github/workflows/browser-smoke.yml', 'node scripts/browser-smoke.cjs', 'Phase 11 browser suite');
-requireText('.github/workflows/browser-smoke.yml', 'node scripts/reality-check.cjs', 'autonomous living-planet experience check');
+forbidText('.github/workflows/browser-smoke.yml', 'node scripts/browser-smoke.cjs', 'old browser smoke script');
+requireText('.github/workflows/browser-smoke.yml', 'node scripts/reality-check.cjs', 'reality check gate');
+requireText('.github/workflows/browser-smoke.yml', 'node scripts/frontier-lab-smoke.cjs', 'frontier-lab route check');
 requireText('.github/workflows/browser-smoke.yml', 'node scripts/iphone-sphere-smoke.cjs', 'iPhone visual check');
 requireText('.github/workflows/browser-smoke.yml', 'node scripts/surface-mode-smoke.cjs', 'local-renderer interaction check');
 requireText('.github/workflows/browser-smoke.yml', 'node scripts/performance-smoke.cjs', 'startup and local-detail performance check');
+requireText('.github/workflows/browser-smoke.yml', 'node scripts/visual-quality-check.cjs', 'CI visual regression gate');
 
-requireText('scripts/reality-check.cjs', 'exerciseDesktopInteraction', 'real browser camera interaction');
-requireText('scripts/reality-check.cjs', 'exerciseBiology', 'causal reproduction browser scenario');
-requireText('scripts/reality-check.cjs', 'exerciseLongRun', 'deterministic long-run browser stress test');
-requireText('scripts/unified-smoke.cjs', "seedScenario('coupling')", 'terrain-water-inspector coupling scenario');
-requireText('scripts/unified-smoke.cjs', 'statDefinitions === 8', 'defined statistic browser assertion');
-requireText('scripts/unified-smoke.cjs', 'initial.observatory.traits > 0', 'evolution observatory browser assertion');
-requireText('scripts/unified-smoke.cjs', '[title][tabindex="0"]', 'keyboard-inspectable statistic assertion');
-requireText('scripts/iphone-sphere-smoke.cjs', 'Mobile dashboard overlaps the inspector.', 'mobile panel overlap assertion');
-requireText('scripts/iphone-sphere-smoke.cjs', 'Movement joystick', 'mobile local-view joystick assertion');
-requireText('scripts/root-renderer-smoke.cjs', 'visibleSimulationCanvases.length === 1', 'single simulation canvas plus approved presentation layers');
-requireText('scripts/surface-mode-smoke.cjs', "document.documentElement.dataset.surfaceMode === 'active'", 'local detail renderer activates in browser');
-requireText('scripts/surface-mode-smoke.cjs', "page.keyboard.down('w')", 'local movement browser assertion');
-requireText('scripts/surface-mode-smoke.cjs', 'window.realitySandboxWorldView.jumpOutward()', 'local renderer rejoins unified view');
-requireText('scripts/continuous-world-view-check.cjs', "page.mouse.wheel(0, -520)", 'globe-to-ground zoom descent assertion');
-requireText('scripts/continuous-world-view-check.cjs', "page.mouse.wheel(0, 900)", 'ground-to-globe zoom ascent assertion');
-requireText('scripts/continuous-world-view-check.cjs', 'Simulation stopped in local LOD', 'simulation remains continuous at local scale');
-requireText('core/continuous-world-view.js', "model: 'single-authoritative-location-altitude-continuous-lod-view'", 'single authoritative continuous camera model');
-requireText('core/continuous-world-view.js', "rendererPolicy: 'globe-and-local-renderers-are-private-lod-backends'", 'globe and local renderers are private LOD backends');
-requireText('scripts/performance-smoke.cjs', 'webglcontextlost', 'surface context-loss fallback assertion');
-requireText('scripts/performance-smoke.cjs', 'STARTUP_PIXEL_BUDGET', 'startup canvas performance budget');
-requireText('scripts/performance-smoke.cjs', 'preEntrySurfaceResources', 'lazy Surface resource performance budget');
-requireText('core/surface-mode.js', 'DISTANT_CACHE_START', 'surface mode distant terrain cache');
-requireText('core/surface-mode.js', 'MAX_RENDER_LONG_EDGE = 960', 'surface mode render budget');
-
-requireText('reality-engine-v6-9.html', 'ENGINE V6.9 · HOWLER.JS SOUNDSCAPE', 'archived V6.9 compatibility page');
-requireText('README.md', 'Eidolon is not Earth', 'scientific boundary documentation');
-requireText('README.md', 'Scope freeze', 'universe scope freeze documentation');
-requireText('README.md', 'No new phase should be added', 'experience-gate rule');
 requireText('package.json', '"audit:integration"', 'integration audit script');
-requireText('package.json', '"check:ecology"', 'ecology observatory contract script');
+requireText('package.json', '"check:reality"', 'runtime reality contract script');
+requireText('package.json', '"check:surface"', 'surface smoke script');
 requireText('package.json', '"check:view"', 'continuous world-view regression script');
+requireText('package.json', '"check:visual"', 'visual regression command');
 
 if (failures.length) {
   console.error('Reality Sandbox integration audit failed:\n');

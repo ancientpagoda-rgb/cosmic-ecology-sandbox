@@ -60,10 +60,19 @@
   white-space: nowrap;
 }
 
+.planet-frontier-link {
+  border-color: rgb(var(--amber-rgb) / 0.38);
+  background: rgb(var(--amber-rgb) / 0.12);
+}
+
 .planet-seed-field input:hover,
 .planet-seed-actions button:hover,
 .planet-origin-link:hover {
   background: rgb(var(--jade-rgb) / 0.24);
+}
+
+.planet-frontier-link:hover {
+  background: rgb(var(--amber-rgb) / 0.22);
 }
 
 .planet-seed-field input:focus-visible,

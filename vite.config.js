@@ -20,6 +20,7 @@ export default defineConfig({
       input: {
         main: resolve(process.cwd(), 'index.html'),
         origins: resolve(process.cwd(), 'origins.html'),
+        frontierLab: resolve(process.cwd(), 'frontier-lab.html'),
         realityEngineV69: resolve(process.cwd(), 'reality-engine-v6-9.html'),
       },
     },

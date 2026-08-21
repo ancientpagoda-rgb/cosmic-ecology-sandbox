@@ -19,18 +19,8 @@ fs.mkdirSync(artifactDir, { recursive: true });
 
   try {
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
-    await page.waitForFunction(() => Boolean(window.realitySandboxSurfaceMode && window.realitySandboxPlanet && window.realitySandboxUnified), null, { timeout: 120000 });
-    await page.evaluate(() => {
-      const { position, agent } = window.realitySandboxPlanet.world.ecs.components;
-      const firstId = agent.keys().next().value;
-      const target = position.get(firstId);
-      const world = window.realitySandboxPlanet.world;
-      if (target) window.realitySandboxSurfaceMode.enterAt((target.x - 28 + world.width) % world.width, target.y);
-      else {
-        const camera = window.realitySandboxUnified.getCamera();
-        window.realitySandboxSurfaceMode.enterAt(camera.centerX * world.width, camera.centerY * world.height);
-      }
-    });
+    await page.waitForFunction(() => Boolean(window.realitySandboxSurfaceMode && window.realitySandboxPlanet && window.realitySandboxUnified && document.getElementById('enterSurfaceMode')), null, { timeout: 120000 });
+    await page.click('#enterSurfaceMode');
     await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'active', null, { timeout: 30000 });
     await page.waitForFunction(() => {
       const diagnostics = window.realitySandboxPresentationDiagnostics?.();
@@ -66,6 +56,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
       diagnostics: window.realitySandboxPresentationDiagnostics(),
       flora: window.realitySandboxSurfaceFloraV78?.getStats?.() || null,
       active: window.realitySandboxSurfaceMode.isActive(),
+      globePresentation: document.documentElement.dataset.globePresentation,
       canvasVisible: (() => {
         const canvas = document.getElementById('surfaceModeCanvas');
         if (!canvas) return false;
@@ -84,18 +75,16 @@ fs.mkdirSync(artifactDir, { recursive: true });
     fs.writeFileSync(path.join(artifactDir, 'surface-mode.json'), JSON.stringify({ before, after, pageErrors }, null, 2));
 
     const moved = Math.hypot(after.player.x - before.player.x, after.player.y - before.player.y);
-    assert(before.diagnostics.surfaceModeReady === true, 'Classic Surface renderer diagnostics never became ready.');
-    assert(after.active && after.canvasVisible, 'Classic Surface renderer did not remain active with a visible input canvas.');
-    assert(after.diagnostics.surfaceMode === 'active' && after.diagnostics.surfaceModeCanvasPresent, 'Classic Surface diagnostics do not report an active presentation.');
-    assert(after.diagnostics.surfaceModeRenderer === 'gpu-controller-spherical-topology', `Unexpected classic surface controller (${after.diagnostics.surfaceModeRenderer}).`);
-    assert(after.diagnostics.surfaceGpu?.renderer === 'WebGLRenderer' && after.diagnostics.surfaceGpu?.gpuPrimary === true, 'Classic Surface LOD did not select the cached WebGL GPU renderer.');
-    assert(before.player.pitch >= 0.18, `Classic Surface view should start terrain-facing, not at the empty horizon (pitch ${before.player.pitch}).`);
-    assert(after.diagnostics.surfaceGpu?.fauna?.renderLoopProceduralSamples === 0, 'Legacy fauna backend performs procedural sampling in the render loop.');
+    assert(before.diagnostics.surfaceModeReady === true, 'Surface mode diagnostics never became ready.');
+    assert(after.active && after.canvasVisible, 'Surface mode did not remain active with a visible surface canvas.');
+    assert(after.diagnostics.surfaceMode === 'active' && after.diagnostics.surfaceModeCanvasPresent, 'Surface mode diagnostics do not report an active presentation.');
+    assert(after.diagnostics.surfaceModeRenderer === 'gpu-controller-spherical-topology', `Unexpected Surface controller (${after.diagnostics.surfaceModeRenderer}).`);
+    assert(after.diagnostics.surfaceGpu?.renderer === 'WebGLRenderer' && after.diagnostics.surfaceGpu?.gpuPrimary === true, 'Surface mode did not select the cached WebGL GPU renderer.');
+    assert(before.player.pitch >= 0.18, `Surface mode should start terrain-facing, not at the empty horizon (pitch ${before.player.pitch}).`);
+    assert(after.diagnostics.surfaceGpu?.fauna?.renderLoopProceduralSamples === 0, 'Surface fauna performs procedural sampling in the render loop.');
+    assert(after.diagnostics.surfaceGpu?.fauna?.visible >= 1, 'Surface expedition did not present nearby fauna.');
     assert(after.flora?.installed === true && after.flora?.presentation === 'procedural-3d-plants', 'The 3D flora presentation did not install.');
     assert(after.flora?.gpuInstancing === true, 'The 3D flora presentation is not GPU-instanced.');
-    // Plant density is ecological state, not renderer readiness. A valid zero is
-    // allowed on the diagnostic fallback route so random/seasonal local scarcity
-    // cannot make the renderer gate flaky.
     assert(Number.isFinite(after.flora?.visiblePlants) && after.flora.visiblePlants >= 0, `Surface flora count is invalid (${after.flora?.visiblePlants}).`);
     assert(after.flora?.legacyFaunaVisible === false, 'A legacy animal mesh remained visible in flora mode.');
     assert(after.flora?.hiddenLegacyFauna >= 1, 'The legacy animal mesh was not explicitly hidden.');
@@ -106,7 +95,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(after.classicRootPresent, 'Classic root living canvas disappeared while Surface Mode was active.');
     assert(!after.experimentalSphericalInstalled, 'Smooth spherical renderer installed on the explicit classic fallback route.');
     assert(after.sphereStats?.simulationRunning === false, 'Classic Surface presentation no longer applies its intended simulation-relief budget.');
-    assert(pageErrors.length === 0, `Classic Surface view produced browser errors: ${pageErrors.join(' | ')}`);
+    assert(pageErrors.length === 0, `Surface mode produced browser errors: ${pageErrors.join(' | ')}`);
 
     await page.evaluate(() => window.realitySandboxSurfaceMode.exit());
     await page.waitForFunction(() => document.documentElement.dataset.surfaceMode === 'inactive', null, { timeout: 10000 });

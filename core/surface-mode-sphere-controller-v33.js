@@ -52,6 +52,9 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
   let dragX = 0;
   let dragY = 0;
   let shellDisplay = '';
+  let sourceCanvasOpacity = '';
+  let sourceCanvasPointerEvents = '';
+  let previousCamera = null;
   let terrainRendererRequested = false;
   let terrainRendererPromise = null;
 
@@ -266,6 +269,9 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
   requestAnimationFrame(loop);
 
   function enterAt(x, y) {
+    if (!previousCamera && runtime.getCamera) {
+      previousCamera = runtime.getCamera();
+    }
     player.x = wrap(x, world.width);
     player.y = clamp(y, 0, world.height);
     player.altitude = EYE_HEIGHT;
@@ -274,6 +280,12 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     keys.clear();
     lastHudUpdate = -Infinity;
     document.documentElement.dataset.surfaceMode = 'active';
+    runtime.setPresentationSuspended?.(true);
+    runtime.setCamera?.({
+      centerX: player.x / world.width,
+      centerY: player.y / world.height,
+      zoom: 2.5,
+    });
     canvas.style.opacity = '1';
     paintSurfaceFallback();
     document.documentElement.dataset.surfaceModeFallbackReady = 'true';
@@ -284,6 +296,10 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
       terrainRendererRequested = true;
       startTerrainRenderer();
     }
+    sourceCanvasOpacity = sourceCanvas.style.opacity;
+    sourceCanvasPointerEvents = sourceCanvas.style.pointerEvents;
+    sourceCanvas.style.opacity = '0';
+    sourceCanvas.style.pointerEvents = 'none';
     layer.style.pointerEvents = 'auto';
     layer.style.opacity = '1';
     enterButton.style.display = 'none';
@@ -301,10 +317,17 @@ function installSurfaceMode({ runtime, planet, sourceCanvas }) {
     if (!active) return;
     active = false;
     keys.clear();
+    if (previousCamera) {
+      runtime.setCamera?.(previousCamera);
+      previousCamera = null;
+    }
+    runtime.setPresentationSuspended?.(false);
     document.documentElement.dataset.surfaceMode = 'inactive';
     if (document.pointerLockElement === canvas) document.exitPointerLock?.();
     layer.style.opacity = '0';
     layer.style.pointerEvents = 'none';
+    sourceCanvas.style.opacity = sourceCanvasOpacity;
+    sourceCanvas.style.pointerEvents = sourceCanvasPointerEvents;
     enterButton.style.display = '';
     const shell = document.querySelector('.planet-shell');
     if (shell) shell.style.display = shellDisplay;

@@ -20,6 +20,10 @@ function worldUrl(seed) {
   return url;
 }
 
+function frontierUrl() {
+  return new URL('./frontier-lab.html', location.href);
+}
+
 function randomSeed() {
   const values = new Uint32Array(3);
   if (globalThis.crypto?.getRandomValues) crypto.getRandomValues(values);
@@ -98,6 +102,7 @@ function installSeedControls() {
       <button type="button" data-new-world>New World</button>
       <button type="button" data-copy-world>Copy Link</button>
       <a class="planet-origin-link" href="./origins.html">Trace origins</a>
+      <a class="planet-origin-link planet-frontier-link" href="${frontierUrl().toString()}">Sail frontier</a>
     </div>
     <output class="planet-seed-status" data-seed-status aria-live="polite"></output>`;
 

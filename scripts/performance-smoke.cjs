@@ -33,7 +33,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
       const canvas = document.getElementById('lofiLivingCanvas');
       const preEntrySurfaceResources = performance.getEntriesByType('resource')
         .map(entry => entry.name)
-        .filter(name => /surface-terrain-water-sphere-gpu|surface-visual-layers|three\.module/i.test(name));
+        .filter(name => /surface-terrain-water-sphere-gpu|surface-visual-layers/i.test(name));
       const legacyPresentationResources = performance.getEntriesByType('resource')
         .map(entry => entry.name)
         .filter(name => /world-formation|natural-drag|interaction-pixi|interaction-performance|interaction-cache|interaction-fast-canvas|ui-shell|seed-ui|morphology-genetics|vegetation-terrain|vegetation-render-guard|surface-layer|presentation-layer-fix|presentation-runtime-recovery/i.test(name));

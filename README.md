@@ -32,6 +32,10 @@ planetary starting scenario, then hands that scenario to the living-planet
 sandbox. It is deliberately a separate route: it does not add a second render
 loop or a cosmological solver to the planetary simulation.
 
+`frontier-lab.html` is a separate experimental route for pirates, ports, and
+castles. It is intentionally self-contained and does not alter the living-planet
+simulation chain.
+
 The globe renderer reads `core/planet.js`, `core/living-systems.js`, `core/water-cycle.js`, `core/world.js`, and `core/biosphere.js` directly. It does not replace the canvas, monkey-patch a second renderer, or draw an unrelated Earth surface over the simulated planet.
 
 The seasonal-resource and trait-journal design is informed by [BiomeSimulator](https://github.com/andrenepomuceno/BiomeSimulator) (Apache-2.0) and [Genesis](https://github.com/bukkbeek/Genesis) (MIT). Eidolon implements its own deterministic browser modules and preserves those projects’ credit separately from its code.
