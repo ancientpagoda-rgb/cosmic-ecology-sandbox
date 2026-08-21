@@ -1,4 +1,4 @@
-const BUILD = 'v88-default-spherical-input';
+const BUILD = 'v89-natural-look-input';
 const html = document.documentElement;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const wrap = (value, max) => ((value % max) + max) % max;
@@ -78,7 +78,11 @@ function install({ api, canvas, world }) {
   function refreshHelp() {
     const locked = document.pointerLockElement === canvas;
     const state = api.getState();
-    const mouseText = locked ? 'mouse captured · Esc releases' : state.altitude <= 80 ? 'click view for mouse-look' : 'drag globe · wheel altitude';
+    const mouseText = locked
+      ? 'mouse captured · Esc releases'
+      : state.altitude <= 80
+        ? 'left-drag look · right-click free-look'
+        : 'drag globe · wheel altitude';
     const gamepadText = activeGamepadIndex == null
       ? 'gamepad ready'
       : `${gamepadLabel || 'gamepad'} · LS move · RS look · A/B altitude · Y inspect · Start ground view`;
@@ -102,7 +106,7 @@ function install({ api, canvas, world }) {
     if (Math.abs(smoothMouseX) > 0.01 || Math.abs(smoothMouseY) > 0.01) {
       const state = api.getState();
       api.setOrientation(
-        wrapAngle(state.yaw + smoothMouseX * 0.00175),
+        wrapAngle(state.yaw - smoothMouseX * 0.00175),
         clamp(state.pitch - smoothMouseY * 0.00155, -0.72, 0.72),
       );
       if (Math.abs(smoothMouseX) > 0.04 || Math.abs(smoothMouseY) > 0.04) {
@@ -213,7 +217,7 @@ function install({ api, canvas, world }) {
     const lookX = deadzone(pad.axes?.[2], 0.12);
     const lookY = deadzone(pad.axes?.[3], 0.12);
     if (lookX || lookY) {
-      yaw = wrapAngle(yaw + lookX * dt * 2.45);
+      yaw = wrapAngle(yaw - lookX * dt * 2.45);
       pitch = clamp(pitch - lookY * dt * 2.05, -0.72, 0.72);
       api.setOrientation(yaw, pitch);
     }
@@ -278,8 +282,8 @@ function install({ api, canvas, world }) {
   window.realitySandboxSphericalInputV88 = {
     installed: true,
     build: BUILD,
-    mouse: 'pointer-lock-smoothed-ground-look',
-    gamepad: 'standard-dual-stick-analog',
+    mouse: 'pointer-lock-smoothed-natural-look',
+    gamepad: 'standard-dual-stick-natural-look',
     destroy() {
       clearInterval(helpTimer);
       document.removeEventListener('mousemove', onMouseMove, { capture: true });
@@ -293,7 +297,7 @@ function install({ api, canvas, world }) {
 
 waitForRenderer().then(state => {
   if (!state) {
-    html.dataset.sphericalInput = 'v88-unavailable';
+    html.dataset.sphericalInput = 'v89-unavailable';
     return;
   }
   install(state);
