@@ -35,17 +35,14 @@ window.realitySandboxExperimentalSphericalRenderer = {
 };
 
 if (enabled) {
-  // Install presentation hooks before the renderer creates its local terrain
-  // patch or fauna mesh. v90 then expands the spherical embedding to 10x the
-  // radius while preserving local relief/creature scale. Once the renderer
-  // exists, gate right-click capture, install natural mouse/gamepad look, then
-  // let v89 own robust Firefox-safe left-drag.
+  // Keep presentation polish separate from world scale. The retired v90
+  // geometry-remap shim mutated terrain/camera state after construction and
+  // could leave the local surface frame looking away from the planet.
   const polishReady = import('./spherical-production-polish-v88.js?v=20260821-v88')
-    .then(() => import('./spherical-planet-scale-v90.js?v=20260821-v90-ten-x-radius'))
     .catch(error => console.warn('[experimental-spherical-world] spherical presentation polish unavailable:', error));
 
   polishReady
-    .then(() => import('./single-spherical-world-renderer.js?v=20260821-v90-ten-x-planet'))
+    .then(() => import('./single-spherical-world-renderer.js?v=20260821-v89-restored'))
     .then(() => import('./spherical-pointerlock-gate-v88.js?v=20260821-v88c'))
     .then(() => import('./spherical-input-polish-v88.js?v=20260821-v89-natural-look'))
     .then(() => import('./spherical-drag-controls-v89.js?v=20260821-v89-natural-drag'))
