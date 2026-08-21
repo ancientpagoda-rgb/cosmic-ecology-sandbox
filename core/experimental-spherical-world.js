@@ -35,9 +35,26 @@ window.realitySandboxExperimentalSphericalRenderer = {
 };
 
 if (enabled) {
-  import('./single-spherical-world-renderer.js?v=20260819-v86-smooth-default').catch(error => {
-    console.warn('[experimental-spherical-world] renderer failed to load:', error);
-    document.documentElement.dataset.experimentalSphericalRenderer = 'error';
-    document.documentElement.dataset.rootRenderer = 'legacy-pixi-globe-fallback';
-  });
+  // Install presentation hooks before the renderer creates its local terrain
+  // patch or fauna mesh. Once the renderer exists, gate mouse capture first so
+  // normal left-click selection/dragging can never race pointer lock, then add
+  // the smoothed mouse/gamepad input layer.
+  const polishReady = import('./spherical-production-polish-v88.js?v=20260821-v88')
+    .catch(error => console.warn('[experimental-spherical-world] v88 presentation polish unavailable:', error));
+
+  polishReady
+    .then(() => import('./single-spherical-world-renderer.js?v=20260821-v88-default-polish'))
+    .then(() => import('./spherical-pointerlock-gate-v88.js?v=20260821-v88c'))
+    .then(() => import('./spherical-input-polish-v88.js?v=20260821-v88'))
+    .catch(error => {
+      // Input polish is optional. Only mark the renderer as failed if the
+      // production renderer itself never installed.
+      if (window.realitySandboxSingleSphericalRenderer?.installed) {
+        console.warn('[experimental-spherical-world] v88 input polish unavailable:', error);
+        return;
+      }
+      console.warn('[experimental-spherical-world] renderer failed to load:', error);
+      document.documentElement.dataset.experimentalSphericalRenderer = 'error';
+      document.documentElement.dataset.rootRenderer = 'legacy-pixi-globe-fallback';
+    });
 }
