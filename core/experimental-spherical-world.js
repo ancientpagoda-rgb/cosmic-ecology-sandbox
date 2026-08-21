@@ -36,16 +36,16 @@ window.realitySandboxExperimentalSphericalRenderer = {
 
 if (enabled) {
   // Install presentation hooks before the renderer creates its local terrain
-  // patch or fauna mesh, then attach the input layer after its public API is
-  // ready. Each optional polish layer can fail independently without taking
-  // the production renderer down with it.
+  // patch or fauna mesh. Once the renderer exists, gate mouse capture first so
+  // normal left-click selection/dragging can never race pointer lock, then add
+  // the smoothed mouse/gamepad input layer.
   const polishReady = import('./spherical-production-polish-v88.js?v=20260821-v88')
     .catch(error => console.warn('[experimental-spherical-world] v88 presentation polish unavailable:', error));
 
   polishReady
     .then(() => import('./single-spherical-world-renderer.js?v=20260821-v88-default-polish'))
+    .then(() => import('./spherical-pointerlock-gate-v88.js?v=20260821-v88c'))
     .then(() => import('./spherical-input-polish-v88.js?v=20260821-v88'))
-    .then(() => import('./spherical-pointerlock-gate-v88.js?v=20260821-v88b'))
     .catch(error => {
       // Input polish is optional. Only mark the renderer as failed if the
       // production renderer itself never installed.
