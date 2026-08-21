@@ -44,9 +44,15 @@ if (enabled) {
 
   polishReady
     .then(() => import('./single-spherical-world-renderer.js?v=20260821-v88-default-polish'))
-    .then(() => import('./spherical-input-polish-v88.js?v=20260821-v88')
-      .catch(error => console.warn('[experimental-spherical-world] v88 input polish unavailable:', error)))
+    .then(() => import('./spherical-input-polish-v88.js?v=20260821-v88'))
+    .then(() => import('./spherical-pointerlock-gate-v88.js?v=20260821-v88b'))
     .catch(error => {
+      // Input polish is optional. Only mark the renderer as failed if the
+      // production renderer itself never installed.
+      if (window.realitySandboxSingleSphericalRenderer?.installed) {
+        console.warn('[experimental-spherical-world] v88 input polish unavailable:', error);
+        return;
+      }
       console.warn('[experimental-spherical-world] renderer failed to load:', error);
       document.documentElement.dataset.experimentalSphericalRenderer = 'error';
       document.documentElement.dataset.rootRenderer = 'legacy-pixi-globe-fallback';
