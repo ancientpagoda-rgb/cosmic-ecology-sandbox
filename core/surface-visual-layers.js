@@ -22,6 +22,7 @@ import './surface-large-planet-coverage-v43.js';
 // near-field soil/rock/moisture detail without raising distant terrain LOD.
 import './surface-vegetation-v38.js?v=20260821-v88';
 import './surface-ecology-polish-v88.js?v=20260821-v88';
+import './surface-flora-luminance-v88.js?v=20260821-v88';
 import './surface-gpu-backend-diagnostics.js';
 import './surface-mobile-controls.js';
 
