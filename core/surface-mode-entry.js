@@ -8,10 +8,11 @@ import './surface-water-stability-v38b.js?v=20260821-v88';
 import './surface-water-repair-v85.js?v=20260821-v88';
 import './surface-radar-weather-v84.js?v=20260821-v88';
 import './surface-mode-sphere-controller-v33.js?v=20260821-v88';
-// Convert the ecological population slots into rooted hierarchical plants
-// before the fauna fallback gets a chance to polish the legacy animal mesh.
+// The explicit classic fallback is the plant-focused diagnostic presentation.
+// Keep its authoritative fauna-shaped instance slot conversion owned by the
+// grounded flora hook; the public spherical renderer owns the readable animal
+// presentation repaired by spherical-production-polish-v88.js.
 import './surface-flora-v78.js?v=20260821-v88';
-import './surface-fauna-polish-v87.js?v=20260821-v88';
 import './surface-desktop-gamepad-controls-v87.js?v=20260821-v88';
 import './surface-cpu-relief.js';
 import './surface-mode-dblclick-bridge.js';
