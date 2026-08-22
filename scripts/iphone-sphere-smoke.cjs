@@ -65,8 +65,7 @@ fs.mkdirSync(artifactDir, { recursive: true });
     assert(metrics.statDefinitions === 8, 'Mobile statistics lost their definitions.');
     assert(metrics.snapshot.presentation.interactions.regionInspection === true, 'Mobile world view lost region inspection support.');
     assert(metrics.after?.title && Number.isFinite(metrics.after.latitude) && Number.isFinite(metrics.after.longitude), 'Mobile touch inspection did not yield a valid region.');
-    const sphericalSceneActive = Number(metrics.worldView?.frames) > 0 && Number(metrics.worldView?.faunaVisible) > 0;
-    assert((metrics.snapshot.presentation.drawnEntities > 0 || sphericalSceneActive) && pageErrors.length === 0, `Mobile scene is empty or errored: ${pageErrors.join(' | ')}`);
+    assert(metrics.snapshot.presentation.drawnEntities > 0 && pageErrors.length === 0, `Mobile scene is empty or errored: ${pageErrors.join(' | ')}`);
     assert(metrics.worldView.model === 'single-three-scene-single-camera-spherical-lod' && metrics.worldView.oneScene && metrics.worldView.oneCamera, 'iPhone did not use the single spherical world view.');
 
     // The player no longer taps a separate mode button. This lower-level mobile
