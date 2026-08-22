@@ -115,7 +115,7 @@ function install({ runtime, planet, host }) {
   style.id = 'eidolon-single-spherical-world-style';
   style.textContent = `
     #lofiLivingCanvas{opacity:0!important;visibility:hidden!important;pointer-events:none!important}
-    #surfaceModeLayer,#enterSurfaceMode{display:none!important;visibility:hidden!important;pointer-events:none!important}
+    #surfaceModeLayer{display:none!important;visibility:hidden!important;pointer-events:none!important}
     #eidolonSingleWorldCanvas{display:block!important;visibility:visible!important;opacity:1!important}
   `;
   document.head.append(style);
